@@ -2,6 +2,7 @@ import { tracker, input } from '../core.js';
 import { POSES } from '../body.js';
 import { W, H, txt, rng, Hold, session, charById, setupPanes, UI_X } from './common.js';
 import { Stage3D } from '../stage3d.js';
+import { demoPose } from '../posedemo.js';
 
 const ROUND_MS = 30000;
 const HOLD_MS = 450;
@@ -44,8 +45,11 @@ export class PasswordScene extends Phaser.Scene {
       // wide panes: pose on the left, the player's stick figure on the right
       // wide panes: the pose to copy on the left, the player's animal on the right
       const L = wide
-        ? { poseX: c.cx - c.w * 0.22, skelX: c.cx + c.w * 0.22, skelY: 470, footY: 640, animH: 380, wrap: c.w * 0.4, scoreX: c.cx }
-        : { poseX: c.cx, skelX: c.cx, skelY: 575, footY: 668, animH: 150, wrap: c.w - 40, scoreX: c.x + 90 };
+        ? { poseX: c.cx - c.w * 0.22, skelX: c.cx + c.w * 0.22, skelY: 470, footY: 640, animH: 380, wrap: c.w * 0.4, scoreX: c.cx,
+            demoFoot: 500, demoH: 300, nameY: 530, hintY: 568 }
+        : { poseX: c.cx, skelX: c.cx, skelY: 575, footY: 668, animH: 150, wrap: c.w - 40, scoreX: c.x + 90,
+            demoFoot: 410, demoH: 230, nameY: 438, hintY: 472 };
+      L.demoY = L.demoFoot - L.demoH / 2;     // middle of the demo animal (emoji fallback and hold ring)
       bg.fillGradientStyle(0x5b3a1e, 0x5b3a1e, 0x8a5a2b, 0x8a5a2b, 1).fillRect(c.x, 0, c.w, 720);
       bg.fillStyle(0x000000, 0.18).fillRoundedRect(c.x + 12, 12, c.w - 24, 696, 18);
       bg.lineStyle(6, pl.color, 1).strokeRoundedRect(c.x + 12, 12, c.w - 24, 696, 18);
@@ -60,9 +64,9 @@ export class PasswordScene extends Phaser.Scene {
         pl, c, L, cardSize, cards, k: 0, step: 0, points: 0, hold: new Hold(HOLD_MS),
         head: this.add.text(c.cx, 52, `P${i + 1} · ${charById(pl.animal).name}`, txt(32, pl.css)).setOrigin(0.5),
         cheerAt: -1e9,
-        big: this.add.text(L.poseX, 300, '', txt(Math.min(150, c.w * 0.26))).setOrigin(0.5).setDepth(3),
-        name: this.add.text(L.poseX, 410, '', txt(40, '#fff8e6')).setOrigin(0.5).setDepth(3),
-        hint: this.add.text(L.poseX, 450, '', txt(26, '#f4e3c3', { wordWrap: { width: L.wrap } })).setOrigin(0.5, 0).setDepth(3),
+        big: this.add.text(L.poseX, L.demoY, '', txt(Math.min(150, c.w * 0.26))).setOrigin(0.5).setDepth(3),
+        name: this.add.text(L.poseX, L.nameY, '', txt(40, '#fff8e6')).setOrigin(0.5).setDepth(3),
+        hint: this.add.text(L.poseX, L.hintY, '', txt(26, '#f4e3c3', { wordWrap: { width: L.wrap } })).setOrigin(0.5, 0).setDepth(3),
         score: this.add.text(L.scoreX, 680, '', txt(40, '#fff8e6')).setOrigin(0.5).setDepth(3),
         flash: this.add.text(c.cx, 215, '', txt(44, '#fff8e6', { stroke: '#2e7d4f', strokeThickness: 8 })).setOrigin(0.5).setDepth(5),
         lost: this.add.text(L.skelX, L.skelY, '', txt(28, '#ffffff', { stroke: '#9b3b2f', strokeThickness: 6, wordWrap: { width: L.wrap } })).setOrigin(0.5).setDepth(3),
@@ -117,6 +121,14 @@ export class PasswordScene extends Phaser.Scene {
 
       // the player's animal copies them so kids can see themselves (it hops for a door code)
       const zoom = c.rect.h / c.h, cam = pp.pl.kind === 'camera';
+      // the pose to copy, shown by the player's own animal doing it (the emoji stays as a fallback)
+      if (this.state !== 'intro') {
+        const target = this.seqOf(pp)[pp.step], demo = demoPose(target, time / 1000);
+        const shown = this.stage.place(100 + pp.pl.slot, pp.pl.animal || 'bear',
+          c.rect.x + (pp.L.poseX - c.x) * zoom, c.rect.y + (pp.L.demoFoot + 0.45 * pp.L.demoH * Math.min(0, demo.drop) * 0.75) * zoom, pp.L.demoH * zoom,
+          demo.pts, demo.base, time / 1000, demo.world);
+        pp.big.setVisible(!shown);
+      } else this.stage.hide(100 + pp.pl.slot);
       const hop = Math.max(0, Math.sin(Math.min(1, (time - pp.cheerAt) / 600) * Math.PI * 2)) * 40;
       const show = this.state !== 'intro' && (!cam || (pp.pl.body.pts && inp.present));   // not over the intro text
       if (show) {
@@ -135,7 +147,7 @@ export class PasswordScene extends Phaser.Scene {
       if (k > 0) {
         g.lineStyle(10, pp.pl.color, 1);
         g.beginPath();
-        g.arc(pp.L.poseX, 300, Math.min(105, c.w * 0.19), -Math.PI / 2, -Math.PI / 2 + k * Math.PI * 2);
+        g.arc(pp.L.poseX, pp.L.demoY, Math.min(pp.L.demoH * 0.62, c.w * 0.22), -Math.PI / 2, -Math.PI / 2 + k * Math.PI * 2);
         g.strokePath();
       }
       if (k >= 1) {

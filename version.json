@@ -1,5 +1,5 @@
 {
- "build": "1124-034804-jiggle",
+ "build": "1124-035214-pose-demos",
  "files": [
   "js/autorig.js",
   "js/bear3d.js",
@@ -9,6 +9,7 @@
   "js/main.js",
   "js/phone.js",
   "js/pose.js",
+  "js/posedemo.js",
   "js/puppet.js",
   "js/puppet3d.js",
   "js/race3d.js",
