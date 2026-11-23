@@ -21,7 +21,15 @@ function makeCourse(seed) {
   while (d < COURSE - 25) {
     const x = r();
     const type = x < 0.5 ? 'rock' : x < 0.75 ? 'log' : 'branch';
-    obs.push({ d, type, lane: Math.floor(r() * 3) - 1 });
+    if (type === 'rock') {
+      // Boulders block 1 or 2 of the 3 lanes; at least one lane is always free.
+      const free = Math.floor(r() * 3) - 1;
+      const others = [-1, 0, 1].filter((l) => l !== free);
+      const blocked = r() < 0.5 ? others : [others[Math.floor(r() * 2)]];
+      obs.push({ d, type, blocked, free });
+    } else {
+      obs.push({ d, type });
+    }
     d += 14 + r() * 8;
   }
   return obs;
@@ -102,7 +110,7 @@ export class RaceScene extends Phaser.Scene {
       r.lost.setText(inp.present ? '' : 'Come back into view!');
 
       // Movement
-      const targetX = r.c.cx + inp.lane * r.c.tw * 0.3;
+      const targetX = r.c.cx + inp.lane * r.c.tw / 3;
       r.laneX += (targetX - r.laneX) * Math.min(1, dt * 14);
 
       if (this.state === 'run' && !r.place) {
@@ -193,7 +201,7 @@ export class RaceScene extends Phaser.Scene {
 
   resolve(r, o, inp, now) {
     let ok;
-    if (o.type === 'rock') ok = inp.lane !== o.lane;
+    if (o.type === 'rock') ok = !o.blocked.includes(inp.lane);
     else if (o.type === 'log') ok = now - r.lastJump < WINDOW_MS || inp.jumping;
     else ok = now - r.lastDuck < WINDOW_MS || inp.ducking;
     if (ok) {
@@ -220,9 +228,18 @@ export class RaceScene extends Phaser.Scene {
   drawObstacle(g, c, o, y) {
     const half = c.tw * 0.46;
     if (o.type === 'rock') {
-      const x = c.cx + o.lane * c.tw * 0.3;
-      const im = this.sprite('prop_rock', 2 + y / 10000).setOrigin(0.5, 0.75).setPosition(x, y);
-      this.fitHeight(im, Math.pow(depthScale(y), 1.4) * Math.min(210, c.tw * 0.3));
+      // Huge boulders fill whole lanes: one boulder per lane, or a rock pile across two side-by-side lanes.
+      const laneW = c.tw / 3;
+      const grow = 0.8 + 0.2 * depthScale(y);
+      const b = [...o.blocked].sort((p, q) => p - q);
+      const adjacent = b.length === 2 && b[1] - b[0] === 1;
+      const groups = adjacent ? [[b[0], b[1]]] : b.map((l) => [l]);
+      for (const gr of groups) {
+        const mid = (gr[0] + gr[gr.length - 1]) / 2;
+        const key = gr.length === 2 ? 'prop_rocks' : (gr[0] === 0 ? 'prop_rock' : 'prop_boulder');
+        const im = this.sprite(key, 2 + y / 10000).setOrigin(0.5, 0.85).setPosition(c.cx + mid * laneW, y);
+        im.setScale((laneW * gr.length * 0.98 * grow) / im.width);
+      }
       return null;
     }
     if (o.type === 'log') {
