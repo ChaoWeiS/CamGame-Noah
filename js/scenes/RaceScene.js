@@ -9,7 +9,7 @@ const PX_PER_M = 16;       // 30 m of track visible ahead
 const RUNNER_Y = 610;
 const TOP_Y = 120;
 const WINDOW_MS = 380;
-const TREE_NEAR_H = 980;  // height of a tree right next to the runner (taller than the 720 screen)     // how recently you must have jumped/ducked when an obstacle arrives
+const TREE_SCALE = 5.2;   // trees are ~5x as tall as the animals     // how recently you must have jumped/ducked when an obstacle arrives
 
 // Things further up the track are drawn a bit smaller, for a sense of depth.
 const depthScale = (y) => 0.55 + 0.45 * Math.max(0, Math.min(1, (y - TOP_Y) / (RUNNER_Y - TOP_Y)));
@@ -46,7 +46,11 @@ export class RaceScene extends Phaser.Scene {
     this.layout = setupPanes(this, players.length, DH);
     this.cols = this.layout.panes;
     // the actual running track inside each pane (panes can be wide)
-    for (const c of this.cols) { c.tw = Math.min(c.w * 0.72, 760); c.tx = c.cx - c.tw / 2; }
+    for (const c of this.cols) {
+      c.tw = Math.min(c.w * 0.72, 760); c.tx = c.cx - c.tw / 2;
+      c.runH = Math.min(190, c.tw * 0.5);   // runner height: everything is sized relative to it
+      c.treeH = c.runH * TREE_SCALE;        // a tree right beside the runner (taller than the screen)
+    }
 
     this.bg = this.add.graphics().setDepth(0);
     this.g = this.add.graphics().setDepth(3);
@@ -65,7 +69,7 @@ export class RaceScene extends Phaser.Scene {
         pl, c, dist: 0, speed: 0, laneX: c.cx, stumbleUntil: 0,
         lastJump: -1e9, lastDuck: -1e9, nextObs: 0, place: 0,
         shadow: this.add.ellipse(c.cx, RUNNER_Y + 30, Math.min(110, c.tw * 0.3), 22, 0x000000, 0.25).setDepth(4),
-        sprite: charImage(this, c.cx, RUNNER_Y + 30, pl.animal || 'bear', 'back', Math.min(190, c.tw * 0.5)).setDepth(5),
+        sprite: charImage(this, c.cx, RUNNER_Y + 30, pl.animal || 'bear', 'back', c.runH).setDepth(5),
         msg: this.add.text(c.cx, RUNNER_Y - 110, '', txt(30, '#ffffff', { stroke: '#1d3b52', strokeThickness: 6 })).setOrigin(0.5).setDepth(8),
         lost: this.add.text(c.cx, 380, '', txt(26, '#ffffff', { stroke: '#9b3b2f', strokeThickness: 6, wordWrap: { width: c.tw - 30 } })).setOrigin(0.5).setDepth(8),
         labels: [],
@@ -142,7 +146,7 @@ export class RaceScene extends Phaser.Scene {
         // Big trees: near ones are taller than the screen, so their tops are cut off.
         const rocky = dcr.key.includes('rock') || dcr.key.includes('boulder');
         const k = depthScale(y);
-        const h = TREE_NEAR_H * Math.pow(k, 1.6) * (rocky ? 0.38 : 1);
+        const h = r.c.treeH * Math.pow(k, 1.6) * (rocky ? 0.38 : 1);
         const im = this.sprite(dcr.key, 1 + y / 10000).setOrigin(0.5, 1);
         this.fitHeight(im, h);
         const halfW = im.displayWidth / 2;
@@ -237,10 +241,11 @@ export class RaceScene extends Phaser.Scene {
       const b = [...o.blocked].sort((p, q) => p - q);
       const adjacent = b.length === 2 && b[1] - b[0] === 1;
       if (o.kind === 'tree') {
-        // a big tree standing in each blocked lane
+        // a full-size tree (same scale as the forest) standing in each blocked lane;
+        // drawn under other obstacles so its canopy never hides what's coming next
         for (const l of b) {
-          const im = this.sprite(o.tree, 2 + y / 10000).setOrigin(0.5, 0.97).setPosition(c.cx + l * laneW, y);
-          im.setScale((laneW * 1.4 * grow) / im.width);
+          const im = this.sprite(o.tree, 1.95 + y / 100000).setOrigin(0.5, 0.97).setPosition(c.cx + l * laneW, y);
+          this.fitHeight(im, c.treeH * Math.pow(depthScale(y), 1.6));
           im.setFlipX(l > 0);
         }
         return null;
@@ -265,11 +270,12 @@ export class RaceScene extends Phaser.Scene {
     // High branch = duck under it, low branch = jump over it. Its shadow on the
     // ground shows where it is; the gap between branch and shadow shows how high.
     const k = Math.pow(depthScale(y), 1.4);
-    const postH = k * Math.min(330, c.tw * 0.55);
+    const postH = c.treeH * Math.pow(depthScale(y), 1.6);  // full-size birch trees hold the branch
     const high = o.type === 'branch';
-    const lift = postH * (high ? 0.5 : 0.13);
+    const kk = depthScale(y);                                // same perspective as the runner
+    const lift = c.runH * kk * (high ? 0.75 : 0.2);          // head height vs knee height of the animals
     const sg = this.shadowG;
-    const sw = half * 2, sh = Math.max(10, postH * 0.08);
+    const sw = half * 2, sh = Math.max(10, c.runH * kk * 0.14);
     if (high) {
       // soft, faint shadow: the branch is far above the ground
       sg.fillStyle(0x1d3b1a, 0.12).fillEllipse(c.cx, y, sw * 1.04, sh * 2.2);
@@ -278,9 +284,9 @@ export class RaceScene extends Phaser.Scene {
       // dark, sharp shadow right under it: the branch is close to the ground
       sg.fillStyle(0x1d3b1a, 0.45).fillEllipse(c.cx, y, sw, sh);
     }
-    this.fitHeight(this.sprite('prop_birch', 2 + y / 10000).setOrigin(0.5, 1).setPosition(c.cx - half, y + 16), postH);
-    this.fitHeight(this.sprite('prop_birch', 2 + y / 10000).setOrigin(0.5, 1).setPosition(c.cx + half, y + 16), postH).setFlipX(true);
-    const thick = Math.max(22, postH * 0.13);
+    this.fitHeight(this.sprite('prop_birch', 1.95 + y / 100000).setOrigin(0.5, 1).setPosition(c.cx - half, y + 16), postH);
+    this.fitHeight(this.sprite('prop_birch', 1.95 + y / 100000).setOrigin(0.5, 1).setPosition(c.cx + half, y + 16), postH).setFlipX(true);
+    const thick = Math.max(18, c.runH * kk * 0.13);
     const bar = this.sprite('prop_stick', 2.5 + y / 10000).setOrigin(0.5, 0.5).setPosition(c.cx, y - lift);
     bar.setDisplaySize(thick, half * 2.1);
     bar.setRotation(Math.PI / 2);
