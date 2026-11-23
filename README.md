@@ -75,3 +75,16 @@ Tuning lives mostly in `js/body.js` (thresholds) and the top of `js/scenes/RaceS
 - The camera needs HTTPS, which GitHub Pages provides (or `localhost`).
 - The pose model downloads from Google on first run. For offline use, see `models/README.md`.
 - Libraries are bundled in `vendor/` (Phaser 3.90, PeerJS 1.5.5, MediaPipe Tasks Vision 1.2.3, qrcode-generator).
+
+## Versions and caching
+
+GitHub Pages lets browsers keep files for up to 10 minutes. To avoid running a mix
+of old and new code, every page (`index.html`, `phone.html`, `bear3d.html`) checks
+`version.json` (never cached) before it starts:
+
+- if the page itself is older, it reloads once with `?v=<build>` added;
+- if the build changed since last time, it re-downloads every code file listed there.
+
+**Before each push run `python3 tools/stamp.py "short note"`** — it writes a new build
+id into `version.json` and each page's `<meta name="build">`. The PC's HUD (F9) shows
+the build it is running, and warns when the phone page is on a different one.

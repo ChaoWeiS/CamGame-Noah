@@ -1,0 +1,24 @@
+{
+ "build": "1124-024859-versioning",
+ "files": [
+  "js/autorig.js",
+  "js/bear3d.js",
+  "js/body.js",
+  "js/bones.js",
+  "js/core.js",
+  "js/main.js",
+  "js/phone.js",
+  "js/pose.js",
+  "js/puppet.js",
+  "js/puppet3d.js",
+  "js/race3d.js",
+  "js/scenes/LobbyScene.js",
+  "js/scenes/PasswordScene.js",
+  "js/scenes/PickScene.js",
+  "js/scenes/RaceScene.js",
+  "js/scenes/ResultsScene.js",
+  "js/scenes/common.js",
+  "js/stage3d.js",
+  "assets/puppets/rig.json"
+ ]
+}

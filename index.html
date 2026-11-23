@@ -1,6 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+<meta name="build" content="1124-024859-versioning">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Race to the Ark</title>
@@ -54,6 +55,24 @@
 <script src="vendor/phaser.min.js"></script>
 <script src="vendor/peerjs.min.js"></script>
 <script src="vendor/qrcode.js"></script>
-<script type="module" src="js/main.js"></script>
+<script type="module">
+// Version check. GitHub Pages lets browsers keep files for 10 minutes, so before
+// starting, make sure this page and all its code are the newest build.
+const BUILD = document.querySelector('meta[name=build]').content;
+try {
+  const v = await fetch('version.json', { cache: 'no-store' }).then((r) => r.json());
+  const u = new URL(location.href);
+  if (v.build !== BUILD && u.searchParams.get('v') !== v.build) {
+    u.searchParams.set('v', v.build);                    // the page itself is old: reload it past the cache
+    location.replace(u);
+    await new Promise(() => {});
+  }
+  if (localStorage.getItem('ark-build') !== v.build) {    // new build: refresh every code file in the cache
+    await Promise.all(v.files.map((f) => fetch(f, { cache: 'reload' }).catch(() => {})));
+    try { localStorage.setItem('ark-build', v.build); } catch (_) {}
+  }
+} catch (_) { /* offline or no version.json: just start */ }
+await import('./js/main.js');
+</script>
 </body>
 </html>

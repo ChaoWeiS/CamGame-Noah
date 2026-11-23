@@ -11,7 +11,8 @@ export const stats = {
   source: 'none',        // 'phone' | 'webcam' | 'none'
   connected: false,
   fps: 0, inf: 0, rtt: null, people: 0, lastFrame: 0, camera: '',
-  world3D: false,        // is the phone sending the 3D skeleton (new phone page)?
+  world3D: false,
+  phoneBuild: null,      // the phone page's build (from its hello)        // is the phone sending the 3D skeleton (new phone page)?
 };
 
 // ---------------------------------------------------------------- tracker
@@ -174,6 +175,7 @@ export const net = {
           stats.rtt = Math.round(performance.now() - d.t);
         } else if (d.type === 'hello') {
           stats.camera = d.camera || '';
+          stats.phoneBuild = d.build || 'old';
         }
       });
       c.on('close', () => { if (this.conn === c) { stats.connected = false; this.conn = null; this.onStatus('Phone disconnected — waiting…'); } });

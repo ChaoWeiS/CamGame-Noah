@@ -22,7 +22,7 @@ $('qr').src = qr.createDataURL(6, 8);
 $('kbhelp').textContent = keyboardHelp;
 
 // ---- debug HUD (press D to toggle)
-const BUILD = '11-24c countdown on top';   // shows which version the browser has loaded
+const BUILD = document.querySelector('meta[name=build]')?.content || 'dev';   // stamped by tools/stamp.py
 setInterval(() => {
   const live = performance.now() - stats.lastFrame < 1500;
   const players = tracker.players.map((p, i) => `P${i + 1}${input(p).present ? '' : ' (lost)'}`).join(' ');
@@ -31,6 +31,7 @@ setInterval(() => {
     `round trip <b>${stats.rtt ?? '–'}</b> ms · people <b>${stats.people}</b>`,
     live ? (stats.world3D ? '3D body: <b>✓</b>' : '3D body: <b>✗</b> — reload the phone page') : '',
     `build <b>${BUILD}</b>`,
+    stats.phoneBuild && stats.phoneBuild !== BUILD ? `<span style="color:#ffb4a8">phone is on build <b>${stats.phoneBuild}</b> — reload the phone page</span>` : '',
     players ? `players: ${players}` : '',
   ].filter(Boolean).join('<br>');
 }, 250);
