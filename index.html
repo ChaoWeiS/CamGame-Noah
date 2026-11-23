@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Race to the Ark</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #10202b; overflow: hidden; font-family: system-ui, -apple-system, sans-serif; }
+  #wrap { position: absolute; inset: 0; margin: auto; width: min(100vw, 177.78vh); height: min(100vh, 56.25vw); }
+  #game { position: absolute; inset: 0; }
+  #lobby {
+    position: absolute; left: 3.1%; top: 16.7%; width: 37.5%; height: 70.8%;
+    background: rgba(13, 27, 38, 0.85); border-radius: 18px; color: #fff8e6;
+    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.1vh;
+    padding: 2%; box-sizing: border-box; text-align: center; font-size: clamp(11px, 1.6vh, 18px);
+  }
+  #lobby[hidden] { display: none; }
+  #lobby h2 { margin: 0; font-size: 1.5em; }
+  #qr { width: 52%; image-rendering: pixelated; background: #fff; border-radius: 10px; }
+  #room { font-size: 1.8em; font-weight: 800; letter-spacing: 0.08em; color: #f2b544; }
+  #link { color: #9fd6ef; font-size: 0.8em; word-break: break-all; }
+  #status { min-height: 1.3em; }
+  #lobby button { font: inherit; padding: 0.6em 1em; border-radius: 10px; border: 0; background: #2b3b47; color: #fff8e6; cursor: pointer; }
+  #lobby button:hover { background: #3a4f5e; }
+  #kbhelp { font-size: 0.7em; opacity: 0.7; }
+  #hud {
+    position: absolute; right: 0.6%; top: 1%; padding: 4px 8px; border-radius: 8px;
+    background: rgba(0, 0, 0, 0.5); color: #e8f4fa; font: 11px/1.35 ui-monospace, Menlo, monospace; pointer-events: none;
+  }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="game"></div>
+  <div id="lobby">
+    <h2>📱 Scan to use your phone as the camera</h2>
+    <img id="qr" alt="QR code for the phone camera page">
+    <div>Room code</div>
+    <div id="room">…</div>
+    <a id="link" target="_blank"></a>
+    <div id="status">Starting…</div>
+    <div>
+      <button id="camBtn">Use this computer’s webcam</button>
+      <button id="kbBtn">Keyboard players: 0</button>
+    </div>
+    <div id="kbhelp"></div>
+  </div>
+  <div id="hud"></div>
+</div>
+<script src="vendor/phaser.min.js"></script>
+<script src="vendor/peerjs.min.js"></script>
+<script src="vendor/qrcode.js"></script>
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
