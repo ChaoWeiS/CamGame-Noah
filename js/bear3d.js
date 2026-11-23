@@ -3,7 +3,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { net, localCam, tracker, stats } from './core.js';
 import { Body } from './body.js';
 import { loadPuppet3D } from './puppet3d.js';
-import { loadRiggedCharacter, EXAGGERATE_FOR } from './autorig.js';
+import { loadRiggedCharacter, EXAGGERATE_FOR, PHYSICS_FOR } from './autorig.js';
 const params = new URLSearchParams(location.search);
 
 const $ = (id) => document.getElementById(id);
@@ -78,13 +78,14 @@ const bear = params.get('model') === 'simple'
   : await loadRiggedCharacter(pick.file);
 if (params.has('weights') && bear.mesh) {
   // debug: colour each vertex by the bone that moves it most
-  const cols = [0x888888, 0xffffff, 0xff4444, 0xffaa00, 0x4488ff, 0x00ddff, 0xff44ff, 0xffff44, 0x44ff44, 0x22aa22, 0x880000, 0x884400, 0x9966ff, 0xff88cc]; // … handL, handR, chest, head
+  const cols = [0x888888, 0xffffff, 0xff4444, 0xffaa00, 0x4488ff, 0x00ddff, 0xff44ff, 0xffff44, 0x44ff44, 0x22aa22, 0x880000, 0x884400, 0x9966ff, 0xff88cc, 0x00ff00, 0xff0000]; // … handL, handR, chest, head, belly (green), tail (red)
   const g = bear.mesh.geometry, si = g.attributes.skinIndex, c = new Float32Array(si.count * 3), col = new THREE.Color();
   for (let i = 0; i < si.count; i++) { col.set(cols[si.getX(i)]); c[i * 3] = col.r; c[i * 3 + 1] = col.g; c[i * 3 + 2] = col.b; }
   g.setAttribute('color', new THREE.BufferAttribute(c, 3));
   bear.mesh.material = new THREE.MeshLambertMaterial({ vertexColors: true });
 }
 bear.ex = EXAGGERATE_FOR[pick.id];
+bear.phys = PHYSICS_FOR[pick.id];
 scene.add(bear.root);
 // B: show the bones on top of the character
 if (bear.mesh) {
@@ -118,6 +119,7 @@ renderer.setAnimationLoop(() => {
   else { bear.idle(t); calibrated = false; calibT = 0; }
   $('status').textContent = tracking ? `Tracking you · ${stats.fps} fps` : (stats.source === 'none' ? 'Scan the QR code or use the webcam' : 'Step into view…');
   controls.update();
+  if (bear.physics) { bear.root.updateMatrixWorld(true); bear.physics(); }
   renderer.render(scene, camera);
 });
 window.bear = bear; // for debugging in the console

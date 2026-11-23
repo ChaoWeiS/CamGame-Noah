@@ -8,7 +8,7 @@
 // (the runner is 1 unit tall and stands at z = 0; things ahead are at z < 0).
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { loadRiggedCharacter } from './autorig.js';
+import { loadRiggedCharacter, PHYSICS_FOR } from './autorig.js';
 import { L } from './body.js';
 
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
@@ -147,6 +147,7 @@ export class Race3D {
     const proto = await charCache[file];
     const ch = proto.root.parent ? await loadRiggedCharacter(file) : proto;
     ch.root.rotation.y = Math.PI;      // seen from behind
+    ch.phys = PHYSICS_FOR[r.pl.animal];
     this.scene.add(ch.root);
     const pane = this.panes.find((p) => p.r === r);
     if (pane) { pane.ch = ch; pane.phase = Math.random() * 6; }
@@ -281,6 +282,8 @@ export class Race3D {
     pane.ch.root.position.set(((st.x ?? c.cx) - c.cx) / c.runH, 0, 0);
     pane.ch.root.scale.setScalar(1 / pane.ch.height);
     this.animate(pane, dt, st);
+    pane.ch.root.updateMatrixWorld(true);
+    pane.ch.physics();                 // belly wobble, tail swing, body bob
   }
 
   // running cycle driven by the runner's speed, plus jump / duck / stumble

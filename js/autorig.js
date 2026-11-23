@@ -33,6 +33,16 @@ export const EXAGGERATE_FOR = {
   dog: { torso: 1.6, head: 1.3, wrist: 1.3 },
 };
 
+// Jiggle physics per animal (set ch.phys = PHYSICS_FOR[id]); amounts 0…1+
+//   belly: the tummy lags and wobbles · bob: the upper body bounces on the waist
+//   tail: swings against the motion · wag: tail wagging (rad), more when moving
+export const PHYSICS_FOR = {
+  bear: { belly: 1.3, bob: 0.4, tail: 0.5, wag: 0 },
+  hamster: { belly: 0.9, bob: 1.0, tail: 0.4, wag: 0 },
+  chicken: { belly: 0.3, bob: 1.2, tail: 0.8, wag: 0 },
+  dog: { belly: 0.3, bob: 0.4, tail: 1.2, wag: 0.35 },
+};
+
 // which way each bone points in the T-pose (the rig is built with no rotations)
 const REST = {
   upperL: new THREE.Vector3(-1, 0, 0), foreL: new THREE.Vector3(-1, 0, 0),
@@ -135,15 +145,37 @@ export async function loadRiggedCharacter(url) {
   const hipY = crotchY + H * 0.06;
   const kneeY = crotchY * 0.5;
   const waistY = hipY + (armRootY - hipY) * 0.35;
-  const chestY = hipY + (armRootY - hipY) * 0.7;
   const neckY = armRootY + (H - armRootY) * 0.12;   // where the head starts turning on its own
 
+  // Belly and tail. The model faces +Z: the belly is the front of the torso,
+  // a tail is anything sticking out behind the back (measured at the waist, where no tail is).
+  const chestY = hipY + (armRootY - hipY) * 0.7;
+  const bellyY = (hipY + chestY) / 2;
+  let frontZ = 0; const backs = [];
+  for (let i = 0; i < n; i++) {
+    const x = Math.abs(pos[i * 3]), y = pos[i * 3 + 1], z = pos[i * 3 + 2];
+    if (x < sx && y > hipY && y < chestY && z > frontZ) frontZ = z;
+    if (x < sx && Math.abs(y - waistY) < H * 0.06) backs.push(z);
+  }
+  backs.sort((p2, q) => p2 - q);
+  const backZ = backs.length ? backs[Math.floor(backs.length * 0.1)] : 0;
+  let tailMinZ = 0, tbx = 0, tby = 0, tbc = 0;
+  for (let i = 0; i < n; i++) {
+    const x = pos[i * 3], y = pos[i * 3 + 1], z = pos[i * 3 + 2];
+    if (z < backZ - H * 0.05 && y < chestY && y > H * 0.05 && Math.abs(x) < sx) {
+      tailMinZ = Math.min(tailMinZ, z);
+      if (z > backZ - H * 0.1) { tbx += x; tby += y; tbc++; }
+    }
+  }
+  const hasTail = tbc > 20 && backZ - tailMinZ > H * 0.1;
+  const tailBase = hasTail ? new THREE.Vector3(tbx / tbc, tby / tbc, backZ - H * 0.03) : new THREE.Vector3(0, hipY, backZ);
+
   // 3. Skeleton: hips → spine → arms ; hips → legs
-  const bone = (name, x, y, parent) => {
+  const bone = (name, x, y, parent, z = 0) => {
     const b = new THREE.Bone(); b.name = name;
     const p = parent ? parent.userData.world : new THREE.Vector3();
-    b.position.set(x - p.x, y - p.y, 0);
-    b.userData.world = new THREE.Vector3(x, y, 0);
+    b.position.set(x - p.x, y - p.y, z - p.z);
+    b.userData.world = new THREE.Vector3(x, y, z);
     if (parent) parent.add(b);
     return b;
   };
@@ -152,7 +184,10 @@ export async function loadRiggedCharacter(url) {
   const spine = bone('spine', 0, waistY, hips);
   const chest = bone('chest', 0, chestY, spine);
   const head = bone('head', 0, neckY, chest);
-  const B = { hips, spine, chest, head };
+  // extra bones moved by physics (not by the player): the belly and the tail
+  const belly = bone('belly', 0, bellyY, spine, frontZ * 0.4);
+  const tail = bone('tail', tailBase.x, tailBase.y, hips, tailBase.z);
+  const B = { hips, spine, chest, head, belly, tail };
   for (const [s, side] of [['L', -1], ['R', 1]]) {
     const elbowY = armRootY + (armTipY - armRootY) * 0.5;
     B['upper' + s] = bone('upper' + s, side * sx, armRootY, chest);
@@ -161,7 +196,7 @@ export async function loadRiggedCharacter(url) {
     B['thigh' + s] = bone('thigh' + s, side * legX, hipY, hips);
     B['shin' + s] = bone('shin' + s, side * legX, kneeY, B['thigh' + s]);
   }
-  const order = ['hips', 'spine', 'upperL', 'foreL', 'thighL', 'shinL', 'upperR', 'foreR', 'thighR', 'shinR', 'handL', 'handR', 'chest', 'head'];
+  const order = ['hips', 'spine', 'upperL', 'foreL', 'thighL', 'shinL', 'upperR', 'foreR', 'thighR', 'shinR', 'handL', 'handR', 'chest', 'head', 'belly', 'tail'];
   const idx = Object.fromEntries(order.map((k, i) => [k, i]));
 
   // 4. Skin weights: arms, legs, then the rest split between spine and hips
@@ -188,6 +223,15 @@ export async function loadRiggedCharacter(url) {
     const hd = smooth(neckY - H * 0.04, neckY + H * 0.04, y) * (1 - smooth(sx * 0.9, sx * 1.3, ax));
     ws.hips = r * (1 - up); ws.spine = r * up * (1 - ch);
     ws.chest = r * up * ch * (1 - hd); ws.head = r * up * ch * hd;
+    // belly: the front of the torso around the middle
+    const z = pos[i * 3 + 2];
+    const wb = r * smooth(frontZ * 0.25, frontZ * 0.75, z) * (1 - smooth(0, (chestY - hipY) * 0.6, Math.abs(y - bellyY))) *
+      (1 - smooth(sx * 0.6, sx, ax));
+    // tail: behind the back, growing from its base
+    const wt = hasTail ? smooth(backZ - H * 0.03, backZ - H * 0.09, z) * (ax < sx ? 1 : 0) * (y < chestY ? 1 : 0) : 0;
+    const keep = (1 - wb) * (1 - wt);
+    for (const key of Object.keys(ws)) ws[key] *= keep;
+    ws.belly = wb * (1 - wt); ws.tail = wt;
     const top4 = Object.entries(ws).filter(([, w]) => w > 1e-4).sort((p, q) => q[1] - p[1]).slice(0, 4);
     const sum = top4.reduce((t, [, w]) => t + w, 0) || 1;
     top4.forEach(([k2, w], j) => { si[i * 4 + j] = idx[k2]; sw[i * 4 + j] = w / sum; });
@@ -206,7 +250,7 @@ export async function loadRiggedCharacter(url) {
   mesh.bind(skeleton);
   const root = new THREE.Group();
   root.add(mesh);
-  return new RiggedCharacter(root, mesh, B, H, { sx, elbowX, wristX, chestY, neckY, crotchY, kneeY, armRootY, armTipY, legX, waistY });
+  return new RiggedCharacter(root, mesh, B, H, { hasTail, frontZ, backZ, sx, elbowX, wristX, chestY, neckY, crotchY, kneeY, armRootY, armTipY, legX, waistY });
 }
 
 export class RiggedCharacter {
@@ -215,6 +259,53 @@ export class RiggedCharacter {
     this.a = {}; this.tilt = 0; this.hop = 0; this.hipY0 = bones.hips.position.y;
     // rest directions of each bone (screen angle, y down): arms point out, legs point down
     this.rest = { upperL: Math.PI, upperR: 0, thighL: Math.PI / 2, thighR: Math.PI / 2 };
+    this.restPos = { belly: bones.belly.position.clone(), chest: bones.chest.position.clone() };
+    this.phys = null;
+  }
+
+  // Secondary motion: springs that lag behind the body and wobble back.
+  // Call once per frame AFTER posing. Works in "body heights", so it looks the
+  // same at any size on screen.
+  physics() {
+    const P = this.phys;
+    if (!P) return;
+    const now = performance.now() / 1000;
+    const dt = Math.min(1 / 20, Math.max(1 / 120, now - (this._pt || now - 1 / 60)));
+    this._pt = now;
+    const s = this.root.getWorldScale(_d).x * this.height || 1;
+    const springs = this._sp || (this._sp = {
+      belly: { bone: this.b.belly, k: 140, d: 7, gain: 0.5, max: 0.06 },
+      bob: { bone: this.b.chest, k: 90, d: 6, gain: 0.35, max: 0.05 },
+      tail: { bone: this.b.tail, k: 60, d: 4, gain: 1.6, max: 0.25 },
+    });
+    let energy = 0;
+    for (const [name, sp] of Object.entries(springs)) {
+      const amount = P[name] || 0;
+      // where the spring is attached, and how that point is accelerating (body heights / s²)
+      const at = sp.bone.parent.getWorldPosition(new THREE.Vector3()).multiplyScalar(1 / s);
+      if (!sp.prev) { sp.prev = at.clone(); sp.vel = new THREE.Vector3(); sp.x = new THREE.Vector3(); sp.xv = new THREE.Vector3(); }
+      const vel = at.clone().sub(sp.prev).multiplyScalar(1 / dt);
+      const acc = vel.clone().sub(sp.vel).multiplyScalar(1 / dt);
+      if (acc.length() > 400) acc.setLength(400);               // ignore teleports (e.g. respawn)
+      sp.prev.copy(at); sp.vel.copy(vel);
+      energy = Math.max(energy, Math.min(1, vel.length() / 2));
+      // damped spring pushed the opposite way to the acceleration (it lags behind)
+      sp.xv.addScaledVector(sp.x, -sp.k * dt).addScaledVector(sp.xv, -sp.d * dt).addScaledVector(acc, -sp.gain * dt);
+      sp.x.addScaledVector(sp.xv, dt);
+      if (sp.x.length() > sp.max) sp.x.setLength(sp.max);
+      // into the bone's parent space (model units)
+      const q = sp.bone.parent.getWorldQuaternion(new THREE.Quaternion()).invert();   // world → parent
+      const local = sp.x.clone().multiplyScalar(this.height * amount).applyQuaternion(q);
+      if (name === 'belly') this.b.belly.position.copy(this.restPos.belly).add(local);
+      else if (name === 'bob') this.b.chest.position.copy(this.restPos.chest).add(local.multiply(new THREE.Vector3(0.4, 1, 0.6)));
+      else if (name === 'tail') {
+        // the tail swings sideways / up-down against the motion, and wags
+        this._wag = (this._wag || 0) + dt * (9 + 6 * energy);
+        const wag = (P.wag || 0) * (0.5 + energy) * Math.sin(this._wag);
+        const swing = local.x / this.height * 2.5, lift = local.y / this.height * 2.5;
+        this.b.tail.rotation.set(-lift, swing + wag, 0);
+      }
+    }
   }
 
   // pts: smoothed mirrored points from body.js; base: calibrated posture (optional)

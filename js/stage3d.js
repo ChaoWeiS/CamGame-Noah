@@ -4,14 +4,14 @@
 // camera in Phaser's screen pixels, so an actor is placed by where its feet go
 // and how tall it is, in the same coordinates the scenes already use.
 import * as THREE from 'three';
-import { loadRiggedCharacter, EXAGGERATE_FOR } from './autorig.js';
+import { loadRiggedCharacter, EXAGGERATE_FOR, PHYSICS_FOR } from './autorig.js';
 import { MODELS } from './race3d.js';
 
 // one character instance per (animal, slot), kept between scenes so they load once
 const cache = new Map();
 function getChar(id, slot) {
   const key = `${id}#${slot}`;
-  if (!cache.has(key)) cache.set(key, loadRiggedCharacter(MODELS[id]).then((ch) => { ch.ex = EXAGGERATE_FOR[id]; return ch; }).catch((e) => { console.warn('3D character failed', id, e); return null; }));
+  if (!cache.has(key)) cache.set(key, loadRiggedCharacter(MODELS[id]).then((ch) => { ch.ex = EXAGGERATE_FOR[id]; ch.phys = PHYSICS_FOR[id]; return ch; }).catch((e) => { console.warn('3D character failed', id, e); return null; }));
   return cache.get(key);
 }
 // start loading the cast in the background (call from the lobby)
@@ -85,6 +85,8 @@ export class Stage3D {
     ch.root.scale.setScalar(heightPx / ch.height);
     if (pts && world) ch.pose3D(world, pts, base);
     else if (pts) ch.pose(pts, base); else ch.idle(t);
+    ch.root.updateMatrixWorld(true);
+    ch.physics();                      // belly wobble, tail swing, body bob
     return true;
   }
 
