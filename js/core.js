@@ -123,7 +123,7 @@ export const keyboardHelp = 'P1: ← → lean · ↑ jump · ↓ duck · 1–6 p
 window.addEventListener('keydown', (e) => {
   for (const pl of tracker.players) {
     if (pl.kind !== 'keyboard') continue;
-    const k = KB[pl.keyboardIndex]; const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    const k = KB[pl.keyboardIndex]; if (!k) continue; const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
     if (key === k.left) pl.kb.lane = Math.max(-1, pl.kb.lane - 1);
     if (key === k.right) pl.kb.lane = Math.min(1, pl.kb.lane + 1);
     if (key === k.up && !e.repeat) pl.kb.jumpAt = performance.now();
@@ -136,7 +136,7 @@ window.addEventListener('keydown', (e) => {
 window.addEventListener('keyup', (e) => {
   for (const pl of tracker.players) {
     if (pl.kind !== 'keyboard') continue;
-    const k = KB[pl.keyboardIndex]; const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
+    const k = KB[pl.keyboardIndex]; if (!k) continue; const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
     if (key === k.down) pl.kb.duck = false;
     if (key === k.ok) pl.kb.handsUp = false;
     if (k.poses.includes(key)) pl.kb.pose = null;

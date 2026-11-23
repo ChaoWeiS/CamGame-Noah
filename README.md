@@ -4,7 +4,7 @@ A proof-of-concept, Kinect-style motion game for kids. A phone is the camera, a
 computer (e.g. the church iMac) is the big-screen display, and the kids play with
 their bodies.
 
-**Flow:** pick your animal → race to the ark (lean / jump / duck past obstacles) →
+**Flow:** pick your character → race to the ark (lean / jump / duck past obstacles) →
 animal-pose password at the ark door (30 s) → results with a rainbow 🌈
 
 ## How to play
@@ -13,7 +13,7 @@ animal-pose password at the ark door (30 s) → results with a rainbow 🌈
 2. On the phone, scan the QR code. The phone page opens. Tap **Start camera**.
 3. Prop the phone up sideways (landscape), about 3 m away, so everyone fits head to toe.
 4. Players stand in a row. Anyone raises **both hands** to start, then everyone stands still for 3 s (calibration).
-5. **Pick:** lean left/right to change animal, raise both hands to choose.
+5. **Pick:** lean left/right to change character (Barnaby, Scout, Whiskers, Spike, Cluck, Squeak, Hammy, Pine), raise both hands to choose.
 6. **Race:** lean or step left/right to dodge rocks, jump over logs, duck under branches.
 7. **Password:** copy 5 animal poses in a row = 1 point. Most points in 30 s wins.
 
@@ -46,6 +46,7 @@ index.html  ◀── points ── tracker (who is who) → body.js (lane/jump/
 | `js/body.js` | Turns points into game input: lanes, jump, duck, the 6 poses |
 | `js/core.js` | Phone connection, webcam fallback, player tracking, keyboard players |
 | `js/scenes/*` | Lobby, Pick, Race, Password, Results |
+| `assets/characters/*` | Character sprites cut from the model sheets: `front`, `back` (used in the race) and `tpose` (celebrations) |
 
 Tuning lives mostly in `js/body.js` (thresholds) and the top of `js/scenes/RaceScene.js` (course length, speed).
 

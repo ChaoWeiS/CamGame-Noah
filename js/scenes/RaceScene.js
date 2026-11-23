@@ -1,5 +1,5 @@
 import { tracker, input } from '../core.js';
-import { W, H, txt, columns, rng, session, ordinal } from './common.js';
+import { W, H, txt, columns, rng, session, ordinal, charImage } from './common.js';
 
 const COURSE = 300;        // metres to the ark
 const BASE_SPEED = 10;     // metres per second
@@ -38,7 +38,7 @@ export class RaceScene extends Phaser.Scene {
         pl, c, dist: 0, speed: 0, laneX: c.cx, stumbleUntil: 0,
         lastJump: -1e9, lastDuck: -1e9, nextObs: 0, place: 0,
         shadow: this.add.ellipse(c.cx, RUNNER_Y + 30, 60, 16, 0x000000, 0.25),
-        sprite: this.add.text(c.cx, RUNNER_Y, pl.animal || '🐘', txt(Math.min(72, c.w * 0.22))).setOrigin(0.5, 0.75),
+        sprite: charImage(this, c.cx, RUNNER_Y + 30, pl.animal || 'bear', 'back', Math.min(120, c.w * 0.36)),
         msg: this.add.text(c.cx, RUNNER_Y - 110, '', txt(30, '#ffffff', { stroke: '#1d3b52', strokeThickness: 6 })).setOrigin(0.5),
         lost: this.add.text(c.cx, 380, '', txt(26, '#ffffff', { stroke: '#9b3b2f', strokeThickness: 6, wordWrap: { width: c.w - 30 } })).setOrigin(0.5),
         labels: [],
@@ -124,11 +124,14 @@ export class RaceScene extends Phaser.Scene {
       const jumpK = Math.max(0, 1 - (now - r.lastJump) / 450);
       const ducking = now - r.lastDuck < 120;
       const wobble = now < r.stumbleUntil ? Math.sin(time / 40) * 0.3 : 0;
-      r.sprite.setPosition(r.laneX, RUNNER_Y - jumpK * 50);
-      r.sprite.setScale(1 + jumpK * 0.2, ducking ? 0.55 : 1 + jumpK * 0.2);
+      // Bob while running, hop when jumping, squash when ducking
+      const bob = r.speed > 1 ? Math.abs(Math.sin(time / 110)) * 6 : 0;
+      const bs = r.sprite.baseScale;
+      r.sprite.setPosition(r.laneX, RUNNER_Y + 30 - jumpK * 60 - bob);
+      r.sprite.setScale(bs * (1 + jumpK * 0.15), bs * (ducking ? 0.55 : 1 + jumpK * 0.15));
       r.sprite.setRotation(wobble);
       r.shadow.setPosition(r.laneX, RUNNER_Y + 30).setScale(1 - jumpK * 0.4);
-      r.msg.setPosition(r.c.cx, RUNNER_Y - 120);
+      r.msg.setPosition(r.c.cx, RUNNER_Y - 130);
 
       this.drawProgress(g, r);
     }

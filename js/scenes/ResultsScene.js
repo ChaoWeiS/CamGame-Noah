@@ -1,5 +1,5 @@
 import { tracker, input } from '../core.js';
-import { W, H, txt, sky, Hold, session, ordinal } from './common.js';
+import { W, H, txt, sky, Hold, session, ordinal, charById, charImage } from './common.js';
 
 const RACE_POINTS = { 1: 3, 2: 2, 3: 1 };
 
@@ -31,11 +31,19 @@ export class ResultsScene extends Phaser.Scene {
       const y = 170 + i * 92;
       this.add.rectangle(W / 2, y, 900, 78, 0xffffff, 0.8).setStrokeStyle(4, r.pl.color, 1);
       const crown = r.total === best ? '👑 ' : '';
-      this.add.text(W / 2 - 420, y, `${crown}${r.pl.animal || ''}  Player ${r.pl.slot + 1}`, txt(30, '#1d3b52')).setOrigin(0, 0.5);
-      this.add.text(W / 2 + 60, y,
+      charImage(this, W / 2 - 400, y + 36, r.pl.animal || 'bear', 'front', 70);
+      this.add.text(W / 2 - 350, y, `${crown}${charById(r.pl.animal).name} (P${r.pl.slot + 1})`, txt(28, '#1d3b52')).setOrigin(0, 0.5);
+      this.add.text(W / 2 + 180, y,
         `Race: ${r.place ? ordinal(r.place) : '–'} (+${r.racePts})   Password: ⭐ ${r.pw}   =  ${r.total}`,
-        txt(24, '#1d3b52')).setOrigin(0.5);
+        txt(22, '#1d3b52')).setOrigin(0.5);
     });
+
+    // Winner celebrates in a T-pose
+    if (rows.length) {
+      const top = rows[0];
+      const champ = charImage(this, W / 2, H - 62, top.pl.animal || 'bear', 'tpose', Math.min(200, H - 62 - (170 + rows.length * 92) + 40));
+      this.tweens.add({ targets: champ, y: champ.y - 16, yoyo: true, repeat: -1, duration: 400, ease: 'Sine.easeInOut' });
+    }
 
     this.add.text(W / 2, H - 40, 'Raise both hands (or press Enter) to play again · press L for a new lobby',
       txt(22, '#1d3b52')).setOrigin(0.5);

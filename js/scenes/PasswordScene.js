@@ -1,6 +1,6 @@
 import { tracker, input } from '../core.js';
 import { POSES } from '../body.js';
-import { W, H, txt, sky, columns, rng, Hold, session, drawSkeleton, personMap } from './common.js';
+import { W, H, txt, sky, columns, rng, Hold, session, drawSkeleton, personMap, charById, charImage } from './common.js';
 
 const ROUND_MS = 30000;
 const HOLD_MS = 450;
@@ -41,16 +41,17 @@ export class PasswordScene extends Phaser.Scene {
       const cards = [];
       for (let j = 0; j < SEQ_LEN; j++) {
         const x = c.cx + (j - (SEQ_LEN - 1) / 2) * (cardSize + 8);
-        cards.push(this.add.text(x, 100, '', txt(cardSize * 0.62)).setOrigin(0.5));
+        cards.push(this.add.text(x, 114, '', txt(cardSize * 0.62)).setOrigin(0.5));
       }
       return {
         pl, c, cardSize, cards, k: 0, step: 0, points: 0, hold: new Hold(HOLD_MS),
-        head: this.add.text(c.cx, 62, `${pl.animal || ''} Player ${i + 1}`, txt(20, pl.css)).setOrigin(0.5),
+        head: this.add.text(c.cx, 62, `${charById(pl.animal).name} · Player ${i + 1}`, txt(20, pl.css)).setOrigin(0.5),
+        cheer: charImage(this, c.cx, 330, pl.animal || 'bear', 'tpose', Math.min(200, c.w * 0.5)).setAlpha(0).setDepth(4),
         big: this.add.text(c.cx, 235, '', txt(Math.min(110, c.w * 0.3))).setOrigin(0.5),
         name: this.add.text(c.cx, 318, '', txt(Math.min(30, c.w * 0.09), '#fff8e6')).setOrigin(0.5),
         hint: this.add.text(c.cx, 352, '', txt(Math.min(20, c.w * 0.06), '#f4e3c3', { wordWrap: { width: c.w - 20 } })).setOrigin(0.5, 0),
         score: this.add.text(c.cx, H - 30, '', txt(28, '#fff8e6')).setOrigin(0.5),
-        flash: this.add.text(c.cx, 235, '', txt(34, '#fff8e6', { stroke: '#2e7d4f', strokeThickness: 8 })).setOrigin(0.5).setDepth(5),
+        flash: this.add.text(c.cx, 150, '', txt(34, '#fff8e6', { stroke: '#2e7d4f', strokeThickness: 8 })).setOrigin(0.5).setDepth(5),
         lost: this.add.text(c.cx, 520, '', txt(22, '#ffffff', { stroke: '#9b3b2f', strokeThickness: 6, wordWrap: { width: c.w - 20 } })).setOrigin(0.5),
       };
     });
@@ -120,6 +121,9 @@ export class PasswordScene extends Phaser.Scene {
           pp.points++; pp.k++; pp.step = 0;
           pp.flash.setText('Door code! +1').setAlpha(1);
           this.tweens.add({ targets: pp.flash, alpha: 0, delay: 700, duration: 400 });
+          pp.cheer.setAlpha(1).setY(330);
+          this.tweens.add({ targets: pp.cheer, y: 300, yoyo: true, duration: 200, repeat: 1 });
+          this.tweens.add({ targets: pp.cheer, alpha: 0, delay: 900, duration: 300 });
         }
         this.showCurrent(pp);
         this.tweens.add({ targets: pp.big, scale: { from: 1.3, to: 1 }, duration: 180 });

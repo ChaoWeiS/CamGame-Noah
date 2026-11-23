@@ -1,10 +1,12 @@
 import { tracker, stats, net, localCam, PLAYER_COLORS, MAX_PLAYERS } from '../core.js';
-import { W, H, txt, sky, drawSkeleton, Hold, session } from './common.js';
+import { W, H, txt, sky, drawSkeleton, Hold, session, loadCharacters } from './common.js';
 
 const $ = (id) => document.getElementById(id);
 
 export class LobbyScene extends Phaser.Scene {
   constructor() { super('Lobby'); }
+
+  preload() { loadCharacters(this); }
 
   create() {
     tracker.unlock();

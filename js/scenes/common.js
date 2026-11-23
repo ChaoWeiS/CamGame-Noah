@@ -2,7 +2,34 @@ import { keyPoints } from '../body.js';
 import { BONES } from '../bones.js';
 
 export const W = 1280, H = 720;
-export const ANIMALS = ['🐘', '🦒', '🦁', '🐰', '🐢', '🦊', '🐼', '🐒'];
+export const CHARACTERS = [
+  { id: 'bear', name: 'Barnaby' },
+  { id: 'dog', name: 'Scout' },
+  { id: 'cat', name: 'Whiskers' },
+  { id: 'lizard', name: 'Spike' },
+  { id: 'chicken', name: 'Cluck' },
+  { id: 'mouse', name: 'Squeak' },
+  { id: 'hamster', name: 'Hammy' },
+  { id: 'pine', name: 'Pine' },
+];
+export const VIEWS = ['front', 'back', 'tpose'];
+export const charById = (id) => CHARACTERS.find((c) => c.id === id) || CHARACTERS[0];
+
+// Load every character view (call from a scene's preload).
+export function loadCharacters(scene) {
+  for (const c of CHARACTERS) for (const v of VIEWS) {
+    const key = `${c.id}_${v}`;
+    if (!scene.textures.exists(key)) scene.load.image(key, `assets/characters/${key}.png`);
+  }
+}
+
+// Character image standing on (x, y), scaled to a given height.
+export function charImage(scene, x, y, id, view, height) {
+  const img = scene.add.image(x, y, `${id}_${view}`).setOrigin(0.5, 1);
+  img.setScale(height / img.height);
+  img.baseScale = img.scaleX;
+  return img;
+}
 export const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 
 export const session = { kbCount: 0, race: [], pw: [], seed: 1 };
