@@ -30,23 +30,30 @@ export class RaceScene extends Phaser.Scene {
     const players = tracker.players;
     this.cols = columns(players.length);
 
-    this.bg = this.add.graphics();
-    this.g = this.add.graphics();
+    this.bg = this.add.graphics().setDepth(0);
+    this.g = this.add.graphics().setDepth(3);
+    this.pool = new Map();
+    // Scenery: trees along the track edges, same for every column
+    const r0 = rng(session.seed ^ 0x77);
+    this.decor = [];
+    for (let d = 6; d < COURSE + 40; d += 7 + r0() * 6) {
+      this.decor.push({ d, side: r0() < 0.5 ? -1 : 1, key: ['prop_oak', 'prop_birch', 'prop_twisty', 'prop_boulder', 'prop_rocks'][Math.floor(r0() * 5)] });
+    }
     this.runners = players.map((pl, i) => {
       const c = this.cols[i];
       return {
         pl, c, dist: 0, speed: 0, laneX: c.cx, stumbleUntil: 0,
         lastJump: -1e9, lastDuck: -1e9, nextObs: 0, place: 0,
-        shadow: this.add.ellipse(c.cx, RUNNER_Y + 30, 60, 16, 0x000000, 0.25),
-        sprite: charImage(this, c.cx, RUNNER_Y + 30, pl.animal || 'bear', 'back', Math.min(120, c.w * 0.36)),
-        msg: this.add.text(c.cx, RUNNER_Y - 110, '', txt(30, '#ffffff', { stroke: '#1d3b52', strokeThickness: 6 })).setOrigin(0.5),
-        lost: this.add.text(c.cx, 380, '', txt(26, '#ffffff', { stroke: '#9b3b2f', strokeThickness: 6, wordWrap: { width: c.w - 30 } })).setOrigin(0.5),
+        shadow: this.add.ellipse(c.cx, RUNNER_Y + 30, 60, 16, 0x000000, 0.25).setDepth(4),
+        sprite: charImage(this, c.cx, RUNNER_Y + 30, pl.animal || 'bear', 'back', Math.min(120, c.w * 0.36)).setDepth(5),
+        msg: this.add.text(c.cx, RUNNER_Y - 110, '', txt(30, '#ffffff', { stroke: '#1d3b52', strokeThickness: 6 })).setOrigin(0.5).setDepth(8),
+        lost: this.add.text(c.cx, 380, '', txt(26, '#ffffff', { stroke: '#9b3b2f', strokeThickness: 6, wordWrap: { width: c.w - 30 } })).setOrigin(0.5).setDepth(8),
         labels: [],
       };
     });
     // Text labels for obstacles are pooled per column
     this.runners.forEach((r) => {
-      for (let i = 0; i < 4; i++) r.labels.push(this.add.text(0, 0, '', txt(18, '#ffffff', { stroke: '#000', strokeThickness: 4 })).setOrigin(0.5).setVisible(false));
+      for (let i = 0; i < 4; i++) r.labels.push(this.add.text(0, 0, '', txt(18, '#ffffff', { stroke: '#000', strokeThickness: 4 })).setOrigin(0.5).setVisible(false).setDepth(7));
     });
 
     this.banner = this.add.text(W / 2, H / 2 - 40, '', txt(90, '#fff8e6', { stroke: '#1d3b52', strokeThickness: 12 })).setOrigin(0.5).setDepth(10);
@@ -75,6 +82,7 @@ export class RaceScene extends Phaser.Scene {
     this.rainT += dt;
     this.drawBackground();
     const g = this.g; g.clear();
+    for (const list of this.pool.values()) { list.used = 0; list.forEach((im) => im.setVisible(false)); }
 
     for (const r of this.runners) {
       const inp = input(r.pl);
@@ -102,6 +110,19 @@ export class RaceScene extends Phaser.Scene {
         }
       }
 
+      // Scenery trees at the track edges (far ones first so near ones overlap them)
+      for (let i = this.decor.length - 1; i >= 0; i--) {
+        const dcr = this.decor[i];
+        const ahead = dcr.d - r.dist;
+        if (ahead < -6 || ahead > 32) continue;
+        const y = RUNNER_Y - ahead * PX_PER_M;
+        if (y < TOP_Y + 30) continue;
+        const x = dcr.side < 0 ? r.c.x + 14 : r.c.x + r.c.w - 14;
+        const im = this.sprite(dcr.key, 1).setPosition(x, y).setOrigin(0.5, 1);
+        this.fitHeight(im, Math.min(130, r.c.w * 0.32) * (dcr.key.includes('rock') || dcr.key.includes('boulder') ? 0.45 : 1));
+        im.setFlipX(dcr.side > 0);
+      }
+
       // Draw obstacles ahead in this column
       let li = 0;
       r.labels.forEach((l) => l.setVisible(false));
@@ -113,7 +134,7 @@ export class RaceScene extends Phaser.Scene {
         if (y < TOP_Y) continue;
         const label = this.drawObstacle(g, r.c, o, y);
         if (label && li < r.labels.length) {
-          r.labels[li++].setText(label).setPosition(r.c.cx, y - 34).setVisible(true);
+          r.labels[li++].setText(label).setPosition(r.c.cx, label === 'DUCK!' ? y - 110 : y - 40).setVisible(true);
         }
       }
       // The ark appears near the end
@@ -166,24 +187,37 @@ export class RaceScene extends Phaser.Scene {
     this.time.delayedCall(700, () => { if (!r.place) r.msg.setText(''); });
   }
 
+  // Reusable images: one pool per texture, reset every frame.
+  sprite(key, depth) {
+    let list = this.pool.get(key);
+    if (!list) { list = []; list.used = 0; this.pool.set(key, list); }
+    let im = list[list.used];
+    if (!im) { im = this.add.image(0, 0, key); list.push(im); }
+    list.used++;
+    return im.setVisible(true).setDepth(depth).setRotation(0).setFlipX(false);
+  }
+  fitHeight(im, h) { im.setScale(h / im.height); return im; }
+
   drawObstacle(g, c, o, y) {
     const half = c.w * 0.42;
     if (o.type === 'rock') {
       const x = c.cx + o.lane * c.w * 0.28;
-      const rad = Math.min(30, c.w * 0.09);
-      g.fillStyle(0x7d7f86, 1).fillCircle(x, y, rad);
-      g.fillStyle(0x9ea1a8, 1).fillCircle(x - rad * 0.3, y - rad * 0.3, rad * 0.45);
+      const im = this.sprite('prop_rock', 2).setOrigin(0.5, 0.75).setPosition(x, y);
+      this.fitHeight(im, Math.min(72, c.w * 0.2));
       return null;
     }
     if (o.type === 'log') {
-      g.fillStyle(0x8a5a2b, 1).fillRoundedRect(c.cx - half, y - 14, half * 2, 28, 12);
-      g.fillStyle(0xc28a52, 1).fillCircle(c.cx - half + 10, y, 11).fillCircle(c.cx + half - 10, y, 11);
+      const im = this.sprite('prop_log', 2).setOrigin(0.5, 0.5).setPosition(c.cx, y);
+      im.setDisplaySize(half * 2, Math.min(54, half * 0.35));
       return 'JUMP!';
     }
-    // branch (duck)
-    g.fillStyle(0x5b3a1e, 1).fillRect(c.cx - half, y - 40, 10, 54).fillRect(c.cx + half - 10, y - 40, 10, 54);
-    g.fillStyle(0x3f8f3a, 1).fillRoundedRect(c.cx - half, y - 22, half * 2, 18, 8);
-    for (let i = 0; i < 6; i++) g.fillStyle(0x58b350, 1).fillCircle(c.cx - half + (i + 0.5) * (half * 2 / 6), y - 24, 9);
+    // branch (duck): a long stick held up between two small trees
+    const postH = Math.min(120, c.w * 0.32);
+    this.fitHeight(this.sprite('prop_birch', 2).setOrigin(0.5, 1).setPosition(c.cx - half, y + 16), postH);
+    this.fitHeight(this.sprite('prop_birch', 2).setOrigin(0.5, 1).setPosition(c.cx + half, y + 16), postH).setFlipX(true);
+    const bar = this.sprite('prop_stick', 2).setOrigin(0.5, 0.5).setPosition(c.cx, y - postH * 0.45);
+    bar.setDisplaySize(Math.max(18, half * 0.14), half * 2.1);
+    bar.setRotation(Math.PI / 2);
     return 'DUCK!';
   }
 

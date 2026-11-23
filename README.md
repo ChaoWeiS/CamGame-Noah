@@ -46,6 +46,7 @@ index.html  ◀── points ── tracker (who is who) → body.js (lane/jump/
 | `js/body.js` | Turns points into game input: lanes, jump, duck, the 6 poses |
 | `js/core.js` | Phone connection, webcam fallback, player tracking, keyboard players |
 | `js/scenes/*` | Lobby, Pick, Race, Password, Results |
+| `assets/props/*` | Trees, rocks, log and branch cut from the forest prop sheet (obstacles + scenery) |
 | `assets/characters/*` | Character sprites cut from the model sheets: `front`, `back` (used in the race) and `tpose` (celebrations) |
 
 Tuning lives mostly in `js/body.js` (thresholds) and the top of `js/scenes/RaceScene.js` (course length, speed).

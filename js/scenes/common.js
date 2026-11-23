@@ -21,7 +21,11 @@ export function loadCharacters(scene) {
     const key = `${c.id}_${v}`;
     if (!scene.textures.exists(key)) scene.load.image(key, `assets/characters/${key}.png`);
   }
+  for (const p of PROPS) {
+    if (!scene.textures.exists('prop_' + p)) scene.load.image('prop_' + p, `assets/props/${p}.png`);
+  }
 }
+export const PROPS = ['oak', 'birch', 'twisty', 'rock', 'boulder', 'rocks', 'log', 'stick', 'fork'];
 
 // Character image standing on (x, y), scaled to a given height.
 export function charImage(scene, x, y, id, view, height) {
