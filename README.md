@@ -27,6 +27,11 @@ Poses: 🦒 Giraffe (arms straight up) · 🐦 Bird wings (arms out sideways) ·
   - P2: A D lean · W jump · S duck · tap F to run · Z X C V B N poses · Q = hands up
 - **F9** toggles the stats overlay (camera fps, pose time, round trip, people seen).
 
+## 3D bear test
+`bear3d.html` loads `assets/models/bear.glb` in Three.js and makes Barnaby copy you (arms, legs, lean, jumps)
+using the same phone QR code or the computer's webcam. Drag to look around, H hides the panel.
+Models need their limbs as separately named parts (`Left arm`, `Left paw`, `Left leg`, `Left foot`, …) — see `js/puppet3d.js`.
+
 ## Screen layout
 - The game fits the display's shape automatically, from 16:9 (1920×1080) to 16:10 (1920×1200). Refresh the page after resizing the window.
 - Split screen, up to 4 players: 1 player = full screen, 2 = side by side, 3–4 = 2×2 grid.
