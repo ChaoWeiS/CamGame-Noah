@@ -21,6 +21,19 @@ export const MODELS = {
   dog: 'assets/models/dog.glb',
 };
 const PROPS_FILE = 'assets/models/props.glb';
+
+// How big each prop really is, measured in animal heights (an animal = 1),
+// the same way the 2D version sized things by the runner: [min, max] height.
+// Tripo made every piece about the same size, so this puts them back to scale.
+export const SIZES = {
+  grass: [0.22, 0.38], flowers: [0.2, 0.34], pebbles: [0.1, 0.16],
+  flowerbush: [0.5, 0.8], bush2: [0.6, 0.9], bush: [0.9, 1.3],
+  rock: [0.3, 0.55], rock2: [0.7, 1.1], boulder: [1.2, 2.0],
+  stump: [0.45, 0.7], fallen: [0.9, 1.3],
+};
+// rocks are round underneath: sink them a little so they sit in the grass instead of on a point
+const SINK = { boulder: 0.15, rock2: 0.2, rock: 0.1, rockpile: 0.06, pebbles: 0.2, stump: 0.04, fallen: 0.04 };
+const sizeOf = (key, t) => SIZES[key][0] + t * (SIZES[key][1] - SIZES[key][0]);
 const charCache = {};
 let propsPromise = null;
 
@@ -106,8 +119,8 @@ export class Race3D {
         if (r() < 0.25) continue;
         // rows: low plants at the edge, then bushes and rocks, then a forest of trees
         const band = r();
-        if (band < 0.3) this.scenery.push({ d: d + r(), side, key: pick(['grass', 'flowers', 'flowerbush', 'pebbles']), h: 0.35 + r() * 0.25, off: 0.15 + r() * 0.5, rot: r() * 6.28 });
-        else if (band < 0.55) this.scenery.push({ d: d + r(), side, key: pick(['bush', 'bush2', 'boulder', 'rock2', 'stump', 'fallen']), h: 0.8 + r() * 0.9, off: 0.6 + r() * 1.6, rot: r() * 6.28 });
+        if (band < 0.3) { const key = pick(['grass', 'grass', 'flowers', 'flowerbush', 'pebbles', 'rock']); this.scenery.push({ d: d + r(), side, key, h: sizeOf(key, r()), off: 0.1 + r() * 0.5, rot: r() * 6.28 }); }
+        else if (band < 0.55) { const key = pick(['bush', 'bush2', 'boulder', 'rock2', 'stump', 'fallen']); this.scenery.push({ d: d + r(), side, key, h: sizeOf(key, r()), off: 0.6 + r() * 1.6, rot: r() * 6.28 }); }
         else this.scenery.push({ d: d + r(), side, key: pick(['oak', 'oak', 'pine', 'pine', 'bare']), h: this.cfg.TREE_SCALE * (0.8 + r() * 0.45), off: 1.2 + r() * 5, rot: r() * 6.28 });
       }
     }
@@ -148,12 +161,14 @@ export class Race3D {
   resetPools() { for (const p of this.pools.values()) { p.used = 0; p.list.forEach((m) => { m.visible = false; }); } }
 
   // a prop standing on the ground at (x, z), h units tall, turned by rot
-  prop(name, x, z, h, rot = 0) {
+  // maxW (optional) keeps its footprint no wider than that, so a lane blocker stays in its lane
+  prop(name, x, z, h, rot = 0, maxW = 0) {
     const t = this.T[name], m = this.use(name), k = h / t.size.y;
-    m.scale.setScalar(k);
-    m.position.set(x, 0, z);
+    const kw = maxW ? Math.min(k, maxW / Math.max(t.size.x, t.size.z)) : k;
+    m.scale.set(kw, k, kw);
+    m.position.set(x, -(SINK[name] || 0) * h, z);
     m.rotation.y = rot;
-    const b = this.use('_blob'), w = Math.max(t.size.x, t.size.z) * k * 1.1;
+    const b = this.use('_blob'), w = Math.max(t.size.x, t.size.z) * kw * 1.1;
     b.scale.set(w, 1, w * 0.8);
     b.position.set(x, 0.01, z);
     return m;
@@ -181,9 +196,9 @@ export class Race3D {
         if (o.kind === 'tree') {
           b.forEach((l, j) => this.prop(j % 2 ? 'pine' : 'oak', l * lane, z, cfg.TREE_SCALE * v.k, v.rot + j));
         } else if (b.length === 2 && b[1] - b[0] === 1) {
-          this.prop('rockpile', (b[0] + b[1]) / 2 * lane, z, 1.7 * v.k, v.rot);
+          this.prop('rockpile', (b[0] + b[1]) / 2 * lane, z, 1.7 * v.k, v.rot, lane * 2.05);
         } else {
-          b.forEach((l, j) => this.prop(j % 2 ? 'rock2' : 'boulder', l * lane, z, 1.4 * v.k, v.rot + j * 2));
+          b.forEach((l, j) => this.prop(j % 2 ? 'rock2' : 'boulder', l * lane, z, 1.4 * v.k, v.rot + j * 2, lane * 1.05));
         }
       } else if (o.type === 'log') {
         // a log lying across the whole track, about half an animal high
