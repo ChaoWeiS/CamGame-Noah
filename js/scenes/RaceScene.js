@@ -8,6 +8,9 @@ const RUNNER_Y = 610;
 const TOP_Y = 120;
 const WINDOW_MS = 380;     // how recently you must have jumped/ducked when an obstacle arrives
 
+// Things further up the track are drawn a bit smaller, for a sense of depth.
+const depthScale = (y) => 0.55 + 0.45 * Math.max(0, Math.min(1, (y - TOP_Y) / (RUNNER_Y - TOP_Y)));
+
 function makeCourse(seed) {
   const r = rng(seed);
   const obs = [];
@@ -45,8 +48,8 @@ export class RaceScene extends Phaser.Scene {
       return {
         pl, c, dist: 0, speed: 0, laneX: c.cx, stumbleUntil: 0,
         lastJump: -1e9, lastDuck: -1e9, nextObs: 0, place: 0,
-        shadow: this.add.ellipse(c.cx, RUNNER_Y + 30, 60, 16, 0x000000, 0.25).setDepth(4),
-        sprite: charImage(this, c.cx, RUNNER_Y + 30, pl.animal || 'bear', 'back', Math.min(120, c.w * 0.36)).setDepth(5),
+        shadow: this.add.ellipse(c.cx, RUNNER_Y + 30, Math.min(110, c.w * 0.3), 22, 0x000000, 0.25).setDepth(4),
+        sprite: charImage(this, c.cx, RUNNER_Y + 30, pl.animal || 'bear', 'back', Math.min(190, c.w * 0.5)).setDepth(5),
         msg: this.add.text(c.cx, RUNNER_Y - 110, '', txt(30, '#ffffff', { stroke: '#1d3b52', strokeThickness: 6 })).setOrigin(0.5).setDepth(8),
         lost: this.add.text(c.cx, 380, '', txt(26, '#ffffff', { stroke: '#9b3b2f', strokeThickness: 6, wordWrap: { width: c.w - 30 } })).setOrigin(0.5).setDepth(8),
         labels: [],
@@ -54,7 +57,7 @@ export class RaceScene extends Phaser.Scene {
     });
     // Text labels for obstacles are pooled per column
     this.runners.forEach((r) => {
-      for (let i = 0; i < 4; i++) r.labels.push(this.add.text(0, 0, '', txt(18, '#ffffff', { stroke: '#000', strokeThickness: 4 })).setOrigin(0.5).setVisible(false).setDepth(7));
+      for (let i = 0; i < 4; i++) r.labels.push(this.add.text(0, 0, '', txt(24, '#ffffff', { stroke: '#000', strokeThickness: 5 })).setOrigin(0.5).setVisible(false).setDepth(7));
     });
 
     this.banner = this.add.text(W / 2, H / 2 - 40, '', txt(90, '#fff8e6', { stroke: '#1d3b52', strokeThickness: 12 })).setOrigin(0.5).setDepth(10);
@@ -120,7 +123,7 @@ export class RaceScene extends Phaser.Scene {
         if (y < TOP_Y + 30) continue;
         const x = dcr.side < 0 ? r.c.x + 14 : r.c.x + r.c.w - 14;
         const im = this.sprite(dcr.key, 1).setPosition(x, y).setOrigin(0.5, 1);
-        this.fitHeight(im, Math.min(130, r.c.w * 0.32) * (dcr.key.includes('rock') || dcr.key.includes('boulder') ? 0.45 : 1));
+        this.fitHeight(im, depthScale(y) * Math.min(200, r.c.w * 0.45) * (dcr.key.includes('rock') || dcr.key.includes('boulder') ? 0.45 : 1));
         im.setFlipX(dcr.side > 0);
       }
 
@@ -135,7 +138,7 @@ export class RaceScene extends Phaser.Scene {
         if (y < TOP_Y) continue;
         const label = this.drawObstacle(g, r.c, o, y);
         if (label && li < r.labels.length) {
-          r.labels[li++].setText(label).setPosition(r.c.cx, label === 'DUCK!' ? y - 110 : y - 40).setVisible(true);
+          r.labels[li++].setText(label).setPosition(r.c.cx, label === 'DUCK!' ? y - depthScale(y) * Math.min(190, r.c.w * 0.45) - 14 : y - depthScale(y) * 50 - 12).setVisible(true);
         }
       }
       // The ark appears near the end
@@ -153,7 +156,7 @@ export class RaceScene extends Phaser.Scene {
       r.sprite.setScale(bs * (1 + jumpK * 0.15), bs * (ducking ? 0.55 : 1 + jumpK * 0.15));
       r.sprite.setRotation(wobble);
       r.shadow.setPosition(r.laneX, RUNNER_Y + 30).setScale(1 - jumpK * 0.4);
-      r.msg.setPosition(r.c.cx, RUNNER_Y - 130);
+      r.msg.setPosition(r.c.cx, RUNNER_Y - 200);
 
       this.drawProgress(this.top, r);
     }
@@ -204,20 +207,21 @@ export class RaceScene extends Phaser.Scene {
     if (o.type === 'rock') {
       const x = c.cx + o.lane * c.w * 0.28;
       const im = this.sprite('prop_rock', 2).setOrigin(0.5, 0.75).setPosition(x, y);
-      this.fitHeight(im, Math.min(72, c.w * 0.2));
+      this.fitHeight(im, depthScale(y) * Math.min(120, c.w * 0.3));
       return null;
     }
     if (o.type === 'log') {
       const im = this.sprite('prop_log', 2).setOrigin(0.5, 0.5).setPosition(c.cx, y);
-      im.setDisplaySize(half * 2, Math.min(54, half * 0.35));
+      const k = depthScale(y);
+      im.setDisplaySize(half * 2 * (0.75 + 0.25 * k), k * Math.min(85, half * 0.5));
       return 'JUMP!';
     }
     // branch (duck): a long stick held up between two small trees
-    const postH = Math.min(120, c.w * 0.32);
+    const postH = depthScale(y) * Math.min(190, c.w * 0.45);
     this.fitHeight(this.sprite('prop_birch', 2).setOrigin(0.5, 1).setPosition(c.cx - half, y + 16), postH);
     this.fitHeight(this.sprite('prop_birch', 2).setOrigin(0.5, 1).setPosition(c.cx + half, y + 16), postH).setFlipX(true);
     const bar = this.sprite('prop_stick', 2).setOrigin(0.5, 0.5).setPosition(c.cx, y - postH * 0.45);
-    bar.setDisplaySize(Math.max(18, half * 0.14), half * 2.1);
+    bar.setDisplaySize(Math.max(26, postH * 0.2), half * 2.1);
     bar.setRotation(Math.PI / 2);
     return 'DUCK!';
   }
