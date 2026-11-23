@@ -22,12 +22,15 @@ $('qr').src = qr.createDataURL(6, 8);
 $('kbhelp').textContent = keyboardHelp;
 
 // ---- debug HUD (press D to toggle)
+const BUILD = '11-24 torso+wrists';   // shows which version the browser has loaded
 setInterval(() => {
   const live = performance.now() - stats.lastFrame < 1500;
   const players = tracker.players.map((p, i) => `P${i + 1}${input(p).present ? '' : ' (lost)'}`).join(' ');
   $('hud').innerHTML = [
     `${stats.source}${live ? '' : ' (no frames)'} · <b>${stats.fps}</b> fps · pose <b>${stats.inf}</b> ms`,
     `round trip <b>${stats.rtt ?? '–'}</b> ms · people <b>${stats.people}</b>`,
+    live ? (stats.world3D ? '3D body: <b>✓</b>' : '3D body: <b>✗</b> — reload the phone page') : '',
+    `build <b>${BUILD}</b>`,
     players ? `players: ${players}` : '',
   ].filter(Boolean).join('<br>');
 }, 250);

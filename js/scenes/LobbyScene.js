@@ -112,7 +112,6 @@ export class LobbyScene extends Phaser.Scene {
       return { x: (hipL.x + hipR.x) / 2, footY, h: (footY - nose.y) * 1.1 };
     });
     sk.slice(0, MAX_PLAYERS).forEach((person, i) => {
-      drawSkeleton(g, person.pts, map, PLAYER_COLORS[i], 3);
       const sp = spots[i], id = CHARACTERS[i % CHARACTERS.length].id;
       const gap = Math.min(...spots.filter((o) => o !== sp).map((o) => Math.abs(o.x - sp.x)), Infinity);
       const h = Math.min(sp.h, gap * 1.15, f.h * 0.85, sp.footY - f.y - 4);

@@ -210,19 +210,40 @@ export class RiggedCharacter {
       this.b[name].rotation.z = -this.a[name];       // screen-clockwise → negative Z rotation
     };
     const { sh, hip, torso } = keyPoints(pts);
-    const tilt = Math.max(-0.5, Math.min(0.5, Math.atan2(sh.y - hip.y, sh.x - hip.x) + Math.PI / 2));
+    const clamp = (v, m) => Math.max(-m, Math.min(m, v));
+    // Each part of the body follows its own line, as a screen angle:
+    //   hips ← the hip line, waist ← the torso (hips→shoulders), chest ← the shoulder line,
+    //   head ← the ear line (and it turns toward where the nose points)
+    const tilt = clamp(Math.atan2(sh.y - hip.y, sh.x - hip.x) + Math.PI / 2, 0.5);
     this.tilt += (tilt - this.tilt) * 0.5;
-    this.b.spine.rotation.z = -this.tilt;
+    const hipsA = ok(L.lHip) && ok(L.rHip) ? clamp(ang(L.lHip, L.rHip), 0.35) : 0;
+    const chestA = ok(L.lShoulder) && ok(L.rShoulder) ? clamp(ang(L.lShoulder, L.rShoulder), 0.6) : this.tilt;
+    set('hips', hipsA);
+    set('spine', this.tilt - hipsA);
+    set('chest', chestA - this.tilt);
+    if (ok(L.lEar) && ok(L.rEar)) {
+      const headA = clamp(wrap(ang(L.lEar, L.rEar) - chestA), 0.7);
+      set('head', headA);
+      // nose left/right of the ears' middle → head turned that way
+      const half = Math.abs(pts[L.rEar].x - pts[L.lEar].x) / 2;
+      if (ok(L.nose) && half > 1e-3) {
+        const off = (pts[L.nose].x - (pts[L.lEar].x + pts[L.rEar].x) / 2) / half;
+        this.a.headYaw = (this.a.headYaw ?? 0) + (clamp(off, 1) * 1.0 - (this.a.headYaw ?? 0)) * 0.5;
+        this.b.head.rotation.y = this.a.headYaw;
+      }
+    }
+    const armBase = this.a.chest !== undefined ? (this.a.hips ?? 0) + (this.a.spine ?? 0) + this.a.chest : this.tilt;
+    const legBase = this.a.hips ?? 0;
     if (base) {
       const dy = (base.hipY - hip.y) / torso;
       this.hop += (dy * 0.45 * this.height - this.hop) * 0.5;
       this.b.hips.position.y = this.hipY0 + this.hop;
     }
     const limbs = [
-      ['upperL', 'foreL', L.lShoulder, L.lElbow, L.lWrist, this.tilt],
-      ['upperR', 'foreR', L.rShoulder, L.rElbow, L.rWrist, this.tilt],
-      ['thighL', 'shinL', L.lHip, L.lKnee, L.lAnkle, 0],
-      ['thighR', 'shinR', L.rHip, L.rKnee, L.rAnkle, 0],
+      ['upperL', 'foreL', L.lShoulder, L.lElbow, L.lWrist, armBase],
+      ['upperR', 'foreR', L.rShoulder, L.rElbow, L.rWrist, armBase],
+      ['thighL', 'shinL', L.lHip, L.lKnee, L.lAnkle, legBase],
+      ['thighR', 'shinR', L.rHip, L.rKnee, L.rAnkle, legBase],
     ];
     for (const [up, lo, a, m, c, parentTilt] of limbs) {
       if (!(ok(a) && ok(m))) continue;
@@ -323,7 +344,7 @@ export class RiggedCharacter {
 
   // 2D: bend each wrist toward the fingers (index/pinky middle)
   poseHands2D(pts) {
-    const ok = (i) => pts[i].v > 0.4;
+    const ok = (i) => pts[i].v > 0.3;
     const ang = (a, x, y) => Math.atan2(y - pts[a].y, x - pts[a].x);
     for (const [h, e, w, i1, i2] of [['handL', L.lElbow, L.lWrist, L.lIndex, L.lPinky], ['handR', L.rElbow, L.rWrist, L.rIndex, L.rPinky]]) {
       if (!(ok(e) && ok(w) && ok(i1) && ok(i2))) continue;
@@ -340,6 +361,7 @@ export class RiggedCharacter {
     const w = Math.sin(t * 2) * 0.2;
     const ease = (name, target) => { const cur = this.a[name] ?? 0; this.a[name] = cur + (target - cur) * 0.08; this.b[name].rotation.z = -this.a[name]; };
     ease('upperL', -1.0 + w); ease('upperR', 1.0 - w); ease('foreL', -0.2); ease('foreR', 0.2); ease('handL', 0); ease('handR', 0);
+    ease('hips', 0); ease('chest', 0); ease('head', 0); this.b.head.rotation.y *= 0.9;
     ['thighL', 'thighR', 'shinL', 'shinR'].forEach((k) => ease(k, 0));
     this.tilt *= 0.9; this.b.spine.rotation.z = -this.tilt;
     this.hop *= 0.9; this.b.hips.position.y = this.hipY0 + this.hop;

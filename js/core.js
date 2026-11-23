@@ -11,6 +11,7 @@ export const stats = {
   source: 'none',        // 'phone' | 'webcam' | 'none'
   connected: false,
   fps: 0, inf: 0, rtt: null, people: 0, lastFrame: 0, camera: '',
+  world3D: false,        // is the phone sending the 3D skeleton (new phone page)?
 };
 
 // ---------------------------------------------------------------- tracker
@@ -24,6 +25,7 @@ class Tracker {
 
   ingest(posesFlat, aspect, worlds = null) {
     this.aspect = aspect || this.aspect;
+    stats.world3D = !!(worlds && worlds.length);
     this.skeletons = posesFlat.map((flat, k) => {
       const pts = toPoints(flat, this.aspect);
       return { pts, key: keyPoints(pts), world: worlds && worlds[k] ? toWorld(worlds[k]) : null };
