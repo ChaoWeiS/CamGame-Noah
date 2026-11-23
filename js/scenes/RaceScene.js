@@ -55,8 +55,9 @@ export class RaceScene extends Phaser.Scene {
     this.cols = this.layout.panes;
     // the actual running track inside each pane (panes can be wide)
     for (const c of this.cols) {
-      c.tw = Math.min(c.w * 0.72, 760); c.tx = c.cx - c.tw / 2;
-      c.runH = Math.min(190, c.tw * 0.5);   // runner height: everything is sized relative to it
+      c.runH = Math.min(190, c.w * 0.72 / 4); // runner height: everything is sized relative to it
+      c.tw = c.runH * 4;                      // track = 3 lanes, each ~1.3x as wide as an animal is tall
+      c.tx = c.cx - c.tw / 2;
       c.treeH = c.runH * TREE_SCALE;        // a tree right beside the runner (taller than the screen)
     }
 
@@ -257,12 +258,13 @@ export class RaceScene extends Phaser.Scene {
         const mid = (gr[0] + gr[gr.length - 1]) / 2;
         const key = gr.length === 2 ? 'prop_rocks' : (gr[0] === 0 ? 'prop_rock' : 'prop_boulder');
         const im = this.sprite(key, dep).setOrigin(0.5, 0.85).setPosition(X(mid * laneW), y).setAlpha(alpha);
-        im.setScale((laneW * gr.length * 0.98 * sc) / im.width);
+        // sized by the animals: a boulder is ~1.4x as tall as an animal, a rock pile ~1.7x
+        this.fitHeight(im, c.runH * (gr.length === 2 ? 1.7 : 1.4) * sc);
       }
       return null;
     }
     if (o.type === 'log') {
-      const lh = c.runH * 0.4 * sc;
+      const lh = c.runH * 0.45 * sc;   // a log about half as tall as the animals: jumpable
       this.sprite('prop_log', dep).setOrigin(0.5, 0.85).setPosition(c.cx, y).setAlpha(alpha)
         .setDisplaySize(c.tw * 0.95 * sc, lh);
       return { text: 'JUMP!', y: y - lh - 18 };
