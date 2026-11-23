@@ -5,14 +5,22 @@ const DH = 720;            // design height of one player's pane
 
 const COURSE = 300;        // metres to the ark
 const BASE_SPEED = 10;     // metres per second
-const PX_PER_M = 16;       // 30 m of track visible ahead
-const RUNNER_Y = 610;
-const TOP_Y = 120;
-const WINDOW_MS = 380;
-const TREE_SCALE = 5.2;   // trees are ~5x as tall as the animals     // how recently you must have jumped/ducked when an obstacle arrives
+const TOP_Y = 120;         // bottom of the sky band
+const HORIZON_Y = 150;     // where the ground meets the sky
+const GROUND_Y = 640;      // where the runner's feet are
+const CAM_Z = 7;           // the camera is this many metres behind the runner
+const VIEW = 45;           // how far ahead (m) things are drawn
+const WINDOW_MS = 380;     // how recently you must have jumped/ducked when an obstacle arrives
+const TREE_SCALE = 5.2;    // trees are ~5x as tall as the animals
 
-// Things further up the track are drawn a bit smaller, for a sense of depth.
-const depthScale = (y) => 0.55 + 0.45 * Math.max(0, Math.min(1, (y - TOP_Y) / (RUNNER_Y - TOP_Y)));
+// 3D projection: something `a` metres ahead of the runner is drawn at scale s
+// (1 at the runner, smaller further away), and its ground point sits at y.
+const scaleAt = (a) => CAM_Z / (Math.max(a, -CAM_Z * 0.85) + CAM_Z);
+const groundY = (s) => HORIZON_Y + (GROUND_Y - HORIZON_Y) * s;
+// z-order: nearer things are drawn on top of farther things. The runner is at depth 10.
+const depthAt = (a) => 10 - a / 10;
+const c_msgOff = (r) => r.c.runH + 50;
+const fadeAt = (a) => Math.max(0, Math.min(1, (VIEW - a) / 6));
 
 function makeCourse(seed) {
   const r = rng(seed);
@@ -52,15 +60,14 @@ export class RaceScene extends Phaser.Scene {
       c.treeH = c.runH * TREE_SCALE;        // a tree right beside the runner (taller than the screen)
     }
 
-    this.bg = this.add.graphics().setDepth(0);
-    this.g = this.add.graphics().setDepth(3);
-    this.shadowG = this.add.graphics().setDepth(1.9); // ground shadows under branches
-    this.top = this.add.graphics().setDepth(6); // sky band, clouds, rain, progress bars
+    this.bg = this.add.graphics().setDepth(0);         // meadow, track, grass
+    this.shadowG = this.add.graphics().setDepth(1);    // shadows lying on the ground
+    this.top = this.add.graphics().setDepth(30);       // sky band, clouds, rain, progress bars
     this.pool = new Map();
     // Scenery: trees along the track edges, same for every column
     const r0 = rng(session.seed ^ 0x77);
     this.decor = [];
-    for (let d = 6; d < COURSE + 40; d += 7 + r0() * 6) {
+    for (let d = -6; d < COURSE + VIEW; d += 5 + r0() * 6) {
       this.decor.push({ d, side: r0() < 0.5 ? -1 : 1, key: ['prop_oak', 'prop_birch', 'prop_twisty', 'prop_boulder', 'prop_rocks'][Math.floor(r0() * 5)] });
     }
     this.runners = players.map((pl, i) => {
@@ -68,21 +75,22 @@ export class RaceScene extends Phaser.Scene {
       return {
         pl, c, dist: 0, speed: 0, laneX: c.cx, stumbleUntil: 0,
         lastJump: -1e9, lastDuck: -1e9, nextObs: 0, place: 0,
-        shadow: this.add.ellipse(c.cx, RUNNER_Y + 30, Math.min(110, c.tw * 0.3), 22, 0x000000, 0.25).setDepth(4),
-        sprite: charImage(this, c.cx, RUNNER_Y + 30, pl.animal || 'bear', 'back', c.runH).setDepth(5),
-        msg: this.add.text(c.cx, RUNNER_Y - 110, '', txt(30, '#ffffff', { stroke: '#1d3b52', strokeThickness: 6 })).setOrigin(0.5).setDepth(8),
-        lost: this.add.text(c.cx, 380, '', txt(26, '#ffffff', { stroke: '#9b3b2f', strokeThickness: 6, wordWrap: { width: c.tw - 30 } })).setOrigin(0.5).setDepth(8),
+        shadow: this.add.ellipse(c.cx, GROUND_Y, Math.min(110, c.tw * 0.3), 22, 0x000000, 0.25).setDepth(1.5),
+        sprite: charImage(this, c.cx, GROUND_Y, pl.animal || 'bear', 'back', c.runH).setDepth(depthAt(0)),
+        ark: this.add.graphics(),
+        msg: this.add.text(c.cx, GROUND_Y - 230, '', txt(30, '#ffffff', { stroke: '#1d3b52', strokeThickness: 6 })).setOrigin(0.5).setDepth(40),
+        lost: this.add.text(c.cx, 380, '', txt(26, '#ffffff', { stroke: '#9b3b2f', strokeThickness: 6, wordWrap: { width: c.tw - 30 } })).setOrigin(0.5).setDepth(40),
         labels: [],
-        tag: this.add.text(c.x + 20, 70, `P${pl.slot + 1} · ${charById(pl.animal).name}`, txt(26, pl.css, { stroke: '#10202b', strokeThickness: 5 })).setOrigin(0, 0.5).setDepth(7),
+        tag: this.add.text(c.x + 20, 70, `P${pl.slot + 1} · ${charById(pl.animal).name}`, txt(26, pl.css, { stroke: '#10202b', strokeThickness: 5 })).setOrigin(0, 0.5).setDepth(41),
       };
     });
     // Text labels for obstacles are pooled per column
     this.runners.forEach((r) => {
-      for (let i = 0; i < 4; i++) r.labels.push(this.add.text(0, 0, '', txt(24, '#ffffff', { stroke: '#000', strokeThickness: 5 })).setOrigin(0.5).setVisible(false).setDepth(7));
+      for (let i = 0; i < 6; i++) r.labels.push(this.add.text(0, 0, '', txt(24, '#ffffff', { stroke: '#000', strokeThickness: 5 })).setOrigin(0.5).setVisible(false).setDepth(39));
     });
 
     this.banner = this.add.text(UI_X + W / 2, H / 2 - 40, '', txt(90, '#fff8e6', { stroke: '#1d3b52', strokeThickness: 12 })).setOrigin(0.5).setDepth(10);
-    this.help = this.add.text(UI_X + W / 2, H / 2 + 60, 'The flood is coming — run to the ark!\nLean around rocks and trees · jump over logs and low branches · duck under high ones',
+    this.help = this.add.text(UI_X + W / 2, H / 2 + 60, 'The flood is coming — run on the spot to go faster!\nLean around rocks and trees · jump over logs and low branches · duck under high ones',
       txt(26, '#fff8e6', { stroke: '#1d3b52', strokeThickness: 6 })).setOrigin(0.5).setDepth(10);
 
     this.state = 'countdown';
@@ -106,7 +114,6 @@ export class RaceScene extends Phaser.Scene {
     const now = performance.now();
     this.rainT += dt;
     this.drawBackground();
-    const g = this.g; g.clear();
     this.shadowG.clear();
     for (const list of this.pool.values()) { list.used = 0; list.forEach((im) => im.setVisible(false)); }
 
@@ -121,7 +128,9 @@ export class RaceScene extends Phaser.Scene {
       r.laneX += (targetX - r.laneX) * Math.min(1, dt * 14);
 
       if (this.state === 'run' && !r.place) {
-        const target = !inp.present ? 0 : now < r.stumbleUntil ? BASE_SPEED * 0.35 : BASE_SPEED;
+        // Running on the spot makes you faster: standing still = 60% speed, running hard = 150%.
+        const runBoost = 0.6 + 0.9 * (inp.run || 0);
+        const target = !inp.present ? 0 : now < r.stumbleUntil ? BASE_SPEED * 0.35 : BASE_SPEED * runBoost;
         r.speed += (target - r.speed) * Math.min(1, dt * 3);
         r.dist += r.speed * dt;
         // Obstacles reaching the runner
@@ -136,57 +145,51 @@ export class RaceScene extends Phaser.Scene {
         }
       }
 
-      // Scenery trees at the track edges (far ones first so near ones overlap them)
-      for (let i = this.decor.length - 1; i >= 0; i--) {
-        const dcr = this.decor[i];
+      // Scenery: trees and boulders beside the track, in 3D perspective
+      for (const dcr of this.decor) {
         const ahead = dcr.d - r.dist;
-        if (ahead < -8 || ahead > 34) continue;
-        const y = RUNNER_Y - ahead * PX_PER_M;
-        if (y < TOP_Y + 10) continue;
-        // Big trees: near ones are taller than the screen, so their tops are cut off.
+        if (ahead < -CAM_Z * 0.7 || ahead > VIEW) continue;
+        const sc = scaleAt(ahead), y = groundY(sc);
         const rocky = dcr.key.includes('rock') || dcr.key.includes('boulder');
-        const k = depthScale(y);
-        const h = r.c.treeH * Math.pow(k, 1.6) * (rocky ? 0.38 : 1);
-        const im = this.sprite(dcr.key, 1 + y / 10000).setOrigin(0.5, 1);
-        this.fitHeight(im, h);
-        const halfW = im.displayWidth / 2;
-        // stand beside the track; canopies may lean a little over its edge
-        const off = halfW * (rocky ? 0.95 : 0.55); // boulders stay off the track
-        const x = dcr.side < 0 ? r.c.tx - off : r.c.tx + r.c.tw + off;
-        im.setPosition(x, y);
+        const im = this.sprite(dcr.key, depthAt(ahead)).setOrigin(0.5, 1).setAlpha(fadeAt(ahead));
+        this.fitHeight(im, r.c.treeH * (rocky ? 0.38 : 1) * sc);
+        // sideways position measured at the runner, then shrunk with distance
+        const halfW1 = im.displayWidth / sc / 2;
+        const lat = r.c.tw / 2 + halfW1 * (rocky ? 1.0 : 0.6);
+        im.setPosition(r.c.cx + dcr.side * lat * sc, y);
         im.setFlipX(dcr.side > 0);
       }
 
-      // Draw obstacles ahead in this column
+      // Obstacles ahead, in 3D perspective
       let li = 0;
       r.labels.forEach((l) => l.setVisible(false));
       for (let i = r.nextObs; i < this.course.length; i++) {
         const o = this.course[i];
         const ahead = o.d - r.dist;
-        if (ahead > 30) break;
-        const y = RUNNER_Y - ahead * PX_PER_M;
-        if (y < TOP_Y) continue;
-        const label = this.drawObstacle(g, r.c, o, y);
+        if (ahead > VIEW) break;
+        const label = this.drawObstacle(r.c, o, ahead);
         if (label && li < r.labels.length) {
-          r.labels[li++].setText(label.text).setPosition(r.c.cx, label.y).setVisible(true);
+          r.labels[li++].setText(label.text).setPosition(r.c.cx, label.y).setScale(0.6 + 0.4 * scaleAt(ahead)).setAlpha(fadeAt(ahead)).setVisible(true);
         }
       }
-      // The ark appears near the end
+      // The ark appears at the finish line
+      r.ark.clear();
       const arkAhead = COURSE - r.dist;
-      if (arkAhead < 30) this.drawArk(g, r.c, RUNNER_Y - arkAhead * PX_PER_M - 40);
+      if (arkAhead < VIEW) this.drawArk(r.ark, r.c, arkAhead);
 
       // Runner sprite
       const jumpK = Math.max(0, 1 - (now - r.lastJump) / 450);
       const ducking = now - r.lastDuck < 120;
       const wobble = now < r.stumbleUntil ? Math.sin(time / 40) * 0.3 : 0;
       // Bob while running, hop when jumping, squash when ducking
-      const bob = r.speed > 1 ? Math.abs(Math.sin(time / 110)) * 6 : 0;
+      r.bobT = (r.bobT || 0) + dt * r.speed * 1.4;
+      const bob = r.speed > 1 ? Math.abs(Math.sin(r.bobT)) * 8 : 0;
       const bs = r.sprite.baseScale;
-      r.sprite.setPosition(r.laneX, RUNNER_Y + 30 - jumpK * 60 - bob);
+      r.sprite.setPosition(r.laneX, GROUND_Y - jumpK * 60 - bob);
       r.sprite.setScale(bs * (1 + jumpK * 0.15), bs * (ducking ? 0.55 : 1 + jumpK * 0.15));
       r.sprite.setRotation(wobble);
-      r.shadow.setPosition(r.laneX, RUNNER_Y + 30).setScale(1 - jumpK * 0.4);
-      r.msg.setPosition(r.c.cx, RUNNER_Y - 200);
+      r.shadow.setPosition(r.laneX, GROUND_Y).setScale(1 - jumpK * 0.4);
+      r.msg.setPosition(r.c.cx, GROUND_Y - c_msgOff(r));
 
       this.drawProgress(this.top, r);
     }
@@ -232,76 +235,74 @@ export class RaceScene extends Phaser.Scene {
   }
   fitHeight(im, h) { im.setScale(h / im.height); return im; }
 
-  drawObstacle(g, c, o, y) {
-    const half = c.tw * 0.46;
+  drawObstacle(c, o, ahead) {
+    const sc = scaleAt(ahead), y = groundY(sc), dep = depthAt(ahead), alpha = fadeAt(ahead);
+    const laneW = c.tw / 3;
+    const X = (lat) => c.cx + lat * sc;          // lat = sideways offset in px, measured at the runner
     if (o.type === 'rock') {
-      // Huge boulders fill whole lanes: one boulder per lane, or a rock pile across two side-by-side lanes.
-      const laneW = c.tw / 3;
-      const grow = 0.8 + 0.2 * depthScale(y);
       const b = [...o.blocked].sort((p, q) => p - q);
-      const adjacent = b.length === 2 && b[1] - b[0] === 1;
       if (o.kind === 'tree') {
-        // a full-size tree (same scale as the forest) standing in each blocked lane;
-        // drawn under other obstacles so its canopy never hides what's coming next
+        // a full-size tree standing in each blocked lane
         for (const l of b) {
-          const im = this.sprite(o.tree, 1.95 + y / 100000).setOrigin(0.5, 0.97).setPosition(c.cx + l * laneW, y);
-          this.fitHeight(im, c.treeH * Math.pow(depthScale(y), 1.6));
+          const im = this.sprite(o.tree, dep).setOrigin(0.5, 0.97).setPosition(X(l * laneW), y).setAlpha(alpha);
+          this.fitHeight(im, c.treeH * sc);
           im.setFlipX(l > 0);
         }
         return null;
       }
+      // huge boulders fill whole lanes: one per lane, or a rock pile across two side-by-side lanes
+      const adjacent = b.length === 2 && b[1] - b[0] === 1;
       const groups = adjacent ? [[b[0], b[1]]] : b.map((l) => [l]);
       for (const gr of groups) {
         const mid = (gr[0] + gr[gr.length - 1]) / 2;
         const key = gr.length === 2 ? 'prop_rocks' : (gr[0] === 0 ? 'prop_rock' : 'prop_boulder');
-        const im = this.sprite(key, 2 + y / 10000).setOrigin(0.5, 0.85).setPosition(c.cx + mid * laneW, y);
-        im.setScale((laneW * gr.length * 0.98 * grow) / im.width);
+        const im = this.sprite(key, dep).setOrigin(0.5, 0.85).setPosition(X(mid * laneW), y).setAlpha(alpha);
+        im.setScale((laneW * gr.length * 0.98 * sc) / im.width);
       }
       return null;
     }
     if (o.type === 'log') {
-      const im = this.sprite('prop_log', 2 + y / 10000).setOrigin(0.5, 0.5).setPosition(c.cx, y);
-      const k = depthScale(y);
-      const lh = k * Math.min(85, half * 0.5);
-      im.setDisplaySize(half * 2 * (0.75 + 0.25 * k), lh);
-      return { text: 'JUMP!', y: y - lh / 2 - 22 };
+      const lh = c.runH * 0.4 * sc;
+      this.sprite('prop_log', dep).setOrigin(0.5, 0.85).setPosition(c.cx, y).setAlpha(alpha)
+        .setDisplaySize(c.tw * 0.95 * sc, lh);
+      return { text: 'JUMP!', y: y - lh - 18 };
     }
-    // Branches stretch across the whole track between two trunks.
+    // Branches stretch across the whole track between two full-size birch trees.
     // High branch = duck under it, low branch = jump over it. Its shadow on the
     // ground shows where it is; the gap between branch and shadow shows how high.
-    const k = Math.pow(depthScale(y), 1.4);
-    const postH = c.treeH * Math.pow(depthScale(y), 1.6);  // full-size birch trees hold the branch
     const high = o.type === 'branch';
-    const kk = depthScale(y);                                // same perspective as the runner
-    const lift = c.runH * kk * (high ? 0.75 : 0.2);          // head height vs knee height of the animals
+    const lift = c.runH * (high ? 0.75 : 0.2) * sc;   // head height vs knee height of the animals
+    const sw = c.tw * sc, sh = Math.max(4, c.runH * 0.14 * sc);
     const sg = this.shadowG;
-    const sw = half * 2, sh = Math.max(10, c.runH * kk * 0.14);
     if (high) {
-      // soft, faint shadow: the branch is far above the ground
-      sg.fillStyle(0x1d3b1a, 0.12).fillEllipse(c.cx, y, sw * 1.04, sh * 2.2);
-      sg.fillStyle(0x1d3b1a, 0.22).fillEllipse(c.cx, y, sw * 0.96, sh * 1.2);
+      sg.fillStyle(0x1d3b1a, 0.12 * alpha).fillEllipse(c.cx, y, sw * 1.04, sh * 2.2);
+      sg.fillStyle(0x1d3b1a, 0.22 * alpha).fillEllipse(c.cx, y, sw * 0.96, sh * 1.2);
     } else {
-      // dark, sharp shadow right under it: the branch is close to the ground
-      sg.fillStyle(0x1d3b1a, 0.45).fillEllipse(c.cx, y, sw, sh);
+      sg.fillStyle(0x1d3b1a, 0.45 * alpha).fillEllipse(c.cx, y, sw, sh);
     }
-    this.fitHeight(this.sprite('prop_birch', 1.95 + y / 100000).setOrigin(0.5, 1).setPosition(c.cx - half, y + 16), postH);
-    this.fitHeight(this.sprite('prop_birch', 1.95 + y / 100000).setOrigin(0.5, 1).setPosition(c.cx + half, y + 16), postH).setFlipX(true);
-    const thick = Math.max(18, c.runH * kk * 0.13);
-    const bar = this.sprite('prop_stick', 2.5 + y / 10000).setOrigin(0.5, 0.5).setPosition(c.cx, y - lift);
-    bar.setDisplaySize(thick, half * 2.1);
+    for (const side of [-1, 1]) {
+      const post = this.sprite('prop_birch', dep).setOrigin(0.5, 0.98).setPosition(X(side * c.tw / 2), y).setAlpha(alpha);
+      this.fitHeight(post, c.treeH * sc);
+      post.setFlipX(side > 0);
+    }
+    const thick = Math.max(4, c.runH * 0.13 * sc);
+    const bar = this.sprite('prop_stick', dep + 0.001).setOrigin(0.5, 0.5).setPosition(c.cx, y - lift).setAlpha(alpha);
+    bar.setDisplaySize(thick, c.tw * 1.02 * sc);
     bar.setRotation(Math.PI / 2);
-    return high ? { text: 'DUCK!', y: y - lift - thick - 14 } : { text: 'JUMP!', y: y - lift - thick - 14 };
+    return { text: high ? 'DUCK!' : 'JUMP!', y: y - lift - thick - 16 };
   }
 
-  drawArk(g, c, y) {
-    const w = Math.min(260, c.tw * 0.6);
+  drawArk(g, c, ahead) {
+    const sc = scaleAt(ahead), y = groundY(sc);
+    g.setDepth(depthAt(ahead)).setAlpha(fadeAt(ahead));
+    const w = c.tw * 1.1 * sc, hh = c.runH * 0.9 * sc;
     g.fillStyle(0x7a4a22, 1);
     g.fillPoints([
-      { x: c.cx - w / 2, y: y }, { x: c.cx + w / 2, y: y },
-      { x: c.cx + w / 2 - 25, y: y + 45 }, { x: c.cx - w / 2 + 25, y: y + 45 },
+      { x: c.cx - w / 2, y: y - hh }, { x: c.cx + w / 2, y: y - hh },
+      { x: c.cx + w / 2 - w * 0.12, y }, { x: c.cx - w / 2 + w * 0.12, y },
     ], true);
-    g.fillStyle(0xa86b36, 1).fillRect(c.cx - w * 0.3, y - 40, w * 0.6, 40);
-    g.fillStyle(0x5a3416, 1).fillRect(c.cx - 14, y - 30, 28, 30);
+    g.fillStyle(0xa86b36, 1).fillRect(c.cx - w * 0.3, y - hh * 2, w * 0.6, hh);
+    g.fillStyle(0x5a3416, 1).fillRect(c.cx - w * 0.06, y - hh * 1.8, w * 0.12, hh * 0.8);
   }
 
   drawProgress(g, r) {
@@ -316,48 +317,57 @@ export class RaceScene extends Phaser.Scene {
     const t = this.top; t.clear();
     this.cols.forEach((c, i) => {
       const dist = this.runners ? this.runners[i].dist : 0;
-      // meadow around the track
-      g.fillStyle(0x5b9a45, 1).fillRect(c.x, 0, c.w, DH);
-      // the running track
-      const x0 = c.tx, w = c.tw;
-      g.fillStyle(0x6fae4f, 1).fillRect(x0, TOP_Y, w, DH - TOP_Y);
-      // mowed stripes scroll toward the player
-      const band = 64, off = (dist * PX_PER_M) % (band * 2);
+      const near = -CAM_Z * 0.7;
+      const P = (a, lat) => { const sc = scaleAt(a); return { x: c.cx + lat * sc, y: groundY(sc) }; };
+      const quad = (a1, a2, l1, l2) => [P(a1, l1), P(a1, l2), P(a2, l2), P(a2, l1)];
+
+      // meadow, with a hazy strip at the horizon
+      g.fillStyle(0x5b9a45, 1).fillRect(c.x, TOP_Y, c.w, DH - TOP_Y);
+      g.fillGradientStyle(0x9fb7a0, 0x9fb7a0, 0x5b9a45, 0x5b9a45, 1).fillRect(c.x, TOP_Y, c.w, HORIZON_Y - TOP_Y + 30);
+
+      // the running track narrows towards the horizon
+      const hw = c.tw / 2;
+      g.fillStyle(0x6fae4f, 1).fillPoints(quad(near, VIEW + 20, -hw, hw), true);
+      // mowed stripes every 3 m, fixed to the ground
       g.fillStyle(0x7fbd5d, 1);
-      for (let y = TOP_Y - band * 2 + off; y < DH; y += band * 2) {
-        const top = Math.max(TOP_Y, y), bot = Math.min(DH, y + band);
-        if (bot > top) g.fillRect(x0, top, w, bot - top);
+      for (let m = Math.floor((dist + near) / 6) * 6; m < dist + VIEW + 20; m += 6) {
+        const a1 = Math.max(near, m - dist), a2 = Math.min(VIEW + 20, m + 3 - dist);
+        if (a2 > a1) g.fillPoints(quad(a1, a2, -hw, hw), true);
       }
-      // grass tufts and little flowers, fixed to the ground (also on the meadow)
-      const m0 = Math.floor(dist - 6), m1 = Math.ceil(dist + 32);
-      for (let m = m0; m <= m1; m++) {
-        for (let k = 0; k < 4; k++) {
+      // lane guides: dashes on the two lane boundaries
+      g.fillStyle(0xffffff, 0.22);
+      for (let m = Math.floor((dist + near) / 2) * 2; m < dist + VIEW; m += 2) {
+        const a1 = Math.max(near, m - dist), a2 = m + 0.8 - dist;
+        if (a2 <= a1) continue;
+        for (const lx of [-c.tw / 6, c.tw / 6]) g.fillPoints(quad(a1, a2, lx - 3, lx + 3), true);
+      }
+      // track edges
+      g.lineStyle(3, 0x3f7a2e, 0.8);
+      for (const lx of [-hw, hw]) { const A = P(near, lx), B = P(VIEW + 20, lx); g.lineBetween(A.x, A.y, B.x, B.y); }
+
+      // grass tufts and little flowers, fixed to the ground
+      for (let m = Math.floor(dist + near); m <= dist + VIEW; m++) {
+        for (let k = 0; k < 5; k++) {
           const h = Math.sin(m * 12.9898 + k * 78.233 + i * 3.1) * 43758.5453;
           const fx = h - Math.floor(h);
           const h2 = Math.sin(m * 4.1 + k * 9.7) * 1234.5;
           const fy = h2 - Math.floor(h2);
-          const y = RUNNER_Y - (m + fy - dist) * PX_PER_M;
-          if (y < TOP_Y + 4 || y > DH - 4) continue;
-          const x = c.x + 8 + fx * (c.w - 16);
+          const a = m + fy - dist;
+          if (a < near) continue;
+          const sc = scaleAt(a);
+          const p = P(a, (fx - 0.5) * c.w * 1.3);
+          if (p.x < c.x || p.x > c.x + c.w || p.y > DH) continue;
           if (k === 2 && fx > 0.6) {
-            g.fillStyle(fy > 0.5 ? 0xfff3a6 : 0xffffff, 1).fillCircle(x, y, 3.5);
-            g.fillStyle(0xf2b544, 1).fillCircle(x, y, 1.5);
+            g.fillStyle(fy > 0.5 ? 0xfff3a6 : 0xffffff, 1).fillCircle(p.x, p.y, 4 * sc);
+            g.fillStyle(0xf2b544, 1).fillCircle(p.x, p.y, 1.8 * sc);
           } else {
-            g.lineStyle(2, 0x4f8f39, 0.9);
-            g.lineBetween(x, y, x - 4, y - 9); g.lineBetween(x, y, x, y - 11); g.lineBetween(x, y, x + 4, y - 9);
+            g.lineStyle(Math.max(1, 2.4 * sc), 0x4f8f39, 0.9);
+            g.lineBetween(p.x, p.y, p.x - 5 * sc, p.y - 11 * sc); g.lineBetween(p.x, p.y, p.x, p.y - 13 * sc); g.lineBetween(p.x, p.y, p.x + 5 * sc, p.y - 11 * sc);
           }
         }
       }
-      // faint lane guides
-      g.lineStyle(3, 0xffffff, 0.18);
-      for (const k of [-0.15, 0.15]) {
-        const lx = c.cx + k * c.tw;
-        const o2 = (dist * PX_PER_M) % 40;
-        for (let y = TOP_Y - 40 + o2; y < DH; y += 40) g.lineBetween(lx, Math.max(TOP_Y, y), lx, Math.max(TOP_Y, y + 18));
-      }
-      g.lineStyle(4, 0x3f7a2e, 0.8).strokeRect(x0, TOP_Y, w, DH - TOP_Y);
 
-      // sky band with storm clouds, drawn above everything that scrolls in from the top
+      // sky band with storm clouds, drawn above everything
       t.fillGradientStyle(0x4b5563, 0x4b5563, 0x6b7a86, 0x6b7a86, 1).fillRect(c.x, 0, c.w, TOP_Y);
       t.fillStyle(0x374151, 1);
       const nC = Math.ceil(c.w / 160) + 2;

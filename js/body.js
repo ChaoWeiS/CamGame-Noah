@@ -46,6 +46,10 @@ export class Body {
     this.ducking = false;
     this.pose = null;
     this.handsUp = false;
+    // running on the spot: count alternating knee lifts
+    this.stepSide = 0;      // which knee was last lifted (-1 left, 1 right)
+    this.steps = [];        // timestamps of recent steps
+    this.run = 0;           // 0 = standing still … 1 = running fast
   }
 
   // Feed one new frame of points for this person.
@@ -95,12 +99,33 @@ export class Body {
       if (this.lane === 0) b.shX += (sh.x - b.shX) * k;
     }
 
+    this.detectRunning(p, T);
+
     const nose = p[L.nose], wl = p[L.lWrist], wr = p[L.rWrist];
     const armsSeen = wl.v > 0.4 && wr.v > 0.4;
     this.handsUp = armsSeen && wl.y < nose.y && wr.y < nose.y;
     this.pose = classify(p, sh, hip, T, b);
   }
 }
+
+// Running on the spot: knees take turns lifting. Each switch of the higher knee
+// counts as a step; steps per second over the last ~1.5 s gives the running speed.
+Body.prototype.detectRunning = function (p, T) {
+  const now = performance.now();
+  const kl = p[L.lKnee], kr = p[L.rKnee];
+  if (kl.v > 0.4 && kr.v > 0.4) {
+    const diff = kr.y - kl.y;                 // > 0 when the left knee is higher
+    const side = diff > 0.12 * T ? -1 : diff < -0.12 * T ? 1 : 0;
+    if (side !== 0 && side !== this.stepSide) {
+      this.stepSide = side;
+      this.steps.push(now);
+    }
+  }
+  while (this.steps.length && now - this.steps[0] > 1500) this.steps.shift();
+  const cadence = this.steps.length / 1.5;    // steps per second
+  const target = Math.min(1, cadence / 4);    // ~4 steps/s = full speed
+  this.run += (target - this.run) * 0.15;     // smooth it
+};
 
 function classify(p, sh, hip, T, b) {
   const nose = p[L.nose], wl = p[L.lWrist], wr = p[L.rWrist];

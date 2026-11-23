@@ -90,7 +90,7 @@ function makePlayer(slot, kind, body, anchor, keyboardIndex = 0) {
     anchor: anchor ? { x: anchor.x, y: anchor.y } : { x: 0, y: 0 },
     present: kind === 'keyboard', lastSeen: performance.now(),
     animal: null,
-    kb: { lane: 0, duck: false, jumpAt: -1e9, pose: null, handsUp: false },
+    kb: { lane: 0, duck: false, jumpAt: -1e9, pose: null, handsUp: false, runAt: -1e9 },
   };
 }
 
@@ -103,22 +103,23 @@ export function input(pl) {
       present: true, lane: pl.kb.lane, ducking: pl.kb.duck,
       jumping: performance.now() - pl.kb.jumpAt < 450,
       pose: pl.kb.pose, handsUp: pl.kb.handsUp,
+      run: Math.max(0, 1 - (performance.now() - pl.kb.runAt) / 600), // tap R (P1) / F (P2) to run
     };
   }
   const b = pl.body;
   return {
     present: pl.present, lane: b.lane, ducking: b.ducking, jumping: b.jumping,
-    pose: b.pose, handsUp: b.handsUp,
+    pose: b.pose, handsUp: b.handsUp, run: b.run,
   };
 }
 
 // ---------------------------------------------------------------- keyboard test players
 const KB = [
-  { left: 'ArrowLeft', right: 'ArrowRight', up: 'ArrowUp', down: 'ArrowDown', ok: 'Enter', poses: ['1', '2', '3', '4', '5', '6'] },
-  { left: 'a', right: 'd', up: 'w', down: 's', ok: ' ', poses: ['z', 'x', 'c', 'v', 'b', 'n'] },
+  { left: 'ArrowLeft', right: 'ArrowRight', up: 'ArrowUp', down: 'ArrowDown', ok: 'Enter', run: 'r', poses: ['1', '2', '3', '4', '5', '6'] },
+  { left: 'a', right: 'd', up: 'w', down: 's', ok: ' ', run: 'f', poses: ['z', 'x', 'c', 'v', 'b', 'n'] },
 ];
 import { POSES } from './body.js';
-export const keyboardHelp = 'P1: ← → lean · ↑ jump · ↓ duck · 1–6 poses · Enter = hands up | P2: A D · W · S · Z–N · Space';
+export const keyboardHelp = 'P1: ← → lean · ↑ jump · ↓ duck · R run · 1–6 poses · Enter = hands up | P2: A D · W · S · F · Z–N · Space';
 
 window.addEventListener('keydown', (e) => {
   for (const pl of tracker.players) {
@@ -129,6 +130,7 @@ window.addEventListener('keydown', (e) => {
     if (key === k.up && !e.repeat) pl.kb.jumpAt = performance.now();
     if (key === k.down) pl.kb.duck = true;
     if (key === k.ok) pl.kb.handsUp = true;
+    if (key === k.run) pl.kb.runAt = performance.now();
     const pi = k.poses.indexOf(key);
     if (pi >= 0) pl.kb.pose = POSES[pi].id;
   }

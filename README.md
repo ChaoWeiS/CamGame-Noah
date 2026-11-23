@@ -14,7 +14,7 @@ animal-pose password at the ark door (30 s) → results with a rainbow 🌈
 3. Prop the phone up sideways (landscape), about 3 m away, so everyone fits head to toe.
 4. Players stand in a row. Anyone raises **both hands** to start, then everyone stands still for 3 s (calibration).
 5. **Pick:** lean left/right to change character (Barnaby, Scout, Whiskers, Spike, Cluck, Squeak, Hammy, Pine), raise both hands to choose.
-6. **Race:** lean or step left/right to dodge rocks, jump over logs, duck under branches.
+6. **Race:** run on the spot to go faster (standing still = 60% speed, running hard = 150%). Lean or step left/right into the free lane past rocks and trees, jump over logs and low branches, duck under high branches.
 7. **Password:** copy 5 animal poses in a row = 1 point. Most points in 30 s wins.
 
 Poses: 🦒 Giraffe (arms straight up) · 🐦 Bird wings (arms out sideways) · 🐻 Bear ears (hands on head)
@@ -23,8 +23,8 @@ Poses: 🦒 Giraffe (arms straight up) · 🐦 Bird wings (arms out sideways) ·
 ### No phone? Testing options
 - **Use this computer's webcam:** a button in the lobby runs the tracking on the computer itself.
 - **Keyboard players** (lobby button, up to 2), for testing game logic without a camera:
-  - P1: ← → lean · ↑ jump · ↓ duck · 1–6 poses · Enter = hands up
-  - P2: A D lean · W jump · S duck · Z X C V B N poses · Space = hands up
+  - P1: ← → lean · ↑ jump · ↓ duck · tap R to run · 1–6 poses · Enter = hands up
+  - P2: A D lean · W jump · S duck · tap F to run · Z X C V B N poses · Space = hands up
 - **F9** toggles the stats overlay (camera fps, pose time, round trip, people seen).
 
 ## Screen layout
