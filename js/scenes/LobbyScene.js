@@ -1,6 +1,7 @@
 import { tracker, stats, net, localCam, PLAYER_COLORS, MAX_PLAYERS } from '../core.js';
 import { W, H, txt, sky, drawSkeleton, Hold, session, loadCharacters, CHARACTERS } from './common.js';
 import { Puppet } from '../puppet.js';
+import { Stage3D, preloadCast } from '../stage3d.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -46,7 +47,10 @@ export class LobbyScene extends Phaser.Scene {
     };
 
     this.enterKey = this.input.keyboard.addKey('ENTER');
-    this.events.once('shutdown', () => { $('lobby').hidden = true; });
+    // 3D animals copy the people in view (the 2D puppets stand in until they load)
+    this.stage = new Stage3D(this.game);
+    preloadCast(CHARACTERS.map((c) => c.id), 1);
+    this.events.once('shutdown', () => { $('lobby').hidden = true; this.stage.destroy(); });
   }
 
   beginCountdown() {
@@ -88,9 +92,23 @@ export class LobbyScene extends Phaser.Scene {
     const sk = [...tracker.skeletons].sort((a, b) => a.key.sh.x - b.key.sh.x);
     let anyHandsUp = false;
     this.puppets.forEach((pp, i) => pp.setVisible(i < sk.length));
+    for (let i = sk.length; i < MAX_PLAYERS; i++) this.stage.hide(i);
+    // where each person stands, so the animals can be sized to fit beside each other
+    const spots = sk.slice(0, MAX_PLAYERS).map((person) => {
+      const p3 = person.pts, nose = map(p3[0]), hipL = map(p3[23]), hipR = map(p3[24]), shL = map(p3[11]), shR = map(p3[12]);
+      const hipY = (hipL.y + hipR.y) / 2, shY = (shL.y + shR.y) / 2;
+      const ank = [27, 28].filter((k) => p3[k].v > 0.4).map((k) => map(p3[k]).y);
+      const footY = Math.min(f.y + f.h - 6, ank.length ? Math.max(...ank) : hipY + (hipY - shY) * 1.3);
+      return { x: (hipL.x + hipR.x) / 2, footY, h: (footY - nose.y) * 1.1 };
+    });
     sk.slice(0, MAX_PLAYERS).forEach((person, i) => {
       drawSkeleton(g, person.pts, map, PLAYER_COLORS[i], 3);
-      this.puppets[i].pose(person.pts, map);
+      const sp = spots[i], id = CHARACTERS[i % CHARACTERS.length].id;
+      const gap = Math.min(...spots.filter((o) => o !== sp).map((o) => Math.abs(o.x - sp.x)), Infinity);
+      const h = Math.min(sp.h, gap * 1.15, f.h * 0.85, sp.footY - f.y - 4);
+      const in3D = this.stage.place(i, id, sp.x, sp.footY, h, person.pts, null, time / 1000, person.world);
+      this.puppets[i].setVisible(!in3D);
+      if (!in3D) this.puppets[i].pose(person.pts, map);
       const p = person.pts;
       if (p[15].v > 0.4 && p[16].v > 0.4 && p[15].y < p[0].y && p[16].y < p[0].y) anyHandsUp = true;
     });
@@ -107,5 +125,6 @@ export class LobbyScene extends Phaser.Scene {
       else if (!this.big.text.startsWith('No') && !this.big.text.startsWith('Couldn')) this.big.setText('');
       if (k >= 1) { this.startHold.reset(); this.beginCountdown(); }
     }
+    this.stage.render();
   }
 }

@@ -27,6 +27,14 @@ export function toPoints(flat, aspect) {
   return pts;
 }
 
+// MediaPipe's 3D skeleton (metres, origin between the hips, x right / y down / z away)
+// turned into the characters' space: mirrored like the screen, y up, z toward the camera.
+export function toWorld(flat) {
+  const w = new Array(33);
+  for (let i = 0; i < 33; i++) w[i] = { x: -flat[i * 3], y: -flat[i * 3 + 1], z: -flat[i * 3 + 2] };
+  return w;
+}
+
 const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, v: Math.min(a.v, b.v) });
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 
@@ -53,7 +61,15 @@ export class Body {
   }
 
   // Feed one new frame of points for this person.
-  update(pts) {
+  update(pts, world = null) {
+    if (!world) this.world = null;
+    else if (!this.world) this.world = world.map((p) => ({ ...p }));
+    else {
+      for (let i = 0; i < 33; i++) {
+        const s = this.world[i], p = world[i];
+        s.x += (p.x - s.x) * 0.6; s.y += (p.y - s.y) * 0.6; s.z += (p.z - s.z) * 0.6;
+      }
+    }
     if (!this.pts) {
       this.pts = pts.map((p) => ({ ...p }));
     } else {

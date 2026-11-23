@@ -39,7 +39,7 @@ function wrap(landmarker, delegate) {
   let lastTs = -1;
   return {
     delegate,
-    // Returns { poses: [Float32-ish flat arrays of 33*3 (x, y, visibility)], ms }
+    // Returns { poses: [flat 33*3 (x, y, visibility)], worlds: [flat 33*3 (x, y, z) metres], ms }
     detect(video) {
       let ts = performance.now();
       if (ts <= lastTs) ts = lastTs + 1;
@@ -56,7 +56,17 @@ function wrap(landmarker, delegate) {
         }
         return flat;
       });
-      return { poses, ms };
+      // the same people as a real 3D skeleton in metres, centred between the hips
+      const worlds = (res.worldLandmarks || []).map((lm) => {
+        const flat = new Array(lm.length * 3);
+        for (let i = 0; i < lm.length; i++) {
+          flat[i * 3] = Math.round(lm[i].x * 1000) / 1000;
+          flat[i * 3 + 1] = Math.round(lm[i].y * 1000) / 1000;
+          flat[i * 3 + 2] = Math.round(lm[i].z * 1000) / 1000;
+        }
+        return flat;
+      });
+      return { poses, worlds, ms };
     },
   };
 }

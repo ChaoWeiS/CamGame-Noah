@@ -1,0 +1,99 @@
+// A 3D overlay for the lobby and the character picker: the players' 3D animals,
+// facing the screen, copying each player's whole body like a mirror.
+// It is a transparent Three.js canvas over the Phaser canvas, with an orthographic
+// camera in Phaser's screen pixels, so an actor is placed by where its feet go
+// and how tall it is, in the same coordinates the scenes already use.
+import * as THREE from 'three';
+import { loadRiggedCharacter } from './autorig.js';
+import { MODELS } from './race3d.js';
+
+// one character instance per (animal, slot), kept between scenes so they load once
+const cache = new Map();
+function getChar(id, slot) {
+  const key = `${id}#${slot}`;
+  if (!cache.has(key)) cache.set(key, loadRiggedCharacter(MODELS[id]).catch((e) => { console.warn('3D character failed', id, e); return null; }));
+  return cache.get(key);
+}
+// start loading the cast in the background (call from the lobby)
+export function preloadCast(ids, slots = 1) {
+  for (let s = 0; s < slots; s++) ids.forEach((id) => MODELS[id] && getChar(id, s));
+}
+
+export class Stage3D {
+  constructor(phaserGame) {
+    this.game = phaserGame;
+    this.canvasEl = phaserGame.canvas;
+    this.renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+    this.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
+    this.renderer.setClearColor(0x000000, 0);
+    const el = this.renderer.domElement;
+    Object.assign(el.style, { position: 'absolute', pointerEvents: 'none', left: '0', top: '0' });
+    this.canvasEl.parentElement.appendChild(el);
+    this.scene = new THREE.Scene();
+    this.scene.add(new THREE.HemisphereLight(0xe6f4ff, 0x4f6a3c, 1.8));
+    const sun = new THREE.DirectionalLight(0xfff4e0, 2.0);
+    sun.position.set(-300, 500, 800);
+    this.scene.add(sun);
+    // screen pixels: x right, y down (world y = -screen y)
+    this.cam = new THREE.OrthographicCamera(0, 1, 0, -1, -5000, 5000);
+    this.actors = new Map();
+    this.alive = true;
+  }
+
+  // the 3D character for an actor slot; returns null until it has loaded
+  actor(slot, id) {
+    let a = this.actors.get(slot);
+    if (!a) { a = { id: null, ch: null, want: null }; this.actors.set(slot, a); }
+    if (a.want !== id) {
+      a.want = id;
+      if (a.ch) { this.scene.remove(a.ch.root); a.ch = null; }
+      if (MODELS[id]) {
+        getChar(id, slot).then((ch) => {
+          if (!this.alive || a.want !== id || !ch) return;
+          if (ch.root.parent) ch.root.parent.remove(ch.root);
+          ch.root.rotation.set(0, 0, 0);
+          a.ch = ch; a.id = id;
+          this.scene.add(ch.root);
+        });
+      }
+    }
+    return a.ch;
+  }
+
+  // put an actor's feet at screen (x, footY), heightPx tall; copy the body if pts given
+  // (the whole body in 3D when the phone sent a 3D skeleton, else the limbs in 2D)
+  place(slot, id, x, footY, heightPx, pts = null, base = null, t = 0, world = null) {
+    const ch = this.actor(slot, id);
+    if (!ch) return false;
+    ch.root.visible = true;
+    ch.root.position.set(x, -footY, 0);
+    ch.root.scale.setScalar(heightPx / ch.height);
+    if (pts && world) ch.pose3D(world, pts, base);
+    else if (pts) ch.pose(pts, base); else ch.idle(t);
+    return true;
+  }
+
+  hide(slot) { const a = this.actors.get(slot); if (a?.ch) a.ch.root.visible = false; }
+  hideAll() { for (const a of this.actors.values()) if (a.ch) a.ch.root.visible = false; }
+
+  render() {
+    const g = this.game, el = this.renderer.domElement;
+    const cr = this.canvasEl.getBoundingClientRect(), pr = this.canvasEl.parentElement.getBoundingClientRect();
+    if (el._w !== cr.width || el._h !== cr.height) { this.renderer.setSize(cr.width, cr.height, false); el._w = cr.width; el._h = cr.height; }
+    Object.assign(el.style, { left: `${cr.left - pr.left}px`, top: `${cr.top - pr.top}px`, width: `${cr.width}px`, height: `${cr.height}px` });
+    const W = g.scale.width, H = g.scale.height;
+    if (this.cam.right !== W || this.cam.bottom !== -H) {
+      Object.assign(this.cam, { left: 0, right: W, top: 0, bottom: -H });
+      this.cam.updateProjectionMatrix();
+    }
+    this.renderer.render(this.scene, this.cam);
+  }
+
+  destroy() {
+    this.alive = false;
+    for (const a of this.actors.values()) if (a.ch) this.scene.remove(a.ch.root);
+    this.actors.clear();
+    this.renderer.domElement.remove();
+    this.renderer.dispose();
+  }
+}

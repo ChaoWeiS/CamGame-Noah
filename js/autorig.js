@@ -11,6 +11,18 @@ import { L, keyPoints } from './body.js';
 const smooth = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
+// scratch objects for the 3D solver
+const _v = (o) => new THREE.Vector3(o.x, o.y, o.z);
+const _q = new THREE.Quaternion(), _pq = new THREE.Quaternion(), _rq = new THREE.Quaternion();
+const _m = new THREE.Matrix4(), _d = new THREE.Vector3();
+// which way each bone points in the T-pose (the rig is built with no rotations)
+const REST = {
+  upperL: new THREE.Vector3(-1, 0, 0), foreL: new THREE.Vector3(-1, 0, 0),
+  upperR: new THREE.Vector3(1, 0, 0), foreR: new THREE.Vector3(1, 0, 0),
+  thighL: new THREE.Vector3(0, -1, 0), shinL: new THREE.Vector3(0, -1, 0),
+  thighR: new THREE.Vector3(0, -1, 0), shinR: new THREE.Vector3(0, -1, 0),
+};
+
 export async function loadRiggedCharacter(url) {
   const gltf = await new GLTFLoader().loadAsync(url);
   gltf.scene.updateMatrixWorld(true);
@@ -176,6 +188,7 @@ export class RiggedCharacter {
 
   // pts: smoothed mirrored points from body.js; base: calibrated posture (optional)
   pose(pts, base = null) {
+    this.reset3D();
     const ok = (i) => pts[i].v > 0.4;
     const ang = (a, b) => Math.atan2(pts[b].y - pts[a].y, pts[b].x - pts[a].x);
     const set = (name, target) => {
@@ -212,7 +225,61 @@ export class RiggedCharacter {
     }
   }
 
+  // Whole-body copy from the 3D skeleton (body.world): the hips turn and lean,
+  // the shoulders twist on the spine, and every limb points where the person's does.
+  // pts (2D) are used for visibility and the jump height; base is optional.
+  pose3D(world, pts, base = null, k = 0.5) {
+    const ok = (i) => pts[i].v > 0.4;
+    const P = (i) => _v(world[i]);
+    this.root.getWorldQuaternion(_rq);
+    // body frame from a left→right line and an up line → a rotation
+    const frame = (left, right, up) => {
+      const x = right.clone().sub(left).normalize();
+      const y = up.clone().addScaledVector(x, -up.dot(x)).normalize();
+      const z = new THREE.Vector3().crossVectors(x, y);
+      return new THREE.Quaternion().setFromRotationMatrix(_m.makeBasis(x, y, z));
+    };
+    const turn = (bone, qModel) => {           // give a bone this rotation in model space
+      bone.parent.getWorldQuaternion(_pq);
+      _q.copy(_rq).multiply(qModel);
+      _q.premultiply(_pq.invert());
+      bone.quaternion.slerp(_q, k);
+    };
+    const aim = (name, from, to, fallback) => { // point a bone from joint `from` to joint `to`
+      const bone = this.b[name];
+      if (!(ok(from) && ok(to))) { bone.quaternion.slerp(fallback || new THREE.Quaternion(), k * 0.3); return; }
+      _d.copy(P(to)).sub(P(from)).normalize().applyQuaternion(_rq);
+      bone.parent.getWorldQuaternion(_pq);
+      _d.applyQuaternion(_pq.invert());
+      _q.setFromUnitVectors(REST[name], _d);
+      bone.quaternion.slerp(_q, k);
+    };
+    const hipL = P(L.lHip), hipR = P(L.rHip), shL = P(L.lShoulder), shR = P(L.rShoulder);
+    const up = shL.clone().add(shR).sub(hipL).sub(hipR).multiplyScalar(0.5);
+    turn(this.b.hips, frame(hipL, hipR, up));          // facing and leaning of the whole body
+    turn(this.b.spine, frame(shL, shR, up));           // shoulder twist on top of it
+    aim('upperL', L.lShoulder, L.lElbow); aim('foreL', L.lElbow, L.lWrist);
+    aim('upperR', L.rShoulder, L.rElbow); aim('foreR', L.rElbow, L.rWrist);
+    aim('thighL', L.lHip, L.lKnee); aim('shinL', L.lKnee, L.lAnkle);
+    aim('thighR', L.rHip, L.rKnee); aim('shinR', L.rKnee, L.rAnkle);
+    if (base) {
+      const { hip, torso } = keyPoints(pts);
+      const dy = (base.hipY - hip.y) / torso;
+      this.hop += (dy * 0.45 * this.height - this.hop) * 0.5;
+      this.b.hips.position.y = this.hipY0 + this.hop;
+    }
+    this.used3D = true;
+  }
+
+  // clear what pose3D set, before going back to the 2D (rotation.z) way of posing
+  reset3D() {
+    if (!this.used3D) return;
+    for (const b of Object.values(this.b)) b.quaternion.identity();
+    this.a = {}; this.used3D = false;
+  }
+
   idle(t) {
+    this.reset3D();
     const w = Math.sin(t * 2) * 0.2;
     const ease = (name, target) => { const cur = this.a[name] ?? 0; this.a[name] = cur + (target - cur) * 0.08; this.b[name].rotation.z = -this.a[name]; };
     ease('upperL', -1.0 + w); ease('upperR', 1.0 - w); ease('foreL', -0.2); ease('foreR', 0.2);

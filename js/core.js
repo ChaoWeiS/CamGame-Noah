@@ -1,6 +1,6 @@
 // Core platform: connection (phone → PC), local webcam fallback,
 // player tracking/identity and keyboard test players.
-import { Body, toPoints, keyPoints } from './body.js';
+import { Body, toPoints, toWorld, keyPoints } from './body.js';
 
 export const PLAYER_COLORS = [0xf2b544, 0x5ec8e5, 0xf27a9b, 0x8be07a];
 export const PLAYER_CSS = ['#f2b544', '#5ec8e5', '#f27a9b', '#8be07a'];
@@ -22,11 +22,11 @@ class Tracker {
     this.locked = false;
   }
 
-  ingest(posesFlat, aspect) {
+  ingest(posesFlat, aspect, worlds = null) {
     this.aspect = aspect || this.aspect;
-    this.skeletons = posesFlat.map((flat) => {
+    this.skeletons = posesFlat.map((flat, k) => {
       const pts = toPoints(flat, this.aspect);
-      return { pts, key: keyPoints(pts) };
+      return { pts, key: keyPoints(pts), world: worlds && worlds[k] ? toWorld(worlds[k]) : null };
     });
     stats.people = this.skeletons.length;
     stats.lastFrame = performance.now();
@@ -42,7 +42,7 @@ class Tracker {
     this.players = [];
     seen.forEach((s) => {
       const body = new Body();
-      body.update(s.pts);
+      body.update(s.pts, s.world);
       body.calibrateFromCurrent();
       this.players.push(makePlayer(this.players.length, 'camera', body, s.key.sh));
     });
@@ -72,7 +72,7 @@ class Tracker {
       if (best >= 0) {
         free.splice(free.indexOf(best), 1);
         const s = this.skeletons[best];
-        pl.body.update(s.pts);
+        pl.body.update(s.pts, s.world);
         pl.anchor = { x: s.key.sh.x, y: s.key.sh.y };
         pl.present = true;
         pl.lastSeen = now;
@@ -167,7 +167,7 @@ export const net = {
         if (d.type === 'pose') {
           if (stats.source !== 'phone') return;
           stats.fps = d.fps; stats.inf = d.inf;
-          tracker.ingest(d.poses, d.aspect);
+          tracker.ingest(d.poses, d.aspect, d.worlds);
         } else if (d.type === 'pong') {
           stats.rtt = Math.round(performance.now() - d.t);
         } else if (d.type === 'hello') {
@@ -199,11 +199,11 @@ export const localCam = {
     let frames = 0, t0 = performance.now();
     const loop = () => {
       if (video.readyState >= 2 && stats.source === 'webcam') {
-        const { poses, ms } = det.detect(video);
+        const { poses, worlds, ms } = det.detect(video);
         stats.inf = Math.round(ms); frames++;
         const now = performance.now();
         if (now - t0 > 1000) { stats.fps = Math.round(frames * 1000 / (now - t0)); frames = 0; t0 = now; }
-        tracker.ingest(poses, video.videoWidth / video.videoHeight);
+        tracker.ingest(poses, video.videoWidth / video.videoHeight, worlds);
       }
       requestAnimationFrame(loop);
     };

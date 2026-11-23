@@ -147,11 +147,11 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 function loop() {
   if (!running) return;
   if (video.readyState >= 2 && video.videoWidth) {
-    const { poses, ms } = detector.detect(video);
+    const { poses, worlds, ms } = detector.detect(video);
     lastInf = ms;
     frames++;
     const aspect = video.videoWidth / video.videoHeight;
-    send({ type: 'pose', t: performance.now(), inf: Math.round(ms), fps, aspect, poses });
+    send({ type: 'pose', t: performance.now(), inf: Math.round(ms), fps, aspect, poses, worlds });
     draw(poses);
     $('people').textContent = `${poses.length} ${poses.length === 1 ? 'person' : 'people'}`;
   }

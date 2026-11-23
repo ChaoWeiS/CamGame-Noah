@@ -1,6 +1,7 @@
 import { tracker, input } from '../core.js';
 import { W, H, txt, setupPanes, CHARACTERS, charImage, Hold, session } from './common.js';
 import { Puppet } from '../puppet.js';
+import { Stage3D } from '../stage3d.js';
 
 export class PickScene extends Phaser.Scene {
   constructor() { super('Pick'); }
@@ -8,6 +9,8 @@ export class PickScene extends Phaser.Scene {
   create() {
     const players = tracker.players;
     const cols = setupPanes(this, players.length, 720).panes;
+    this.stage = new Stage3D(this.game);
+    this.events.once('shutdown', () => this.stage.destroy());
     this.cards = players.map((pl, i) => {
       const c = cols[i];
       const sky = this.add.graphics();
@@ -39,8 +42,15 @@ export class PickScene extends Phaser.Scene {
     for (const card of this.cards) {
       const inp = input(card.pl);
       card.ring.clear();
-      if (card.puppet && card.pl.body.pts) {
-        card.puppet.pose(card.pl.body.pts, (p) => p, { cx: card.c.cx, top: 370 - card.imgH / 2, height: card.imgH });
+      // the chosen animal in 3D: copying a camera player, idling for a keyboard player
+      const c = card.c, zoom = c.rect.h / c.h, pts = card.pl.kind === 'camera' ? card.pl.body.pts : null;
+      const in3D = this.stage.place(card.pl.slot, CHARACTERS[card.idx].id,
+        c.rect.x + (c.cx - c.x) * zoom, c.rect.y + (370 + card.imgH / 2) * zoom, card.imgH * 1.1 * zoom,
+        pts, card.pl.body?.base, time / 1000 + card.pl.slot, pts ? card.pl.body.world : null);
+      card.emoji.setVisible(!in3D && !card.puppet);
+      if (card.puppet) card.puppet.setVisible(!in3D);
+      if (!in3D && card.puppet && pts) {
+        card.puppet.pose(pts, (p) => p, { cx: card.c.cx, top: 370 - card.imgH / 2, height: card.imgH });
       }
       if (!inp.present) { card.status.setText('Step back into view!'); continue; }
       if (card.done) continue;
@@ -70,6 +80,7 @@ export class PickScene extends Phaser.Scene {
       if (k >= 1) this.choose(card);
     }
 
+    this.stage.render();
     if (!this.leaving && time > this.deadline) this.cards.forEach((c) => c.done || this.choose(c));
     if (!this.leaving && this.cards.every((c) => c.done)) {
       this.leaving = true;

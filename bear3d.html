@@ -140,14 +140,15 @@ renderer.setAnimationLoop(() => {
     lastFrame = stats.lastFrame;
     const person = [...tracker.skeletons].sort((a, b) => b.key.torso - a.key.torso)[0];
     if (person && person.key.sh.v > 0.4) {
-      body.update(person.pts);
+      body.update(person.pts, person.world);
       seenAt = performance.now();
       // calibrate standing height once the person has been in view ~1 s
       if (!calibrated && (calibT += 1) > 25) { body.calibrateFromCurrent(); calibrated = true; }
     }
   }
   const tracking = performance.now() - seenAt < 800 && body.pts;
-  if (tracking) bear.pose(body.pts, calibrated ? body.base : null);
+  if (tracking && body.world) bear.pose3D(body.world, body.pts, calibrated ? body.base : null);   // whole body in 3D
+  else if (tracking) bear.pose(body.pts, calibrated ? body.base : null);
   else { bear.idle(t); calibrated = false; calibT = 0; }
   $('status').textContent = tracking ? `Tracking you · ${stats.fps} fps` : (stats.source === 'none' ? 'Scan the QR code or use the webcam' : 'Step into view…');
   controls.update();
