@@ -28,7 +28,7 @@ Poses: 🦒 Giraffe (arms straight up) · 🐦 Bird wings (arms out sideways) ·
 - **F9** toggles the stats overlay (camera fps, pose time, round trip, people seen).
 
 ## 3D bear test
-`bear3d.html` loads a Tripo character (Barnaby `bear_tripo.glb`, Hammy `hamster.glb`; switch with the buttons or `?char=hamster`) in Three.js and makes him copy you
+`bear3d.html` loads a Tripo character (Barnaby `bear_tripo.glb`, Hammy `hamster.glb`, Cluck `chicken.glb`; switch with the buttons or `?char=hamster`) in Three.js and makes him copy you
 (arms with elbows, legs with knees, leaning, jumps) using the same phone QR code or the computer's webcam.
 Drag to look around, H hides the panel. `?weights` colours the auto-rig, `?model=simple` loads the older shape-built bear.
 

@@ -70,6 +70,23 @@ export async function loadRiggedCharacter(url) {
   let crotchB = Math.floor(S * 0.12);
   for (let b = 0; b < S * 0.55; b++) if (near[b] === 0) crotchB = b;
   const crotchY = ((crotchB + 1) / S) * H;
+  // Second opinion on the shoulder: walking out from the middle, the body is
+  // tall and the arm (or wing) is thin. The shoulder is where it becomes thin.
+  {
+    const XB = 60, lo = new Float32Array(XB).fill(1e9), hi = new Float32Array(XB).fill(-1e9);
+    for (let i = 0; i < n; i++) {
+      const y = pos[i * 3 + 1];
+      if (y < crotchY) continue;
+      const xb = Math.min(XB - 1, Math.floor((Math.abs(pos[i * 3]) / X) * XB));
+      if (y < lo[xb]) lo[xb] = y;
+      if (y > hi[xb]) hi[xb] = y;
+    }
+    const tall = hi[0] - lo[0];
+    for (let xb = 2; xb < XB - 3; xb++) {
+      const thin = (k) => hi[k] - lo[k] < tall * 0.45;
+      if (thin(xb) && thin(xb + 1) && thin(xb + 2)) { sx = Math.min(sx, (xb / XB) * X); break; }
+    }
+  }
   // leg centres and the arm line (average height of the arm at each end)
   let lx = 0, lc = 0, tipY = 0, tipC = 0, shY = 0, shC = 0;
   for (let i = 0; i < n; i++) {

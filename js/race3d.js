@@ -11,6 +11,7 @@ const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 export const MODELS = {
   bear: 'assets/models/bear_tripo.glb',
   hamster: 'assets/models/hamster.glb',
+  chicken: 'assets/models/chicken.glb',
 };
 const cache = {};                      // file -> Promise<RiggedCharacter>, loaded once
 const DH = 720;                        // design height of a pane (matches RaceScene)
