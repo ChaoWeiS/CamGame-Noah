@@ -23,8 +23,8 @@ Poses: 🦒 Giraffe (arms straight up) · 🐦 Bird wings (arms out sideways) ·
 ### No phone? Testing options
 - **Use this computer's webcam:** a button in the lobby runs the tracking on the computer itself.
 - **Keyboard players** (lobby button, up to 2), for testing game logic without a camera:
-  - P1: ← → lean · ↑ jump · ↓ duck · tap R to run · 1–6 poses · Enter = hands up
-  - P2: A D lean · W jump · S duck · tap F to run · Z X C V B N poses · Space = hands up
+  - P1: ← → lean · Space (or ↑) jump · Shift (or ↓) duck · tap R to run · 1–6 poses · Enter = hands up
+  - P2: A D lean · W jump · S duck · tap F to run · Z X C V B N poses · Q = hands up
 - **F9** toggles the stats overlay (camera fps, pose time, round trip, people seen).
 
 ## Screen layout

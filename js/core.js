@@ -115,22 +115,23 @@ export function input(pl) {
 
 // ---------------------------------------------------------------- keyboard test players
 const KB = [
-  { left: 'ArrowLeft', right: 'ArrowRight', up: 'ArrowUp', down: 'ArrowDown', ok: 'Enter', run: 'r', poses: ['1', '2', '3', '4', '5', '6'] },
-  { left: 'a', right: 'd', up: 'w', down: 's', ok: ' ', run: 'f', poses: ['z', 'x', 'c', 'v', 'b', 'n'] },
+  { left: ['ArrowLeft'], right: ['ArrowRight'], up: [' ', 'ArrowUp'], down: ['Shift', 'ArrowDown'], ok: ['Enter'], run: ['r'], poses: ['1', '2', '3', '4', '5', '6'] },
+  { left: ['a'], right: ['d'], up: ['w'], down: ['s'], ok: ['q'], run: ['f'], poses: ['z', 'x', 'c', 'v', 'b', 'n'] },
 ];
 import { POSES } from './body.js';
-export const keyboardHelp = 'P1: ← → lean · ↑ jump · ↓ duck · R run · 1–6 poses · Enter = hands up | P2: A D · W · S · F · Z–N · Space';
+export const keyboardHelp = 'P1: ← → lean · Space jump · Shift duck · R run · 1–6 poses · Enter = hands up | P2: A D lean · W jump · S duck · F run · Z–N poses · Q hands up';
 
 window.addEventListener('keydown', (e) => {
+  if (e.key === ' ' && tracker.players.some((p) => p.kind === 'keyboard')) e.preventDefault(); // Space = jump, not page scroll/button
   for (const pl of tracker.players) {
     if (pl.kind !== 'keyboard') continue;
     const k = KB[pl.keyboardIndex]; if (!k) continue; const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-    if (key === k.left) pl.kb.lane = Math.max(-1, pl.kb.lane - 1);
-    if (key === k.right) pl.kb.lane = Math.min(1, pl.kb.lane + 1);
-    if (key === k.up && !e.repeat) pl.kb.jumpAt = performance.now();
-    if (key === k.down) pl.kb.duck = true;
-    if (key === k.ok) pl.kb.handsUp = true;
-    if (key === k.run) pl.kb.runAt = performance.now();
+    if (k.left.includes(key)) pl.kb.lane = Math.max(-1, pl.kb.lane - 1);
+    if (k.right.includes(key)) pl.kb.lane = Math.min(1, pl.kb.lane + 1);
+    if (k.up.includes(key) && !e.repeat) pl.kb.jumpAt = performance.now();
+    if (k.down.includes(key)) pl.kb.duck = true;
+    if (k.ok.includes(key)) pl.kb.handsUp = true;
+    if (k.run.includes(key)) pl.kb.runAt = performance.now();
     const pi = k.poses.indexOf(key);
     if (pi >= 0) pl.kb.pose = POSES[pi].id;
   }
@@ -139,8 +140,8 @@ window.addEventListener('keyup', (e) => {
   for (const pl of tracker.players) {
     if (pl.kind !== 'keyboard') continue;
     const k = KB[pl.keyboardIndex]; if (!k) continue; const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
-    if (key === k.down) pl.kb.duck = false;
-    if (key === k.ok) pl.kb.handsUp = false;
+    if (k.down.includes(key)) pl.kb.duck = false;
+    if (k.ok.includes(key)) pl.kb.handsUp = false;
     if (k.poses.includes(key)) pl.kb.pose = null;
   }
 });
