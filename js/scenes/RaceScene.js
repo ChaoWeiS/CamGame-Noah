@@ -1,5 +1,6 @@
 import { tracker, input } from '../core.js';
 import { W, H, txt, rng, session, ordinal, charImage, charById, setupPanes, UI_X } from './common.js';
+import { Race3D } from '../race3d.js';
 
 const DH = 720;            // design height of one player's pane
 
@@ -93,6 +94,13 @@ export class RaceScene extends Phaser.Scene {
     this.banner = this.add.text(UI_X + W / 2, H / 2 - 40, '', txt(90, '#fff8e6', { stroke: '#1d3b52', strokeThickness: 12 })).setOrigin(0.5).setDepth(10);
     this.help = this.add.text(UI_X + W / 2, H / 2 + 60, 'The flood is coming — run on the spot to go faster!\nLean around rocks and trees · jump over logs and low branches · duck under high ones',
       txt(26, '#fff8e6', { stroke: '#1d3b52', strokeThickness: 6 })).setOrigin(0.5).setDepth(10);
+
+    // 3D characters drawn over the 2.5D world (for characters that have a model)
+    try {
+      this.r3d = new Race3D(this.game);
+      this.runners.forEach((r) => this.r3d.addRunner(r).catch((e) => console.warn('3D runner', e)));
+      this.events.once('shutdown', () => { this.r3d?.destroy(); this.r3d = null; });
+    } catch (e) { console.warn('3D layer unavailable', e); this.r3d = null; }
 
     this.state = 'countdown';
     this.finishCount = 0;
@@ -189,11 +197,15 @@ export class RaceScene extends Phaser.Scene {
       r.sprite.setPosition(r.laneX, GROUND_Y - jumpK * 60 - bob);
       r.sprite.setScale(bs * (1 + jumpK * 0.15), bs * (ducking ? 0.55 : 1 + jumpK * 0.15));
       r.sprite.setRotation(wobble);
+      r.anim = { x: r.laneX, y: GROUND_Y, speed: r.speed, jump: jumpK, duck: ducking, wobble: wobble * 0.6,
+        pts: r.pl.kind === 'camera' && inp.present ? r.pl.body.pts : null };   // 3D characters copy the player's arms
       r.shadow.setPosition(r.laneX, GROUND_Y).setScale(1 - jumpK * 0.4);
       r.msg.setPosition(r.c.cx, GROUND_Y - c_msgOff(r));
 
       this.drawProgress(this.top, r);
     }
+
+    if (this.r3d) this.r3d.render(dt);
 
     // End of race: everyone finished, or 12 s after the winner
     if (this.state === 'run') {
