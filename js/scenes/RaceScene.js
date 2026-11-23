@@ -32,6 +32,7 @@ export class RaceScene extends Phaser.Scene {
 
     this.bg = this.add.graphics().setDepth(0);
     this.g = this.add.graphics().setDepth(3);
+    this.top = this.add.graphics().setDepth(6); // sky band, clouds, rain, progress bars
     this.pool = new Map();
     // Scenery: trees along the track edges, same for every column
     const r0 = rng(session.seed ^ 0x77);
@@ -154,7 +155,7 @@ export class RaceScene extends Phaser.Scene {
       r.shadow.setPosition(r.laneX, RUNNER_Y + 30).setScale(1 - jumpK * 0.4);
       r.msg.setPosition(r.c.cx, RUNNER_Y - 130);
 
-      this.drawProgress(g, r);
+      this.drawProgress(this.top, r);
     }
 
     // End of race: everyone finished, or 12 s after the winner
@@ -241,28 +242,59 @@ export class RaceScene extends Phaser.Scene {
 
   drawBackground() {
     const g = this.bg; g.clear();
-    g.fillGradientStyle(0x4b5563, 0x4b5563, 0x8fbf6a, 0x8fbf6a, 1).fillRect(0, 0, W, H);
-    // storm clouds
-    g.fillStyle(0x374151, 1);
-    for (let i = 0; i < 9; i++) g.fillCircle((i * 160 + this.rainT * 20) % (W + 160) - 80, 30 + (i % 2) * 18, 60);
-    // rain
-    g.lineStyle(2, 0xcfe3f5, 0.5);
+    g.fillStyle(0x4f8a3c, 1).fillRect(0, 0, W, H);
+    // sky band with storm clouds, drawn above everything that scrolls in from the top
+    const t = this.top; t.clear();
+    t.fillGradientStyle(0x4b5563, 0x4b5563, 0x6b7a86, 0x6b7a86, 1).fillRect(0, 0, W, TOP_Y);
+    t.fillStyle(0x374151, 1);
+    for (let i = 0; i < 9; i++) t.fillCircle((i * 160 + this.rainT * 20) % (W + 160) - 80, 30 + (i % 2) * 18, 60);
+    // rain over the whole scene
+    t.lineStyle(2, 0xcfe3f5, 0.45);
     for (let i = 0; i < 70; i++) {
       const x = (i * 97 + this.rainT * 120) % W;
       const y = (i * 53 + this.rainT * 700) % H;
-      g.lineBetween(x, y, x - 6, y + 18);
+      t.lineBetween(x, y, x - 6, y + 18);
     }
-    // track per column
+    // grassland track per column
     this.cols.forEach((c, i) => {
       const dist = this.runners ? this.runners[i].dist : 0;
-      g.fillStyle(0xc9a46a, 1).fillRect(c.x + 12, TOP_Y, c.w - 24, H - TOP_Y);
-      g.lineStyle(3, 0xffffff, 0.35);
-      for (const k of [-0.14, 0.14]) {
-        const x = c.cx + k * c.w * 2;
-        const off = (dist * PX_PER_M) % 40;
-        for (let y = TOP_Y - 40 + off; y < H; y += 40) g.lineBetween(x, y, x, y + 18);
+      const x0 = c.x + 12, w = c.w - 24;
+      g.fillStyle(0x6fae4f, 1).fillRect(x0, TOP_Y, w, H - TOP_Y);
+      // mowed stripes scroll toward the player
+      const band = 64, off = (dist * PX_PER_M) % (band * 2);
+      g.fillStyle(0x7fbd5d, 1);
+      for (let y = TOP_Y - band * 2 + off; y < H; y += band * 2) {
+        const top = Math.max(TOP_Y, y), bot = Math.min(H, y + band);
+        if (bot > top) g.fillRect(x0, top, w, bot - top);
       }
-      g.lineStyle(4, 0xffffff, 0.6).strokeRect(c.x + 12, TOP_Y, c.w - 24, H - TOP_Y);
+      // grass tufts and little flowers, fixed to the ground
+      const m0 = Math.floor(dist - 6), m1 = Math.ceil(dist + 32);
+      for (let m = m0; m <= m1; m++) {
+        for (let k = 0; k < 3; k++) {
+          const h = Math.sin(m * 12.9898 + k * 78.233 + i * 3.1) * 43758.5453;
+          const fx = h - Math.floor(h);
+          const h2 = Math.sin(m * 4.1 + k * 9.7) * 1234.5;
+          const fy = h2 - Math.floor(h2);
+          const y = RUNNER_Y - (m + fy - dist) * PX_PER_M;
+          if (y < TOP_Y + 4 || y > H - 4) continue;
+          const x = x0 + 8 + fx * (w - 16);
+          if (k === 2 && fx > 0.7) {
+            g.fillStyle(fy > 0.5 ? 0xfff3a6 : 0xffffff, 1).fillCircle(x, y, 3.5);
+            g.fillStyle(0xf2b544, 1).fillCircle(x, y, 1.5);
+          } else {
+            g.lineStyle(2, 0x4f8f39, 0.9);
+            g.lineBetween(x, y, x - 4, y - 9); g.lineBetween(x, y, x, y - 11); g.lineBetween(x, y, x + 4, y - 9);
+          }
+        }
+      }
+      // faint lane guides
+      g.lineStyle(3, 0xffffff, 0.18);
+      for (const k of [-0.14, 0.14]) {
+        const lx = c.cx + k * c.w * 2;
+        const o2 = (dist * PX_PER_M) % 40;
+        for (let y = TOP_Y - 40 + o2; y < H; y += 40) g.lineBetween(lx, Math.max(TOP_Y, y), lx, Math.max(TOP_Y, y + 18));
+      }
+      g.lineStyle(4, 0x3f7a2e, 0.8).strokeRect(x0, TOP_Y, w, H - TOP_Y);
     });
   }
 }
