@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>3D Bear Test — Race to the Ark</title>
+<title>3D Character Test — Race to the Ark</title>
 <style>
   html, body { margin: 0; height: 100%; overflow: hidden; background: #8fc6e6; font-family: system-ui, -apple-system, sans-serif; }
   canvas { display: block; }
@@ -19,6 +19,8 @@
   #status, #hint { margin-top: 8px; opacity: 0.85; }
   #hint { font-size: 12px; }
   #panel.min > :not(h2) { display: none; }
+  #chars button { margin: 4px 2px 0; padding: 6px 10px; }
+  #chars button.on { background: #f2b544; color: #1d1d1d; }
 </style>
 <script type="importmap">
 { "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }
@@ -26,13 +28,14 @@
 </head>
 <body>
 <div id="panel">
-  <h2>🐻 3D bear test</h2>
+  <h2 id="title">3D character test</h2>
+  <div id="chars"></div>
   <img id="qr" alt="QR code for the phone camera">
   <div id="room">…</div>
   <a id="link" target="_blank"></a>
   <div><button id="camBtn">Use this computer’s webcam</button></div>
   <div id="status">Starting…</div>
-  <div id="hint">Stand back so your whole body is in view. Barnaby copies your arms, legs, leaning and jumps. Drag to look around · H hides this panel.</div>
+  <div id="hint">Stand back so your whole body is in view. Your character copies your arms, legs, leaning and jumps. Drag to look around · H hides this panel.</div>
 </div>
 <script src="vendor/peerjs.min.js"></script>
 <script src="vendor/qrcode.js"></script>
@@ -94,12 +97,25 @@ addEventListener('resize', () => {
 });
 
 // ---- the bear
-// Default: the Tripo bear, auto-rigged so it bends at shoulders, elbows, hips and knees.
-// ?model=simple uses the older shape-built bear.
-$('status').textContent = 'Loading Barnaby…';
+// Tripo models, auto-rigged so they bend at shoulders, elbows, hips and knees.
+// ?char=hamster picks one; ?model=simple uses the older shape-built bear.
+const CHARS = [
+  { id: 'bear', name: 'Barnaby', emoji: '🐻', file: 'assets/models/bear_tripo.glb' },
+  { id: 'hamster', name: 'Hammy', emoji: '🐹', file: 'assets/models/hamster.glb' },
+];
+const pick = CHARS.find((c) => c.id === params.get('char')) || CHARS[0];
+$('title').textContent = `${pick.emoji} ${pick.name} — 3D test`;
+for (const c of CHARS) {
+  const b = document.createElement('button');
+  b.textContent = `${c.emoji} ${c.name}`;
+  if (c === pick) b.className = 'on';
+  b.onclick = () => { const q = new URLSearchParams(location.search); q.set('char', c.id); q.delete('model'); location.search = q.toString(); };
+  $('chars').appendChild(b);
+}
+$('status').textContent = `Loading ${pick.name}…`;
 const bear = params.get('model') === 'simple'
   ? await loadPuppet3D('assets/models/bear.glb')
-  : await loadRiggedCharacter('assets/models/bear_tripo.glb');
+  : await loadRiggedCharacter(pick.file);
 if (params.has('weights') && bear.mesh) {
   // debug: colour each vertex by the bone that moves it most
   const cols = [0x888888, 0xffffff, 0xff4444, 0xffaa00, 0x4488ff, 0x00ddff, 0xff44ff, 0xffff44, 0x44ff44, 0x22aa22];
