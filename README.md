@@ -14,7 +14,7 @@ animal-pose password at the ark door (30 s) → results with a rainbow 🌈
 3. Prop the phone up sideways (landscape), about 3 m away, so everyone fits head to toe.
 4. Players stand in a row. Anyone raises **both hands** to start, then everyone stands still for 3 s (calibration).
 5. **Pick:** lean left/right to change character (Barnaby, Scout, Cluck, Hammy — the 3D cast), raise both hands to choose.
-6. **Race:** run on the spot to go faster (standing still = 60% speed, running hard = 150%). Lean or step left/right into the free lane past rocks and trees, jump over logs and low branches, duck under high branches.
+6. **Race:** run on the spot and/or swing your arms like a runner (they must take turns) to go faster — standing still = 60% speed, fast big swings or fast knees ≈ 160%, both ≈ 170%. Lean or step left/right into the free lane past rocks and trees, jump over logs and low branches, duck under high branches.
 7. **Password:** copy 5 animal poses in a row = 1 point. Most points in 30 s wins.
 
 Poses: 🦒 Giraffe (arms straight up) · 🐦 Bird wings (arms out sideways) · 🐻 Bear ears (hands on head)

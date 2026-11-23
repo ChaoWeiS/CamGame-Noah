@@ -180,7 +180,36 @@ Body.prototype.detectRunning = function (p, T) {
   }
   while (this.steps.length && now - this.steps[0] > 1500) this.steps.shift();
   const cadence = this.steps.length / 1.5;    // steps per second
-  const target = Math.min(1, cadence / 4);    // ~4 steps/s = full speed
+  const legs = Math.min(1, cadence / 4);      // ~4 steps/s = full speed
+
+  // Arm swinging, like a runner: the hands must take turns (one up while the other
+  // goes down). Each time the higher hand switches counts as a swing; faster and
+  // bigger swings = faster running. Waving one arm or raising both doesn't count.
+  const wl = p[L.lWrist], wr = p[L.rWrist];
+  this.wristHist = this.wristHist || [];
+  this.swings = this.swings || [];
+  if (wl.v > 0.4 && wr.v > 0.4) {
+    this.wristHist.push({ t: now, l: wl.y, r: wr.y });
+    while (this.wristHist.length && now - this.wristHist[0].t > 700) this.wristHist.shift();
+    const range = (k) => Math.max(...this.wristHist.map((h) => h[k])) - Math.min(...this.wristHist.map((h) => h[k]));
+    const rl = range('l'), rr = range('r');
+    const bothMoving = rl > 0.12 * T && rr > 0.12 * T;
+    const diff = wr.y - wl.y;
+    const side = diff > 0.08 * T ? -1 : diff < -0.08 * T ? 1 : 0;   // which hand is higher
+    if (side !== 0 && side !== this.swingSide) {
+      this.swingSide = side;
+      if (bothMoving) this.swings.push({ t: now, amp: Math.min(rl, rr) / T });
+    }
+  }
+  while (this.swings.length && now - this.swings[0].t > 1500) this.swings.shift();
+  const swingRate = this.swings.length / 1.5;                       // swings per second
+  const amp = this.swings.length ? this.swings.reduce((s, w) => s + w.amp, 0) / this.swings.length : 0;
+  const vigour = Math.max(0.4, Math.min(1.2, amp / 0.6));          // big swings count for more
+  const arms = Math.min(1.2, (swingRate / 4) * vigour);
+  this.armRun = arms; this.legRun = legs;
+
+  // either one runs; both together give a little extra (up to 1.25)
+  const target = Math.min(1.25, Math.max(legs, arms) + 0.25 * Math.min(legs, arms));
   this.run += (target - this.run) * 0.15;     // smooth it
 };
 

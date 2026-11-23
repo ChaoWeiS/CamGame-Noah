@@ -93,7 +93,7 @@ export class RaceScene extends Phaser.Scene {
     });
 
     this.banner = this.add.text(UI_X + W / 2, H / 2 - 40, '', txt(90, '#fff8e6', { stroke: '#1d3b52', strokeThickness: 12 })).setOrigin(0.5).setDepth(10);
-    this.help = this.add.text(UI_X + W / 2, H / 2 + 60, 'The flood is coming — run on the spot to go faster!\nLean around rocks and trees · jump over logs and low branches · duck under high ones',
+    this.help = this.add.text(UI_X + W / 2, H / 2 + 60, 'The flood is coming — run on the spot and swing your arms to go faster!\nLean around rocks and trees · jump over logs and low branches · duck under high ones',
       txt(26, '#fff8e6', { stroke: '#1d3b52', strokeThickness: 6 })).setOrigin(0.5).setDepth(10);
 
     // 3D characters drawn over the 2.5D world (for characters that have a model)
@@ -141,7 +141,7 @@ export class RaceScene extends Phaser.Scene {
       r.laneX += (targetX - r.laneX) * Math.min(1, dt * 14);
 
       if (this.state === 'run' && !r.place) {
-        // Running on the spot makes you faster: standing still = 60% speed, running hard = 150%.
+        // Running on the spot or swinging the arms (alternately) makes you faster: 60% … ~170% speed.
         const runBoost = 0.6 + 0.9 * (inp.run || 0);
         const target = !inp.present ? 0 : now < r.stumbleUntil ? BASE_SPEED * 0.35 : BASE_SPEED * runBoost;
         r.speed += (target - r.speed) * Math.min(1, dt * 3);
