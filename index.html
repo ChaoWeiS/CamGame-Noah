@@ -6,7 +6,7 @@
 <title>Race to the Ark</title>
 <style>
   html, body { margin: 0; height: 100%; background: #10202b; overflow: hidden; font-family: system-ui, -apple-system, sans-serif; }
-  #wrap { position: absolute; inset: 0; margin: auto; width: min(100vw, 177.78vh); height: min(100vh, 56.25vw); }
+  #wrap { --ar: 1.7778; position: absolute; inset: 0; margin: auto; width: min(100vw, calc(100vh * var(--ar))); height: min(100vh, calc(100vw / var(--ar))); }
   #game { position: absolute; inset: 0; }
   #lobby {
     position: absolute; left: 3.1%; top: 16.7%; width: 37.5%; height: 70.8%;

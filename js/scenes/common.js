@@ -1,7 +1,48 @@
 import { keyPoints } from '../body.js';
 import { BONES } from '../bones.js';
 
-export const W = 1280, H = 720;
+// Screen size follows the display's shape: 16:9 (1920x1080) up to 16:10 (1920x1200).
+export const ASPECT = Math.min(16 / 9, Math.max(16 / 10, window.innerWidth / window.innerHeight));
+export const W = 1280, H = Math.round(1280 / ASPECT);
+
+// ---- split screen: up to 4 panes (1 = full, 2 = side by side, 3-4 = 2x2 grid)
+export const UI_X = -20000; // shared overlay text lives here, seen only by the UI camera
+export function paneRects(n) {
+  if (n <= 1) return [{ x: 0, y: 0, w: W, h: H }];
+  if (n === 2) return [{ x: 0, y: 0, w: W / 2, h: H }, { x: W / 2, y: 0, w: W / 2, h: H }];
+  const hw = W / 2, hh = H / 2;
+  return [{ x: 0, y: 0, w: hw, h: hh }, { x: hw, y: 0, w: hw, h: hh }, { x: 0, y: hh, w: hw, h: hh }, { x: hw, y: hh, w: hw, h: hh }];
+}
+
+// Each player's content is drawn in its own area of the world, designH tall,
+// and a camera shows that area in the player's pane. Returns pane geometry
+// ({x, w, cx, h, cam}) in world coordinates.
+export function setupPanes(scene, n, designH = 720) {
+  const rects = paneRects(n);
+  const panes = [];
+  for (let i = 0; i < n; i++) {
+    const r = rects[i];
+    const zoom = r.h / designH;
+    const w = r.w / zoom;
+    const x = i * 5000;
+    const cam = i === 0 ? scene.cameras.main.setViewport(r.x, r.y, r.w, r.h) : scene.cameras.add(r.x, r.y, r.w, r.h);
+    cam.setZoom(zoom).setBackgroundColor('#10202b');
+    cam.centerOn(x + w / 2, designH / 2);
+    panes.push({ x, w, cx: x + w / 2, h: designH, cam, rect: r });
+  }
+  // UI camera on top: full screen, looks at the UI_X area
+  const ui = scene.cameras.add(0, 0, W, H).setScroll(UI_X, 0);
+  const g = scene.add.graphics().setDepth(50);
+  for (let i = n; i < rects.length; i++) {
+    const r = rects[i];
+    g.fillStyle(0x10202b, 1).fillRect(UI_X + r.x, r.y, r.w, r.h);
+    scene.add.text(UI_X + r.x + r.w / 2, r.y + r.h / 2, '🌈', txt(80)).setOrigin(0.5).setDepth(51);
+  }
+  g.lineStyle(6, 0x10202b, 1);
+  if (rects.length >= 2) g.lineBetween(UI_X + W / 2, 0, UI_X + W / 2, H);
+  if (rects.length >= 3) g.lineBetween(UI_X, H / 2, UI_X + W, H / 2);
+  return { panes, ui };
+}
 export const CHARACTERS = [
   { id: 'bear', name: 'Barnaby' },
   { id: 'dog', name: 'Scout' },

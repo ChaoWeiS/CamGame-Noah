@@ -1,5 +1,7 @@
 import { tracker, input } from '../core.js';
-import { W, H, txt, columns, rng, session, ordinal, charImage } from './common.js';
+import { W, H, txt, rng, session, ordinal, charImage, charById, setupPanes, UI_X } from './common.js';
+
+const DH = 720;            // design height of one player's pane
 
 const COURSE = 300;        // metres to the ark
 const BASE_SPEED = 10;     // metres per second
@@ -31,7 +33,10 @@ export class RaceScene extends Phaser.Scene {
     session.seed = (Math.random() * 1e9) | 0;
     this.course = makeCourse(session.seed);
     const players = tracker.players;
-    this.cols = columns(players.length);
+    this.layout = setupPanes(this, players.length, DH);
+    this.cols = this.layout.panes;
+    // the actual running track inside each pane (panes can be wide)
+    for (const c of this.cols) { c.tw = Math.min(c.w - 40, 760); c.tx = c.cx - c.tw / 2; }
 
     this.bg = this.add.graphics().setDepth(0);
     this.g = this.add.graphics().setDepth(3);
@@ -48,11 +53,12 @@ export class RaceScene extends Phaser.Scene {
       return {
         pl, c, dist: 0, speed: 0, laneX: c.cx, stumbleUntil: 0,
         lastJump: -1e9, lastDuck: -1e9, nextObs: 0, place: 0,
-        shadow: this.add.ellipse(c.cx, RUNNER_Y + 30, Math.min(110, c.w * 0.3), 22, 0x000000, 0.25).setDepth(4),
-        sprite: charImage(this, c.cx, RUNNER_Y + 30, pl.animal || 'bear', 'back', Math.min(190, c.w * 0.5)).setDepth(5),
+        shadow: this.add.ellipse(c.cx, RUNNER_Y + 30, Math.min(110, c.tw * 0.3), 22, 0x000000, 0.25).setDepth(4),
+        sprite: charImage(this, c.cx, RUNNER_Y + 30, pl.animal || 'bear', 'back', Math.min(190, c.tw * 0.5)).setDepth(5),
         msg: this.add.text(c.cx, RUNNER_Y - 110, '', txt(30, '#ffffff', { stroke: '#1d3b52', strokeThickness: 6 })).setOrigin(0.5).setDepth(8),
-        lost: this.add.text(c.cx, 380, '', txt(26, '#ffffff', { stroke: '#9b3b2f', strokeThickness: 6, wordWrap: { width: c.w - 30 } })).setOrigin(0.5).setDepth(8),
+        lost: this.add.text(c.cx, 380, '', txt(26, '#ffffff', { stroke: '#9b3b2f', strokeThickness: 6, wordWrap: { width: c.tw - 30 } })).setOrigin(0.5).setDepth(8),
         labels: [],
+        tag: this.add.text(c.x + 20, 70, `P${pl.slot + 1} · ${charById(pl.animal).name}`, txt(26, pl.css, { stroke: '#10202b', strokeThickness: 5 })).setOrigin(0, 0.5).setDepth(7),
       };
     });
     // Text labels for obstacles are pooled per column
@@ -60,8 +66,8 @@ export class RaceScene extends Phaser.Scene {
       for (let i = 0; i < 4; i++) r.labels.push(this.add.text(0, 0, '', txt(24, '#ffffff', { stroke: '#000', strokeThickness: 5 })).setOrigin(0.5).setVisible(false).setDepth(7));
     });
 
-    this.banner = this.add.text(W / 2, H / 2 - 40, '', txt(90, '#fff8e6', { stroke: '#1d3b52', strokeThickness: 12 })).setOrigin(0.5).setDepth(10);
-    this.help = this.add.text(W / 2, H / 2 + 60, 'The flood is coming — run to the ark!\nLean to dodge rocks · jump over logs · duck under branches',
+    this.banner = this.add.text(UI_X + W / 2, H / 2 - 40, '', txt(90, '#fff8e6', { stroke: '#1d3b52', strokeThickness: 12 })).setOrigin(0.5).setDepth(10);
+    this.help = this.add.text(UI_X + W / 2, H / 2 + 60, 'The flood is coming — run to the ark!\nLean to dodge rocks · jump over logs · duck under branches',
       txt(26, '#fff8e6', { stroke: '#1d3b52', strokeThickness: 6 })).setOrigin(0.5).setDepth(10);
 
     this.state = 'countdown';
@@ -95,7 +101,7 @@ export class RaceScene extends Phaser.Scene {
       r.lost.setText(inp.present ? '' : 'Come back into view!');
 
       // Movement
-      const targetX = r.c.cx + inp.lane * r.c.w * 0.28;
+      const targetX = r.c.cx + inp.lane * r.c.tw * 0.3;
       r.laneX += (targetX - r.laneX) * Math.min(1, dt * 14);
 
       if (this.state === 'run' && !r.place) {
@@ -121,9 +127,9 @@ export class RaceScene extends Phaser.Scene {
         if (ahead < -6 || ahead > 32) continue;
         const y = RUNNER_Y - ahead * PX_PER_M;
         if (y < TOP_Y + 30) continue;
-        const x = dcr.side < 0 ? r.c.x + 14 : r.c.x + r.c.w - 14;
+        const x = dcr.side < 0 ? r.c.tx - 4 : r.c.tx + r.c.tw + 4;
         const im = this.sprite(dcr.key, 1).setPosition(x, y).setOrigin(0.5, 1);
-        this.fitHeight(im, depthScale(y) * Math.min(200, r.c.w * 0.45) * (dcr.key.includes('rock') || dcr.key.includes('boulder') ? 0.45 : 1));
+        this.fitHeight(im, depthScale(y) * Math.min(200, r.c.tw * 0.45) * (dcr.key.includes('rock') || dcr.key.includes('boulder') ? 0.45 : 1));
         im.setFlipX(dcr.side > 0);
       }
 
@@ -138,7 +144,7 @@ export class RaceScene extends Phaser.Scene {
         if (y < TOP_Y) continue;
         const label = this.drawObstacle(g, r.c, o, y);
         if (label && li < r.labels.length) {
-          r.labels[li++].setText(label).setPosition(r.c.cx, label === 'DUCK!' ? y - depthScale(y) * Math.min(190, r.c.w * 0.45) - 14 : y - depthScale(y) * 50 - 12).setVisible(true);
+          r.labels[li++].setText(label).setPosition(r.c.cx, label === 'DUCK!' ? y - depthScale(y) * Math.min(190, r.c.tw * 0.45) - 14 : y - depthScale(y) * 50 - 12).setVisible(true);
         }
       }
       // The ark appears near the end
@@ -186,7 +192,7 @@ export class RaceScene extends Phaser.Scene {
     } else {
       r.stumbleUntil = now + 1100;
       r.msg.setText('Oops!');
-      this.cameras.main.shake(120, 0.004);
+      r.c.cam.shake(120, 0.004);
     }
     this.time.delayedCall(700, () => { if (!r.place) r.msg.setText(''); });
   }
@@ -203,11 +209,11 @@ export class RaceScene extends Phaser.Scene {
   fitHeight(im, h) { im.setScale(h / im.height); return im; }
 
   drawObstacle(g, c, o, y) {
-    const half = c.w * 0.42;
+    const half = c.tw * 0.46;
     if (o.type === 'rock') {
-      const x = c.cx + o.lane * c.w * 0.28;
+      const x = c.cx + o.lane * c.tw * 0.3;
       const im = this.sprite('prop_rock', 2).setOrigin(0.5, 0.75).setPosition(x, y);
-      this.fitHeight(im, depthScale(y) * Math.min(120, c.w * 0.3));
+      this.fitHeight(im, depthScale(y) * Math.min(120, c.tw * 0.3));
       return null;
     }
     if (o.type === 'log') {
@@ -217,7 +223,7 @@ export class RaceScene extends Phaser.Scene {
       return 'JUMP!';
     }
     // branch (duck): a long stick held up between two small trees
-    const postH = depthScale(y) * Math.min(190, c.w * 0.45);
+    const postH = depthScale(y) * Math.min(190, c.tw * 0.45);
     this.fitHeight(this.sprite('prop_birch', 2).setOrigin(0.5, 1).setPosition(c.cx - half, y + 16), postH);
     this.fitHeight(this.sprite('prop_birch', 2).setOrigin(0.5, 1).setPosition(c.cx + half, y + 16), postH).setFlipX(true);
     const bar = this.sprite('prop_stick', 2).setOrigin(0.5, 0.5).setPosition(c.cx, y - postH * 0.45);
@@ -227,7 +233,7 @@ export class RaceScene extends Phaser.Scene {
   }
 
   drawArk(g, c, y) {
-    const w = Math.min(220, c.w * 0.8);
+    const w = Math.min(260, c.tw * 0.6);
     g.fillStyle(0x7a4a22, 1);
     g.fillPoints([
       { x: c.cx - w / 2, y: y }, { x: c.cx + w / 2, y: y },
@@ -246,43 +252,33 @@ export class RaceScene extends Phaser.Scene {
 
   drawBackground() {
     const g = this.bg; g.clear();
-    g.fillStyle(0x4f8a3c, 1).fillRect(0, 0, W, H);
-    // sky band with storm clouds, drawn above everything that scrolls in from the top
     const t = this.top; t.clear();
-    t.fillGradientStyle(0x4b5563, 0x4b5563, 0x6b7a86, 0x6b7a86, 1).fillRect(0, 0, W, TOP_Y);
-    t.fillStyle(0x374151, 1);
-    for (let i = 0; i < 9; i++) t.fillCircle((i * 160 + this.rainT * 20) % (W + 160) - 80, 30 + (i % 2) * 18, 60);
-    // rain over the whole scene
-    t.lineStyle(2, 0xcfe3f5, 0.45);
-    for (let i = 0; i < 70; i++) {
-      const x = (i * 97 + this.rainT * 120) % W;
-      const y = (i * 53 + this.rainT * 700) % H;
-      t.lineBetween(x, y, x - 6, y + 18);
-    }
-    // grassland track per column
     this.cols.forEach((c, i) => {
       const dist = this.runners ? this.runners[i].dist : 0;
-      const x0 = c.x + 12, w = c.w - 24;
-      g.fillStyle(0x6fae4f, 1).fillRect(x0, TOP_Y, w, H - TOP_Y);
+      // meadow around the track
+      g.fillStyle(0x5b9a45, 1).fillRect(c.x, 0, c.w, DH);
+      // the running track
+      const x0 = c.tx, w = c.tw;
+      g.fillStyle(0x6fae4f, 1).fillRect(x0, TOP_Y, w, DH - TOP_Y);
       // mowed stripes scroll toward the player
       const band = 64, off = (dist * PX_PER_M) % (band * 2);
       g.fillStyle(0x7fbd5d, 1);
-      for (let y = TOP_Y - band * 2 + off; y < H; y += band * 2) {
-        const top = Math.max(TOP_Y, y), bot = Math.min(H, y + band);
+      for (let y = TOP_Y - band * 2 + off; y < DH; y += band * 2) {
+        const top = Math.max(TOP_Y, y), bot = Math.min(DH, y + band);
         if (bot > top) g.fillRect(x0, top, w, bot - top);
       }
-      // grass tufts and little flowers, fixed to the ground
+      // grass tufts and little flowers, fixed to the ground (also on the meadow)
       const m0 = Math.floor(dist - 6), m1 = Math.ceil(dist + 32);
       for (let m = m0; m <= m1; m++) {
-        for (let k = 0; k < 3; k++) {
+        for (let k = 0; k < 4; k++) {
           const h = Math.sin(m * 12.9898 + k * 78.233 + i * 3.1) * 43758.5453;
           const fx = h - Math.floor(h);
           const h2 = Math.sin(m * 4.1 + k * 9.7) * 1234.5;
           const fy = h2 - Math.floor(h2);
           const y = RUNNER_Y - (m + fy - dist) * PX_PER_M;
-          if (y < TOP_Y + 4 || y > H - 4) continue;
-          const x = x0 + 8 + fx * (w - 16);
-          if (k === 2 && fx > 0.7) {
+          if (y < TOP_Y + 4 || y > DH - 4) continue;
+          const x = c.x + 8 + fx * (c.w - 16);
+          if (k === 2 && fx > 0.6) {
             g.fillStyle(fy > 0.5 ? 0xfff3a6 : 0xffffff, 1).fillCircle(x, y, 3.5);
             g.fillStyle(0xf2b544, 1).fillCircle(x, y, 1.5);
           } else {
@@ -293,12 +289,26 @@ export class RaceScene extends Phaser.Scene {
       }
       // faint lane guides
       g.lineStyle(3, 0xffffff, 0.18);
-      for (const k of [-0.14, 0.14]) {
-        const lx = c.cx + k * c.w * 2;
+      for (const k of [-0.15, 0.15]) {
+        const lx = c.cx + k * c.tw;
         const o2 = (dist * PX_PER_M) % 40;
-        for (let y = TOP_Y - 40 + o2; y < H; y += 40) g.lineBetween(lx, Math.max(TOP_Y, y), lx, Math.max(TOP_Y, y + 18));
+        for (let y = TOP_Y - 40 + o2; y < DH; y += 40) g.lineBetween(lx, Math.max(TOP_Y, y), lx, Math.max(TOP_Y, y + 18));
       }
-      g.lineStyle(4, 0x3f7a2e, 0.8).strokeRect(x0, TOP_Y, w, H - TOP_Y);
+      g.lineStyle(4, 0x3f7a2e, 0.8).strokeRect(x0, TOP_Y, w, DH - TOP_Y);
+
+      // sky band with storm clouds, drawn above everything that scrolls in from the top
+      t.fillGradientStyle(0x4b5563, 0x4b5563, 0x6b7a86, 0x6b7a86, 1).fillRect(c.x, 0, c.w, TOP_Y);
+      t.fillStyle(0x374151, 1);
+      const nC = Math.ceil(c.w / 160) + 2;
+      for (let j = 0; j < nC; j++) t.fillCircle(c.x + ((j * 160 + this.rainT * 20) % (nC * 160)) - 80, 30 + (j % 2) * 18, 60);
+      // rain over the whole pane
+      t.lineStyle(2, 0xcfe3f5, 0.45);
+      const nR = Math.round(70 * c.w / 1280) + 20;
+      for (let j = 0; j < nR; j++) {
+        const x = c.x + (j * 97 + this.rainT * 120) % c.w;
+        const y = (j * 53 + this.rainT * 700) % DH;
+        t.lineBetween(x, y, x - 6, y + 18);
+      }
     });
   }
 }

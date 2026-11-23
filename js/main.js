@@ -1,5 +1,5 @@
 import { net, stats, tracker, input, keyboardHelp } from './core.js';
-import { W, H } from './scenes/common.js';
+import { W, H, ASPECT } from './scenes/common.js';
 import { LobbyScene } from './scenes/LobbyScene.js';
 import { PickScene } from './scenes/PickScene.js';
 import { RaceScene } from './scenes/RaceScene.js';
@@ -7,6 +7,7 @@ import { PasswordScene } from './scenes/PasswordScene.js';
 import { ResultsScene } from './scenes/ResultsScene.js';
 
 const $ = (id) => document.getElementById(id);
+$('wrap').style.setProperty('--ar', String(ASPECT));
 
 // ---- phone connection + QR code
 net.onStatus = (s) => { $('status').textContent = s; };

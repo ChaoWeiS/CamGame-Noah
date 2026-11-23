@@ -1,30 +1,29 @@
 import { tracker, input } from '../core.js';
-import { W, H, txt, sky, columns, CHARACTERS, charImage, Hold, session } from './common.js';
+import { W, H, txt, setupPanes, CHARACTERS, charImage, Hold, session } from './common.js';
 
 export class PickScene extends Phaser.Scene {
   constructor() { super('Pick'); }
 
   create() {
-    sky(this, 0x7cc0e8, 0xe4f3fb);
-    this.add.text(W / 2, 46, 'Choose your character!', txt(46, '#1d3b52')).setOrigin(0.5);
-    this.add.text(W / 2, 92, 'Lean left or right to change · raise both hands to choose', txt(22, '#1d3b52')).setOrigin(0.5);
-
     const players = tracker.players;
-    const cols = columns(players.length);
+    const cols = setupPanes(this, players.length, 720).panes;
     this.cards = players.map((pl, i) => {
       const c = cols[i];
-      const bg = this.add.rectangle(c.cx, 410, c.w - 24, 520, pl.color, 0.22).setStrokeStyle(4, pl.color, 1);
-      const label = this.add.text(c.cx, 180, `Player ${i + 1}${pl.kind === 'keyboard' ? ' ⌨️' : ''}`, txt(28, '#1d3b52')).setOrigin(0.5);
+      const sky = this.add.graphics();
+      sky.fillGradientStyle(0x7cc0e8, 0x7cc0e8, 0xe4f3fb, 0xe4f3fb, 1).fillRect(c.x, 0, c.w, 720);
+      const bg = this.add.rectangle(c.cx, 360, c.w - 24, 696, pl.color, 0.22).setStrokeStyle(6, pl.color, 1);
+      const label = this.add.text(c.cx, 52, `Player ${i + 1}${pl.kind === 'keyboard' ? ' ⌨️' : ''}`, txt(38, '#1d3b52')).setOrigin(0.5);
+      this.add.text(c.cx, 100, 'Lean ◀ ▶ to change · 🙌 to choose', txt(26, '#1d3b52')).setOrigin(0.5);
       const idx = (pl.slot * 2) % CHARACTERS.length;
-      const imgH = Math.min(260, c.w * 0.75);
+      const imgH = Math.min(320, c.w * 0.75);
       const emoji = charImage(this, c.cx, 370 + imgH / 2, CHARACTERS[idx].id, 'front', imgH);
-      const name = this.add.text(c.cx, 520, CHARACTERS[idx].name, txt(30, '#1d3b52')).setOrigin(0.5);
-      const off = Math.min(150, c.w * 0.4);
+      const name = this.add.text(c.cx, 580, CHARACTERS[idx].name, txt(40, '#1d3b52')).setOrigin(0.5);
+      const off = Math.min(280, c.w * 0.4);
       const arrows = this.add.container(0, 0, [
-        this.add.text(c.cx - off, 370, '◀', txt(40, '#1d3b52')).setOrigin(0.5),
-        this.add.text(c.cx + off, 370, '▶', txt(40, '#1d3b52')).setOrigin(0.5),
+        this.add.text(c.cx - off, 370, '◀', txt(56, '#1d3b52')).setOrigin(0.5),
+        this.add.text(c.cx + off, 370, '▶', txt(56, '#1d3b52')).setOrigin(0.5),
       ]);
-      const status = this.add.text(c.cx, 600, '🙌 to choose', txt(26, '#1d3b52')).setOrigin(0.5);
+      const status = this.add.text(c.cx, 650, '🙌 to choose', txt(32, '#1d3b52')).setOrigin(0.5);
       const ring = this.add.graphics();
       return { pl, c, bg, label, idx, emoji, name, imgH, arrows, status, ring, prevLane: 0, hold: new Hold(800), done: false };
     });
@@ -57,7 +56,7 @@ export class PickScene extends Phaser.Scene {
       if (k > 0) {
         card.ring.lineStyle(10, card.pl.color, 1);
         card.ring.beginPath();
-        card.ring.arc(card.c.cx, 370, Math.min(120, card.c.w * 0.36), -Math.PI / 2, -Math.PI / 2 + k * Math.PI * 2);
+        card.ring.arc(card.c.cx, 370, Math.min(190, card.c.w * 0.42), -Math.PI / 2, -Math.PI / 2 + k * Math.PI * 2);
         card.ring.strokePath();
       }
       if (k >= 1) this.choose(card);

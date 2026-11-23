@@ -14,7 +14,7 @@ export class LobbyScene extends Phaser.Scene {
     this.add.text(W / 2, 48, 'Race to the Ark', txt(52, '#fff8e6', { stroke: '#1d3b52', strokeThickness: 8 })).setOrigin(0.5);
 
     // Camera preview frame (right side)
-    this.frame = { x: 560, y: 120, w: 680, h: 510 };
+    this.frame = { x: 560, y: 120, w: 680, h: H - 210 };
     const f = this.frame;
     this.add.rectangle(f.x + f.w / 2, f.y + f.h / 2, f.w, f.h, 0x0d1b26, 0.85).setStrokeStyle(4, 0xfff8e6, 0.6);
     this.g = this.add.graphics();
@@ -28,6 +28,8 @@ export class LobbyScene extends Phaser.Scene {
 
     // HTML panel (QR code, buttons)
     $('lobby').hidden = false;
+    $('lobby').style.top = (120 / H * 100) + '%';
+    $('lobby').style.height = ((H - 210) / H * 100) + '%';
     $('kbBtn').textContent = `Keyboard players: ${session.kbCount}`;
     $('kbBtn').onclick = () => {
       session.kbCount = (session.kbCount + 1) % 3;

@@ -27,6 +27,11 @@ Poses: 🦒 Giraffe (arms straight up) · 🐦 Bird wings (arms out sideways) ·
   - P2: A D lean · W jump · S duck · Z X C V B N poses · Space = hands up
 - **F9** toggles the stats overlay (camera fps, pose time, round trip, people seen).
 
+## Screen layout
+- The game fits the display's shape automatically, from 16:9 (1920×1080) to 16:10 (1920×1200). Refresh the page after resizing the window.
+- Split screen, up to 4 players: 1 player = full screen, 2 = side by side, 3–4 = 2×2 grid.
+  Each pane has its own camera, so every player gets a full-size view of their race and password.
+
 ## How it works
 
 ```
