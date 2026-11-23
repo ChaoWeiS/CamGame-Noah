@@ -118,7 +118,7 @@ export class PasswordScene extends Phaser.Scene {
       // the player's animal copies them so kids can see themselves (it hops for a door code)
       const zoom = c.rect.h / c.h, cam = pp.pl.kind === 'camera';
       const hop = Math.max(0, Math.sin(Math.min(1, (time - pp.cheerAt) / 600) * Math.PI * 2)) * 40;
-      const show = !cam || (pp.pl.body.pts && inp.present);
+      const show = this.state !== 'intro' && (!cam || (pp.pl.body.pts && inp.present));   // not over the intro text
       if (show) {
         this.stage.place(pp.pl.slot, pp.pl.animal || 'bear',
           c.rect.x + (pp.L.skelX - c.x) * zoom, c.rect.y + (pp.L.footY - hop) * zoom, pp.L.animH * zoom,
