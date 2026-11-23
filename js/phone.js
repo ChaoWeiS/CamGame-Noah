@@ -1,4 +1,5 @@
 import { createPoseDetector, BONES } from './pose.js';
+import { SPINE } from './bones.js';
 
 const $ = (id) => document.getElementById(id);
 const video = $('video'), overlay = $('overlay'), ctx = overlay.getContext('2d');
@@ -124,6 +125,20 @@ function draw(poses) {
       ctx.moveTo(p[a * 3] * vw, p[a * 3 + 1] * vh);
       ctx.lineTo(p[b * 3] * vw, p[b * 3 + 1] * vh);
       ctx.stroke();
+    }
+    // spine: hips → waist → chest → neck, with a joint at each (upper and lower body bend apart here)
+    const vis = (i) => p[i * 3 + 2] >= 0.4;
+    const midOf = ([i, j]) => [(p[i * 3] + p[j * 3]) / 2 * vw, (p[i * 3 + 1] + p[j * 3 + 1]) / 2 * vh];
+    const sp = SPINE.filter(([a, b2]) => [...a, ...b2].every(vis)).map(([a, b2, t]) => {
+      const m1 = midOf(a), m2 = midOf(b2); return [m1[0] + (m2[0] - m1[0]) * t, m1[1] + (m2[1] - m1[1]) * t];
+    });
+    if (sp.length > 1) { ctx.beginPath(); ctx.moveTo(...sp[0]); sp.slice(1).forEach((q) => ctx.lineTo(...q)); ctx.stroke(); }
+    ctx.fillStyle = '#ffffff';
+    sp.forEach((q) => { ctx.beginPath(); ctx.arc(q[0], q[1], 6, 0, Math.PI * 2); ctx.fill(); });
+    // joints: shoulders, elbows, wrists, hips, knees, ankles
+    for (const i of [11, 12, 13, 14, 15, 16, 23, 24, 25, 26, 27, 28]) {
+      if (!vis(i)) continue;
+      ctx.beginPath(); ctx.arc(p[i * 3] * vw, p[i * 3 + 1] * vh, 5, 0, Math.PI * 2); ctx.fill();
     }
     ctx.fillStyle = COLORS[k % COLORS.length];
     ctx.beginPath(); ctx.arc(p[0] * vw, p[1] * vh, 10, 0, Math.PI * 2); ctx.fill();
