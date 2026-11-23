@@ -4,19 +4,30 @@
 // camera in Phaser's screen pixels, so an actor is placed by where its feet go
 // and how tall it is, in the same coordinates the scenes already use.
 import * as THREE from 'three';
-import { loadRiggedCharacter } from './autorig.js';
+import { loadRiggedCharacter, EXAGGERATE_FOR } from './autorig.js';
 import { MODELS } from './race3d.js';
 
 // one character instance per (animal, slot), kept between scenes so they load once
 const cache = new Map();
 function getChar(id, slot) {
   const key = `${id}#${slot}`;
-  if (!cache.has(key)) cache.set(key, loadRiggedCharacter(MODELS[id]).catch((e) => { console.warn('3D character failed', id, e); return null; }));
+  if (!cache.has(key)) cache.set(key, loadRiggedCharacter(MODELS[id]).then((ch) => { ch.ex = EXAGGERATE_FOR[id]; return ch; }).catch((e) => { console.warn('3D character failed', id, e); return null; }));
   return cache.get(key);
 }
 // start loading the cast in the background (call from the lobby)
 export function preloadCast(ids, slots = 1) {
   for (let s = 0; s < slots; s++) ids.forEach((id) => MODELS[id] && getChar(id, s));
+}
+
+// F8: draw the bones over the animals (to check what the rig is doing)
+export const view = { bones: false };
+window.addEventListener('keydown', (e) => { if (e.key === 'F8') { view.bones = !view.bones; e.preventDefault(); } });
+
+function bonesHelper(ch) {
+  const h = new THREE.SkeletonHelper(ch.root);
+  h.material.depthTest = false; h.material.transparent = true; h.renderOrder = 10;
+  h.material.color = new THREE.Color(0xffffff); h.material.vertexColors = false;
+  return h;
 }
 
 export class Stage3D {
@@ -47,6 +58,7 @@ export class Stage3D {
     if (a.want !== id) {
       a.want = id;
       if (a.ch) { this.scene.remove(a.ch.root); a.ch = null; }
+      if (a.helper) { this.scene.remove(a.helper); a.helper = null; }
       if (MODELS[id]) {
         getChar(id, slot).then((ch) => {
           if (!this.alive || a.want !== id || !ch) return;
@@ -66,6 +78,9 @@ export class Stage3D {
     const ch = this.actor(slot, id);
     if (!ch) return false;
     ch.root.visible = true;
+    const a = this.actors.get(slot);
+    if (view.bones && !a.helper) { a.helper = bonesHelper(ch); this.scene.add(a.helper); }
+    if (a.helper) a.helper.visible = view.bones;
     ch.root.position.set(x, -footY, 0);
     ch.root.scale.setScalar(heightPx / ch.height);
     if (pts && world) ch.pose3D(world, pts, base);
@@ -73,8 +88,8 @@ export class Stage3D {
     return true;
   }
 
-  hide(slot) { const a = this.actors.get(slot); if (a?.ch) a.ch.root.visible = false; }
-  hideAll() { for (const a of this.actors.values()) if (a.ch) a.ch.root.visible = false; }
+  hide(slot) { const a = this.actors.get(slot); if (a?.ch) a.ch.root.visible = false; if (a?.helper) a.helper.visible = false; }
+  hideAll() { for (const a of this.actors.values()) { if (a.ch) a.ch.root.visible = false; if (a.helper) a.helper.visible = false; } }
 
   render() {
     const g = this.game, el = this.renderer.domElement;
@@ -91,7 +106,7 @@ export class Stage3D {
 
   destroy() {
     this.alive = false;
-    for (const a of this.actors.values()) if (a.ch) this.scene.remove(a.ch.root);
+    for (const a of this.actors.values()) { if (a.ch) this.scene.remove(a.ch.root); if (a.helper) this.scene.remove(a.helper); }
     this.actors.clear();
     this.renderer.domElement.remove();
     this.renderer.dispose();

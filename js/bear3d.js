@@ -3,7 +3,7 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { net, localCam, tracker, stats } from './core.js';
 import { Body } from './body.js';
 import { loadPuppet3D } from './puppet3d.js';
-import { loadRiggedCharacter } from './autorig.js';
+import { loadRiggedCharacter, EXAGGERATE_FOR } from './autorig.js';
 const params = new URLSearchParams(location.search);
 
 const $ = (id) => document.getElementById(id);
@@ -84,7 +84,15 @@ if (params.has('weights') && bear.mesh) {
   g.setAttribute('color', new THREE.BufferAttribute(c, 3));
   bear.mesh.material = new THREE.MeshLambertMaterial({ vertexColors: true });
 }
+bear.ex = EXAGGERATE_FOR[pick.id];
 scene.add(bear.root);
+// B: show the bones on top of the character
+if (bear.mesh) {
+  const bonesView = new THREE.SkeletonHelper(bear.root);
+  bonesView.material.depthTest = false; bonesView.renderOrder = 10; bonesView.visible = params.has('bones');
+  scene.add(bonesView);
+  addEventListener('keydown', (e) => { if (e.key === 'b' || e.key === 'F8') { bonesView.visible = !bonesView.visible; e.preventDefault(); } });
+}
 controls.target.set(0, bear.height * 0.55, 0);
 camera.position.set(0, bear.height * 0.65, bear.height * 3.2);
 

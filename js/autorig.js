@@ -15,6 +15,24 @@ const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const _v = (o) => new THREE.Vector3(o.x, o.y, o.z);
 const _q = new THREE.Quaternion(), _pq = new THREE.Quaternion(), _rq = new THREE.Quaternion();
 const _m = new THREE.Matrix4(), _d = new THREE.Vector3(), _q2 = new THREE.Quaternion();
+// Scale a rotation's angle by s (capped at max radians): makes small real movements
+// readable on round cartoon bodies.
+function amp(q, s, max = Math.PI) {
+  const w = Math.min(1, Math.abs(q.w)), half = Math.acos(w);
+  if (half < 1e-4) return q.clone();
+  const sign = q.w < 0 ? -1 : 1, k = Math.sin(half);
+  const axis = new THREE.Vector3(q.x * sign / k, q.y * sign / k, q.z * sign / k);
+  return new THREE.Quaternion().setFromAxisAngle(axis, Math.min(max, 2 * half * s));
+}
+export const EXAGGERATE = { torso: 1.6, head: 1.3, wrist: 1.3 };
+// rounder animals hide their movement, so they get more (set ch.ex = EXAGGERATE_FOR[id])
+export const EXAGGERATE_FOR = {
+  bear: { torso: 2.3, head: 1.5, wrist: 1.5 },     // Barnaby: big round belly
+  hamster: { torso: 2.1, head: 1.4, wrist: 1.5 },  // Hammy: round too
+  chicken: { torso: 1.8, head: 1.3, wrist: 1.3 },
+  dog: { torso: 1.6, head: 1.3, wrist: 1.3 },
+};
+
 // which way each bone points in the T-pose (the rig is built with no rotations)
 const REST = {
   upperL: new THREE.Vector3(-1, 0, 0), foreL: new THREE.Vector3(-1, 0, 0),
@@ -219,8 +237,9 @@ export class RiggedCharacter {
     const hipsA = ok(L.lHip) && ok(L.rHip) ? clamp(ang(L.lHip, L.rHip), 0.35) : 0;
     const chestA = ok(L.lShoulder) && ok(L.rShoulder) ? clamp(ang(L.lShoulder, L.rShoulder), 0.6) : this.tilt;
     set('hips', hipsA);
-    set('spine', this.tilt - hipsA);
-    set('chest', chestA - this.tilt);
+    const ex = this.ex || EXAGGERATE;
+    set('spine', (this.tilt - hipsA) * ex.torso);
+    set('chest', (chestA - this.tilt) * ex.torso);
     if (ok(L.lEar) && ok(L.rEar)) {
       const headA = clamp(wrap(ang(L.lEar, L.rEar) - chestA), 0.7);
       set('head', headA);
@@ -228,7 +247,7 @@ export class RiggedCharacter {
       const half = Math.abs(pts[L.rEar].x - pts[L.lEar].x) / 2;
       if (ok(L.nose) && half > 1e-3) {
         const off = (pts[L.nose].x - (pts[L.lEar].x + pts[L.rEar].x) / 2) / half;
-        this.a.headYaw = (this.a.headYaw ?? 0) + (clamp(off, 1) * 1.0 - (this.a.headYaw ?? 0)) * 0.5;
+        this.a.headYaw = (this.a.headYaw ?? 0) + (clamp(off, 1) * 1.0 * ex.head - (this.a.headYaw ?? 0)) * 0.5;
         this.b.head.rotation.y = this.a.headYaw;
       }
     }
@@ -264,6 +283,7 @@ export class RiggedCharacter {
   // the shoulders twist on the spine, and every limb points where the person's does.
   // pts (2D) are used for visibility and the jump height; base is optional.
   pose3D(world, pts, base = null, k = 0.5) {
+    const ex = this.ex || EXAGGERATE;
     const ok = (i) => pts[i].v > 0.4;
     const P = (i) => _v(world[i]);
     this.root.getWorldQuaternion(_rq);
@@ -292,19 +312,18 @@ export class RiggedCharacter {
       bone.parent.getWorldQuaternion(_pq);
       _d.applyQuaternion(_pq.invert());
       _q.setFromUnitVectors(REST[name], _d);
-      if (maxBend) {
-        const bend = 2 * Math.acos(Math.min(1, Math.abs(_q.w)));
-        if (bend > maxBend) _q.slerpQuaternions(_q2.identity(), _q, maxBend / bend);
-      }
+      if (maxBend) _q.copy(amp(_q, ex.wrist, maxBend));   // only wrists have a bend limit
       bone.quaternion.slerp(_q, k);
     };
     const hipL = P(L.lHip), hipR = P(L.rHip), shL = P(L.lShoulder), shR = P(L.rShoulder);
     const up = shL.clone().add(shR).sub(hipL).sub(hipR).multiplyScalar(0.5);
     // lower body follows the hips, upper body the shoulders; the waist takes half the twist
     const qHip = frame(hipL, hipR, up), qSh = frame(shL, shR, up);
+    // the twist/bend between hips and shoulders, exaggerated a little and shared by waist and chest
+    const rel = qHip.clone().invert().multiply(qSh);
     turn(this.b.hips, qHip);
-    turn(this.b.spine, qHip.clone().slerp(qSh, 0.5));
-    turn(this.b.chest, qSh);
+    turn(this.b.spine, qHip.clone().multiply(amp(rel, ex.torso * 0.5, 0.7)));
+    turn(this.b.chest, qHip.clone().multiply(amp(rel, ex.torso, 1.3)));
     // head: ears give left-right, the nose gives which way the face points
     if (ok(L.lEar) && ok(L.rEar) && ok(L.nose) && P(L.lEar).distanceTo(P(L.rEar)) > 0.03) {
       const eL = P(L.lEar), eR = P(L.rEar), earMid = eL.clone().add(eR).multiplyScalar(0.5);
@@ -316,10 +335,8 @@ export class RiggedCharacter {
       const tilt = new THREE.Quaternion().setFromAxisAngle(x, -0.3);
       const qHead = new THREE.Quaternion().setFromRotationMatrix(_m.makeBasis(x, yv, zf)).premultiply(tilt);
       // keep it to what a neck can do relative to the chest
-      const rel = qSh.clone().invert().multiply(qHead);
-      const ang = 2 * Math.acos(Math.min(1, Math.abs(rel.w)));
-      if (ang > 1.1) rel.slerpQuaternions(_q2.identity(), rel, 1.1 / ang);
-      turn(this.b.head, qSh.clone().multiply(rel));
+      const hRel = amp(qSh.clone().invert().multiply(qHead), ex.head, 1.1);
+      turn(this.b.head, qSh.clone().multiply(hRel));
     } else this.b.head.quaternion.slerp(_q.identity(), k * 0.3);
     aim('upperL', L.lShoulder, L.lElbow); aim('foreL', L.lElbow, L.lWrist);
     aim('upperR', L.rShoulder, L.rElbow); aim('foreR', L.rElbow, L.rWrist);
@@ -349,7 +366,7 @@ export class RiggedCharacter {
     for (const [h, e, w, i1, i2] of [['handL', L.lElbow, L.lWrist, L.lIndex, L.lPinky], ['handR', L.rElbow, L.rWrist, L.rIndex, L.rPinky]]) {
       if (!(ok(e) && ok(w) && ok(i1) && ok(i2))) continue;
       const fx = (pts[i1].x + pts[i2].x) / 2, fy = (pts[i1].y + pts[i2].y) / 2;
-      const t = Math.max(-1.4, Math.min(1.4, wrap(ang(w, fx, fy) - ang(e, pts[w].x, pts[w].y))));
+      const t = Math.max(-1.4, Math.min(1.4, wrap(ang(w, fx, fy) - ang(e, pts[w].x, pts[w].y)) * (this.ex || EXAGGERATE).wrist));
       const cur = this.a[h] ?? 0;
       this.a[h] = cur + wrap(t - cur) * 0.5;
       this.b[h].rotation.z = -this.a[h];
