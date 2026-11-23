@@ -97,3 +97,28 @@ export class Stage3D {
     this.renderer.dispose();
   }
 }
+
+// Text that sits above the 3D layer (Phaser text is drawn underneath it).
+// Positioned in game pixels like Phaser text, centred on (x, y); same setText/.text API.
+export class OverlayText {
+  constructor(phaserGame, x, y, size = 64, color = '#fff8e6') {
+    this.game = phaserGame; this.x = x; this.y = y; this.size = size; this.text = '';
+    const el = this.el = document.createElement('div');
+    Object.assign(el.style, {
+      position: 'absolute', transform: 'translate(-50%, -50%)', pointerEvents: 'none', zIndex: 20,
+      color, fontFamily: 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif', fontWeight: '700', textAlign: 'center',
+      whiteSpace: 'pre', lineHeight: '1.1', textShadow: '0 0 6px #000, 0 3px 0 #000, 0 -3px 0 #000, 3px 0 0 #000, -3px 0 0 #000',
+    });
+    phaserGame.canvas.parentElement.appendChild(el);
+    this.place();
+  }
+  place() {
+    const c = this.game.canvas, cr = c.getBoundingClientRect(), pr = c.parentElement.getBoundingClientRect();
+    const k = cr.height / this.game.scale.height;
+    Object.assign(this.el.style, {
+      left: `${cr.left - pr.left + this.x * k}px`, top: `${cr.top - pr.top + this.y * k}px`, fontSize: `${this.size * k}px`,
+    });
+  }
+  setText(t) { this.text = t; this.el.textContent = t; this.place(); return this; }
+  destroy() { this.el.remove(); }
+}

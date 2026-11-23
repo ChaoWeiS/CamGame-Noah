@@ -1,7 +1,7 @@
 import { tracker, stats, net, localCam, PLAYER_COLORS, MAX_PLAYERS } from '../core.js';
 import { W, H, txt, sky, drawSkeleton, Hold, session, loadCharacters, CHARACTERS } from './common.js';
 import { Puppet } from '../puppet.js';
-import { Stage3D, preloadCast } from '../stage3d.js';
+import { Stage3D, preloadCast, OverlayText } from '../stage3d.js';
 import { SkeletonSmoother } from '../body.js';
 
 const $ = (id) => document.getElementById(id);
@@ -26,7 +26,8 @@ export class LobbyScene extends Phaser.Scene {
     this.count = this.add.text(f.x + f.w / 2, f.y + f.h + 30, '', txt(24, '#fff8e6')).setOrigin(0.5);
     this.prompt = this.add.text(W / 2, H - 24, 'Everyone stand in a row facing the camera · raise both hands to start (or press Enter)',
       txt(20, '#fff8e6')).setOrigin(0.5);
-    this.big = this.add.text(f.x + f.w / 2, f.y + f.h / 2, '', txt(64, '#fff8e6', { stroke: '#000', strokeThickness: 8 })).setOrigin(0.5);
+    // countdown / messages: at the top of the camera frame, above the 3D animals
+    this.big = new OverlayText(this.game, f.x + f.w / 2, f.y + 58, 54);
 
     this.startHold = new Hold(1000);
     this.counting = false;
@@ -53,7 +54,7 @@ export class LobbyScene extends Phaser.Scene {
     // smooth each person's points so the animals don't jitter (one smoother per spot, left to right)
     this.smooth = Array.from({ length: MAX_PLAYERS }, () => ({ s2: new SkeletonSmoother(1.0, 2.0), s3: new SkeletonSmoother(0.8, 1.5) }));
     preloadCast(CHARACTERS.map((c) => c.id), 1);
-    this.events.once('shutdown', () => { $('lobby').hidden = true; this.stage.destroy(); });
+    this.events.once('shutdown', () => { $('lobby').hidden = true; this.stage.destroy(); this.big.destroy(); });
   }
 
   beginCountdown() {
@@ -65,11 +66,11 @@ export class LobbyScene extends Phaser.Scene {
     }
     this.counting = true;
     let n = 3;
-    this.big.setText('Stand still!\n3');
+    this.big.setText('Stand still! 3');
     this.time.addEvent({
       delay: 1000, repeat: 2, callback: () => {
         n--;
-        if (n > 0) { this.big.setText('Stand still!\n' + n); return; }
+        if (n > 0) { this.big.setText('Stand still! ' + n); return; }
         tracker.lock(session.kbCount);
         if (tracker.players.length === 0) {
           this.counting = false;

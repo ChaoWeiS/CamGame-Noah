@@ -22,7 +22,7 @@ $('qr').src = qr.createDataURL(6, 8);
 $('kbhelp').textContent = keyboardHelp;
 
 // ---- debug HUD (press D to toggle)
-const BUILD = '11-24 torso+wrists';   // shows which version the browser has loaded
+const BUILD = '11-24c countdown on top';   // shows which version the browser has loaded
 setInterval(() => {
   const live = performance.now() - stats.lastFrame < 1500;
   const players = tracker.players.map((p, i) => `P${i + 1}${input(p).present ? '' : ' (lost)'}`).join(' ');
