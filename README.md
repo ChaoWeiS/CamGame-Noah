@@ -13,7 +13,7 @@ animal-pose password at the ark door (30 s) → results with a rainbow 🌈
 2. On the phone, scan the QR code. The phone page opens. Tap **Start camera**.
 3. Prop the phone up sideways (landscape), about 3 m away, so everyone fits head to toe.
 4. Players stand in a row. Anyone raises **both hands** to start, then everyone stands still for 3 s (calibration).
-5. **Pick:** lean left/right to change character (Barnaby, Scout, Whiskers, Spike, Cluck, Squeak, Hammy, Pine), raise both hands to choose.
+5. **Pick:** lean left/right to change character (Barnaby, Scout, Cluck, Hammy — the 3D cast), raise both hands to choose.
 6. **Race:** run on the spot to go faster (standing still = 60% speed, running hard = 150%). Lean or step left/right into the free lane past rocks and trees, jump over logs and low branches, duck under high branches.
 7. **Password:** copy 5 animal poses in a row = 1 point. Most points in 30 s wins.
 
@@ -28,7 +28,7 @@ Poses: 🦒 Giraffe (arms straight up) · 🐦 Bird wings (arms out sideways) ·
 - **F9** toggles the stats overlay (camera fps, pose time, round trip, people seen).
 
 ## 3D bear test
-`bear3d.html` loads a Tripo character (Barnaby `bear_tripo.glb`, Hammy `hamster.glb`, Cluck `chicken.glb`; switch with the buttons or `?char=hamster`) in Three.js and makes him copy you
+`bear3d.html` loads a Tripo character (Barnaby `bear_tripo.glb`, Hammy `hamster.glb`, Cluck `chicken.glb`, Scout `dog.glb`; switch with the buttons or `?char=hamster`) in Three.js and makes him copy you
 (arms with elbows, legs with knees, leaning, jumps) using the same phone QR code or the computer's webcam.
 Drag to look around, H hides the panel. `?weights` colours the auto-rig, `?model=simple` loads the older shape-built bear.
 

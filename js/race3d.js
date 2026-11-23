@@ -12,6 +12,7 @@ export const MODELS = {
   bear: 'assets/models/bear_tripo.glb',
   hamster: 'assets/models/hamster.glb',
   chicken: 'assets/models/chicken.glb',
+  dog: 'assets/models/dog.glb',
 };
 const cache = {};                      // file -> Promise<RiggedCharacter>, loaded once
 const DH = 720;                        // design height of a pane (matches RaceScene)

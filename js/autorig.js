@@ -54,7 +54,8 @@ export async function loadRiggedCharacter(url) {
   for (let i = 0; i < n; i++) {
     const x = Math.abs(pos[i * 3]), y = pos[i * 3 + 1], b = bin(y);
     if (x > ext[b]) ext[b] = x;
-    if (x < X * 0.06) near[b]++;
+    // between-the-legs check, front half only so a tail hanging behind doesn't hide the gap
+    if (x < X * 0.06 && pos[i * 3 + 2] > 0) near[b]++;
   }
   let top = 0;
   for (let b = 0; b < S; b++) if (ext[b] > ext[top]) top = b;

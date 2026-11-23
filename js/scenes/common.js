@@ -44,18 +44,22 @@ export function setupPanes(scene, n, designH = 720) {
   if (rects.length >= 3) g.lineBetween(UI_X, H / 2, UI_X + W, H / 2);
   return { panes, ui };
 }
+// The playable cast: the four characters that have 3D models.
 export const CHARACTERS = [
   { id: 'bear', name: 'Barnaby' },
   { id: 'dog', name: 'Scout' },
+  { id: 'chicken', name: 'Cluck' },
+  { id: 'hamster', name: 'Hammy' },
+];
+// Characters with 2D art only (not offered in the pick screen for now).
+export const EXTRA_CHARACTERS = [
   { id: 'cat', name: 'Whiskers' },
   { id: 'lizard', name: 'Spike' },
-  { id: 'chicken', name: 'Cluck' },
   { id: 'mouse', name: 'Squeak' },
-  { id: 'hamster', name: 'Hammy' },
   { id: 'pine', name: 'Pine' },
 ];
 export const VIEWS = ['front', 'back', 'tpose'];
-export const charById = (id) => CHARACTERS.find((c) => c.id === id) || CHARACTERS[0];
+export const charById = (id) => [...CHARACTERS, ...EXTRA_CHARACTERS].find((c) => c.id === id) || CHARACTERS[0];
 
 // Load every character view (call from a scene's preload).
 export function loadCharacters(scene) {

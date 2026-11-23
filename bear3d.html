@@ -103,6 +103,7 @@ const CHARS = [
   { id: 'bear', name: 'Barnaby', emoji: '🐻', file: 'assets/models/bear_tripo.glb' },
   { id: 'hamster', name: 'Hammy', emoji: '🐹', file: 'assets/models/hamster.glb' },
   { id: 'chicken', name: 'Cluck', emoji: '🐔', file: 'assets/models/chicken.glb' },
+  { id: 'dog', name: 'Scout', emoji: '🐶', file: 'assets/models/dog.glb' },
 ];
 const pick = CHARS.find((c) => c.id === params.get('char')) || CHARS[0];
 $('title').textContent = `${pick.emoji} ${pick.name} — 3D test`;

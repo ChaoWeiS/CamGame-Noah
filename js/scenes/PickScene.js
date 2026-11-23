@@ -15,7 +15,7 @@ export class PickScene extends Phaser.Scene {
       const bg = this.add.rectangle(c.cx, 360, c.w - 24, 696, pl.color, 0.22).setStrokeStyle(6, pl.color, 1);
       const label = this.add.text(c.cx, 52, `Player ${i + 1}${pl.kind === 'keyboard' ? ' ⌨️' : ''}`, txt(38, '#1d3b52')).setOrigin(0.5);
       this.add.text(c.cx, 100, 'Lean ◀ ▶ to change · 🙌 to choose', txt(26, '#1d3b52')).setOrigin(0.5);
-      const idx = (pl.slot * 2) % CHARACTERS.length;
+      const idx = pl.slot % CHARACTERS.length;   // everyone starts on a different character
       const imgH = Math.min(320, c.w * 0.75);
       const emoji = charImage(this, c.cx, 370 + imgH / 2, CHARACTERS[idx].id, 'front', imgH);
       const name = this.add.text(c.cx, 580, CHARACTERS[idx].name, txt(40, '#1d3b52')).setOrigin(0.5);

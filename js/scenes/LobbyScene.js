@@ -20,7 +20,7 @@ export class LobbyScene extends Phaser.Scene {
     this.add.rectangle(f.x + f.w / 2, f.y + f.h / 2, f.w, f.h, 0x0d1b26, 0.85).setStrokeStyle(4, 0xfff8e6, 0.6);
     this.g = this.add.graphics();
     // live puppets: everyone in view becomes a character that copies them
-    this.puppets = Array.from({ length: MAX_PLAYERS }, (_, i) => new Puppet(this, CHARACTERS[(i * 2) % CHARACTERS.length].id, 2).setVisible(false));
+    this.puppets = Array.from({ length: MAX_PLAYERS }, (_, i) => new Puppet(this, CHARACTERS[i % CHARACTERS.length].id, 2).setVisible(false));
     this.count = this.add.text(f.x + f.w / 2, f.y + f.h + 30, '', txt(24, '#fff8e6')).setOrigin(0.5);
     this.prompt = this.add.text(W / 2, H - 24, 'Everyone stand in a row facing the camera · raise both hands to start (or press Enter)',
       txt(20, '#fff8e6')).setOrigin(0.5);
