@@ -28,9 +28,14 @@ Poses: 🦒 Giraffe (arms straight up) · 🐦 Bird wings (arms out sideways) ·
 - **F9** toggles the stats overlay (camera fps, pose time, round trip, people seen).
 
 ## 3D bear test
-`bear3d.html` loads `assets/models/bear.glb` in Three.js and makes Barnaby copy you (arms, legs, lean, jumps)
-using the same phone QR code or the computer's webcam. Drag to look around, H hides the panel.
-Models need their limbs as separately named parts (`Left arm`, `Left paw`, `Left leg`, `Left foot`, …) — see `js/puppet3d.js`.
+`bear3d.html` loads Barnaby (`assets/models/bear_tripo.glb`, a Tripo model) in Three.js and makes him copy you
+(arms with elbows, legs with knees, leaning, jumps) using the same phone QR code or the computer's webcam.
+Drag to look around, H hides the panel. `?weights` colours the auto-rig, `?model=simple` loads the older shape-built bear.
+
+- `js/autorig.js` rigs a single-mesh T-pose model automatically: it measures the mesh to find shoulders, elbows,
+  hips and knees, builds a skeleton and paints smooth skin weights. Works for unrigged Tripo/Meshy exports.
+- Model prep (keeps the page light): the 60 MB Tripo export was reduced with glTF-Transform
+  (`weld` → `simplify` → `resize` textures to 1024 → `quantize`) to ~3.8 MB, ~118k triangles.
 
 ## Screen layout
 - The game fits the display's shape automatically, from 16:9 (1920×1080) to 16:10 (1920×1200). Refresh the page after resizing the window.

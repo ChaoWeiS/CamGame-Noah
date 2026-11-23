@@ -42,6 +42,8 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { net, localCam, tracker, stats } from './js/core.js';
 import { Body } from './js/body.js';
 import { loadPuppet3D } from './js/puppet3d.js';
+import { loadRiggedCharacter } from './js/autorig.js';
+const params = new URLSearchParams(location.search);
 
 const $ = (id) => document.getElementById(id);
 
@@ -92,7 +94,20 @@ addEventListener('resize', () => {
 });
 
 // ---- the bear
-const bear = await loadPuppet3D('assets/models/bear.glb');
+// Default: the Tripo bear, auto-rigged so it bends at shoulders, elbows, hips and knees.
+// ?model=simple uses the older shape-built bear.
+$('status').textContent = 'Loading Barnaby…';
+const bear = params.get('model') === 'simple'
+  ? await loadPuppet3D('assets/models/bear.glb')
+  : await loadRiggedCharacter('assets/models/bear_tripo.glb');
+if (params.has('weights') && bear.mesh) {
+  // debug: colour each vertex by the bone that moves it most
+  const cols = [0x888888, 0xffffff, 0xff4444, 0xffaa00, 0x4488ff, 0x00ddff, 0xff44ff, 0xffff44, 0x44ff44, 0x22aa22];
+  const g = bear.mesh.geometry, si = g.attributes.skinIndex, c = new Float32Array(si.count * 3), col = new THREE.Color();
+  for (let i = 0; i < si.count; i++) { col.set(cols[si.getX(i)]); c[i * 3] = col.r; c[i * 3 + 1] = col.g; c[i * 3 + 2] = col.b; }
+  g.setAttribute('color', new THREE.BufferAttribute(c, 3));
+  bear.mesh.material = new THREE.MeshLambertMaterial({ vertexColors: true });
+}
 scene.add(bear.root);
 controls.target.set(0, bear.height * 0.55, 0);
 camera.position.set(0, bear.height * 0.65, bear.height * 3.2);
