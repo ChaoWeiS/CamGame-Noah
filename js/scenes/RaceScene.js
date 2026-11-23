@@ -20,13 +20,14 @@ function makeCourse(seed) {
   let d = 40;
   while (d < COURSE - 25) {
     const x = r();
-    const type = x < 0.5 ? 'rock' : x < 0.75 ? 'log' : 'branch';
+    const type = x < 0.45 ? 'rock' : x < 0.6 ? 'log' : x < 0.8 ? 'lowBranch' : 'branch';
     if (type === 'rock') {
       // Boulders block 1 or 2 of the 3 lanes; at least one lane is always free.
       const free = Math.floor(r() * 3) - 1;
       const others = [-1, 0, 1].filter((l) => l !== free);
       const blocked = r() < 0.5 ? others : [others[Math.floor(r() * 2)]];
-      obs.push({ d, type, blocked, free });
+      const kind = r() < 0.5 ? 'tree' : 'boulder'; // what blocks the lanes
+      obs.push({ d, type, blocked, free, kind, tree: r() < 0.5 ? 'prop_oak' : 'prop_twisty' });
     } else {
       obs.push({ d, type });
     }
@@ -49,6 +50,7 @@ export class RaceScene extends Phaser.Scene {
 
     this.bg = this.add.graphics().setDepth(0);
     this.g = this.add.graphics().setDepth(3);
+    this.shadowG = this.add.graphics().setDepth(1.9); // ground shadows under branches
     this.top = this.add.graphics().setDepth(6); // sky band, clouds, rain, progress bars
     this.pool = new Map();
     // Scenery: trees along the track edges, same for every column
@@ -76,7 +78,7 @@ export class RaceScene extends Phaser.Scene {
     });
 
     this.banner = this.add.text(UI_X + W / 2, H / 2 - 40, '', txt(90, '#fff8e6', { stroke: '#1d3b52', strokeThickness: 12 })).setOrigin(0.5).setDepth(10);
-    this.help = this.add.text(UI_X + W / 2, H / 2 + 60, 'The flood is coming — run to the ark!\nLean to dodge rocks · jump over logs · duck under branches',
+    this.help = this.add.text(UI_X + W / 2, H / 2 + 60, 'The flood is coming — run to the ark!\nLean around rocks and trees · jump over logs and low branches · duck under high ones',
       txt(26, '#fff8e6', { stroke: '#1d3b52', strokeThickness: 6 })).setOrigin(0.5).setDepth(10);
 
     this.state = 'countdown';
@@ -101,6 +103,7 @@ export class RaceScene extends Phaser.Scene {
     this.rainT += dt;
     this.drawBackground();
     const g = this.g; g.clear();
+    this.shadowG.clear();
     for (const list of this.pool.values()) { list.used = 0; list.forEach((im) => im.setVisible(false)); }
 
     for (const r of this.runners) {
@@ -161,7 +164,7 @@ export class RaceScene extends Phaser.Scene {
         if (y < TOP_Y) continue;
         const label = this.drawObstacle(g, r.c, o, y);
         if (label && li < r.labels.length) {
-          r.labels[li++].setText(label).setPosition(r.c.cx, label === 'DUCK!' ? y - Math.pow(depthScale(y), 1.4) * Math.min(330, r.c.tw * 0.55) * 0.6 - 14 : y - depthScale(y) * 50 - 12).setVisible(true);
+          r.labels[li++].setText(label.text).setPosition(r.c.cx, label.y).setVisible(true);
         }
       }
       // The ark appears near the end
@@ -202,7 +205,7 @@ export class RaceScene extends Phaser.Scene {
   resolve(r, o, inp, now) {
     let ok;
     if (o.type === 'rock') ok = !o.blocked.includes(inp.lane);
-    else if (o.type === 'log') ok = now - r.lastJump < WINDOW_MS || inp.jumping;
+    else if (o.type === 'log' || o.type === 'lowBranch') ok = now - r.lastJump < WINDOW_MS || inp.jumping;
     else ok = now - r.lastDuck < WINDOW_MS || inp.ducking;
     if (ok) {
       r.msg.setText(['Nice!', 'Great!', 'Woohoo!', 'Yes!'][Math.floor(Math.random() * 4)]);
@@ -233,6 +236,15 @@ export class RaceScene extends Phaser.Scene {
       const grow = 0.8 + 0.2 * depthScale(y);
       const b = [...o.blocked].sort((p, q) => p - q);
       const adjacent = b.length === 2 && b[1] - b[0] === 1;
+      if (o.kind === 'tree') {
+        // a big tree standing in each blocked lane
+        for (const l of b) {
+          const im = this.sprite(o.tree, 2 + y / 10000).setOrigin(0.5, 0.97).setPosition(c.cx + l * laneW, y);
+          im.setScale((laneW * 1.4 * grow) / im.width);
+          im.setFlipX(l > 0);
+        }
+        return null;
+      }
       const groups = adjacent ? [[b[0], b[1]]] : b.map((l) => [l]);
       for (const gr of groups) {
         const mid = (gr[0] + gr[gr.length - 1]) / 2;
@@ -245,17 +257,34 @@ export class RaceScene extends Phaser.Scene {
     if (o.type === 'log') {
       const im = this.sprite('prop_log', 2 + y / 10000).setOrigin(0.5, 0.5).setPosition(c.cx, y);
       const k = depthScale(y);
-      im.setDisplaySize(half * 2 * (0.75 + 0.25 * k), k * Math.min(85, half * 0.5));
-      return 'JUMP!';
+      const lh = k * Math.min(85, half * 0.5);
+      im.setDisplaySize(half * 2 * (0.75 + 0.25 * k), lh);
+      return { text: 'JUMP!', y: y - lh / 2 - 22 };
     }
-    // branch (duck): a long stick held up between two small trees
-    const postH = Math.pow(depthScale(y), 1.4) * Math.min(330, c.tw * 0.55);
+    // Branches stretch across the whole track between two trunks.
+    // High branch = duck under it, low branch = jump over it. Its shadow on the
+    // ground shows where it is; the gap between branch and shadow shows how high.
+    const k = Math.pow(depthScale(y), 1.4);
+    const postH = k * Math.min(330, c.tw * 0.55);
+    const high = o.type === 'branch';
+    const lift = postH * (high ? 0.5 : 0.13);
+    const sg = this.shadowG;
+    const sw = half * 2, sh = Math.max(10, postH * 0.08);
+    if (high) {
+      // soft, faint shadow: the branch is far above the ground
+      sg.fillStyle(0x1d3b1a, 0.12).fillEllipse(c.cx, y, sw * 1.04, sh * 2.2);
+      sg.fillStyle(0x1d3b1a, 0.22).fillEllipse(c.cx, y, sw * 0.96, sh * 1.2);
+    } else {
+      // dark, sharp shadow right under it: the branch is close to the ground
+      sg.fillStyle(0x1d3b1a, 0.45).fillEllipse(c.cx, y, sw, sh);
+    }
     this.fitHeight(this.sprite('prop_birch', 2 + y / 10000).setOrigin(0.5, 1).setPosition(c.cx - half, y + 16), postH);
     this.fitHeight(this.sprite('prop_birch', 2 + y / 10000).setOrigin(0.5, 1).setPosition(c.cx + half, y + 16), postH).setFlipX(true);
-    const bar = this.sprite('prop_stick', 2.5 + y / 10000).setOrigin(0.5, 0.5).setPosition(c.cx, y - postH * 0.45);
-    bar.setDisplaySize(Math.max(22, postH * 0.13), half * 2.1);
+    const thick = Math.max(22, postH * 0.13);
+    const bar = this.sprite('prop_stick', 2.5 + y / 10000).setOrigin(0.5, 0.5).setPosition(c.cx, y - lift);
+    bar.setDisplaySize(thick, half * 2.1);
     bar.setRotation(Math.PI / 2);
-    return 'DUCK!';
+    return high ? { text: 'DUCK!', y: y - lift - thick - 14 } : { text: 'JUMP!', y: y - lift - thick - 14 };
   }
 
   drawArk(g, c, y) {
