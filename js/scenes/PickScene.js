@@ -1,5 +1,6 @@
 import { tracker, input } from '../core.js';
 import { W, H, txt, setupPanes, CHARACTERS, charImage, Hold, session } from './common.js';
+import { Puppet } from '../puppet.js';
 
 export class PickScene extends Phaser.Scene {
   constructor() { super('Pick'); }
@@ -25,7 +26,10 @@ export class PickScene extends Phaser.Scene {
       ]);
       const status = this.add.text(c.cx, 650, '🙌 to choose', txt(32, '#1d3b52')).setOrigin(0.5);
       const ring = this.add.graphics();
-      return { pl, c, bg, label, idx, emoji, name, imgH, arrows, status, ring, prevLane: 0, hold: new Hold(800), done: false };
+      // camera players see their character copying them; keyboard players get the picture
+      const puppet = pl.kind === 'camera' ? new Puppet(this, CHARACTERS[idx].id, 2) : null;
+      if (puppet) emoji.setVisible(false);
+      return { pl, c, bg, label, idx, emoji, name, imgH, puppet, arrows, status, ring, prevLane: 0, hold: new Hold(800), done: false };
     });
     this.deadline = this.time.now + 30000;
     this.leaving = false;
@@ -35,6 +39,9 @@ export class PickScene extends Phaser.Scene {
     for (const card of this.cards) {
       const inp = input(card.pl);
       card.ring.clear();
+      if (card.puppet && card.pl.body.pts) {
+        card.puppet.pose(card.pl.body.pts, (p) => p, { cx: card.c.cx, top: 370 - card.imgH / 2, height: card.imgH });
+      }
       if (!inp.present) { card.status.setText('Step back into view!'); continue; }
       if (card.done) continue;
 
@@ -46,6 +53,7 @@ export class PickScene extends Phaser.Scene {
         card.emoji.setScale(card.imgH / card.emoji.height);
         card.emoji.baseScale = card.emoji.scaleX;
         card.name.setText(ch.name);
+        if (card.puppet) card.puppet.setCharacter(ch.id);
         this.tweens.add({ targets: card.emoji, scale: { from: card.emoji.baseScale * 1.15, to: card.emoji.baseScale }, duration: 200 });
         if (card.pl.kind === 'keyboard') card.pl.kb.lane = 0;
       }
@@ -72,11 +80,12 @@ export class PickScene extends Phaser.Scene {
   choose(card) {
     card.done = true;
     card.pl.animal = CHARACTERS[card.idx].id;
-    card.emoji.setTexture(`${card.pl.animal}_tpose`);
-    card.emoji.setScale(card.imgH / card.emoji.height);
     card.arrows.setVisible(false);
     card.status.setText('Ready! ✅');
     card.ring.clear();
+    if (card.puppet) return; // the puppet keeps copying the player
+    card.emoji.setTexture(`${card.pl.animal}_tpose`);
+    card.emoji.setScale(card.imgH / card.emoji.height);
     this.tweens.add({ targets: card.emoji, y: card.emoji.y - 30, yoyo: true, duration: 180, repeat: 1 });
   }
 }

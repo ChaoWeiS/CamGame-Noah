@@ -1,5 +1,6 @@
 import { keyPoints } from '../body.js';
 import { BONES } from '../bones.js';
+import { loadPuppets } from '../puppet.js';
 
 // Screen size follows the display's shape: 16:9 (1920x1080) up to 16:10 (1920x1200).
 export const ASPECT = Math.min(16 / 9, Math.max(16 / 10, window.innerWidth / window.innerHeight));
@@ -62,6 +63,7 @@ export function loadCharacters(scene) {
     const key = `${c.id}_${v}`;
     if (!scene.textures.exists(key)) scene.load.image(key, `assets/characters/${key}.png`);
   }
+  loadPuppets(scene, CHARACTERS.map((c) => c.id));
   for (const p of PROPS) {
     if (!scene.textures.exists('prop_' + p)) scene.load.image('prop_' + p, `assets/props/${p}.png`);
   }

@@ -1,5 +1,6 @@
 import { tracker, stats, net, localCam, PLAYER_COLORS, MAX_PLAYERS } from '../core.js';
-import { W, H, txt, sky, drawSkeleton, Hold, session, loadCharacters } from './common.js';
+import { W, H, txt, sky, drawSkeleton, Hold, session, loadCharacters, CHARACTERS } from './common.js';
+import { Puppet } from '../puppet.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -18,6 +19,8 @@ export class LobbyScene extends Phaser.Scene {
     const f = this.frame;
     this.add.rectangle(f.x + f.w / 2, f.y + f.h / 2, f.w, f.h, 0x0d1b26, 0.85).setStrokeStyle(4, 0xfff8e6, 0.6);
     this.g = this.add.graphics();
+    // live puppets: everyone in view becomes a character that copies them
+    this.puppets = Array.from({ length: MAX_PLAYERS }, (_, i) => new Puppet(this, CHARACTERS[(i * 2) % CHARACTERS.length].id, 2).setVisible(false));
     this.count = this.add.text(f.x + f.w / 2, f.y + f.h + 30, '', txt(24, '#fff8e6')).setOrigin(0.5);
     this.prompt = this.add.text(W / 2, H - 24, 'Everyone stand in a row facing the camera · raise both hands to start (or press Enter)',
       txt(20, '#fff8e6')).setOrigin(0.5);
@@ -84,8 +87,10 @@ export class LobbyScene extends Phaser.Scene {
 
     const sk = [...tracker.skeletons].sort((a, b) => a.key.sh.x - b.key.sh.x);
     let anyHandsUp = false;
+    this.puppets.forEach((pp, i) => pp.setVisible(i < sk.length));
     sk.slice(0, MAX_PLAYERS).forEach((person, i) => {
-      drawSkeleton(g, person.pts, map, PLAYER_COLORS[i], 6);
+      drawSkeleton(g, person.pts, map, PLAYER_COLORS[i], 3);
+      this.puppets[i].pose(person.pts, map);
       const p = person.pts;
       if (p[15].v > 0.4 && p[16].v > 0.4 && p[15].y < p[0].y && p[16].y < p[0].y) anyHandsUp = true;
     });

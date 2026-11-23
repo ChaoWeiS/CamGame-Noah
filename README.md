@@ -51,6 +51,8 @@ index.html  ◀── points ── tracker (who is who) → body.js (lane/jump/
 | `js/body.js` | Turns points into game input: lanes, jump, duck, the 6 poses |
 | `js/core.js` | Phone connection, webcam fallback, player tracking, keyboard players |
 | `js/scenes/*` | Lobby, Pick, Race, Password, Results |
+| `js/puppet.js` | 2D cut-out puppets: characters copy the player's arms, legs and lean |
+| `assets/puppets/*` | Puppet parts (body, arms, legs) + `rig.json` pivots, made by `tools/make_puppets.py` from the T-pose sprites |
 | `assets/props/*` | Trees, rocks, log and branch cut from the forest prop sheet (obstacles + scenery) |
 | `assets/characters/*` | Character sprites cut from the model sheets: `front`, `back` (used in the race) and `tpose` (celebrations) |
 
