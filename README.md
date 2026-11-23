@@ -64,6 +64,8 @@ index.html  ◀── points ── tracker (who is who) → body.js (lane/jump/
 | `js/scenes/*` | Lobby, Pick, Race, Password, Results |
 | `js/puppet.js` | 2D cut-out puppets: characters copy the player's arms, legs and lean |
 | `assets/puppets/*` | Puppet parts (body, arms, legs) + `rig.json` pivots, made by `tools/make_puppets.py` from the T-pose sprites |
+| `js/race3d.js` | The race's 3D layer (Three.js over Phaser): 3D runners, trees, rocks, logs and branches through a camera that matches the 2.5D ground |
+| `assets/models/props.glb` | 3D props split out of the Tripo forest set (oak, pine, bare tree, fallen log, stump, bushes, grass, flowers, boulders, rocks, log) + rock pile |
 | `assets/props/*` | Trees, rocks, log and branch cut from the forest prop sheet (obstacles + scenery) |
 | `assets/characters/*` | Character sprites cut from the model sheets: `front`, `back` (used in the race) and `tpose` (celebrations) |
 

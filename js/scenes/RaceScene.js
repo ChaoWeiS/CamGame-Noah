@@ -64,6 +64,7 @@ export class RaceScene extends Phaser.Scene {
 
     this.bg = this.add.graphics().setDepth(0);         // meadow, track, grass
     this.shadowG = this.add.graphics().setDepth(1);    // shadows lying on the ground
+    this.nullG = this.add.graphics().setVisible(false); // sink for 2D shadows when 3D props are shown
     this.top = this.add.graphics().setDepth(30);       // sky band, clouds, rain, progress bars
     this.pool = new Map();
     // Scenery: trees along the track edges, same for every column
@@ -97,7 +98,9 @@ export class RaceScene extends Phaser.Scene {
 
     // 3D characters drawn over the 2.5D world (for characters that have a model)
     try {
-      this.r3d = new Race3D(this.game);
+      this.r3d = new Race3D(this.game, { DH, TOP_Y, HORIZON_Y, GROUND_Y, CAM_Z, VIEW, TREE_SCALE });
+      this.r3d.setRunners(this.runners);
+      this.r3d.setWorld(this.course, session.seed, COURSE);
       this.runners.forEach((r) => this.r3d.addRunner(r).catch((e) => console.warn('3D runner', e)));
       this.events.once('shutdown', () => { this.r3d?.destroy(); this.r3d = null; });
     } catch (e) { console.warn('3D layer unavailable', e); this.r3d = null; }
@@ -123,7 +126,8 @@ export class RaceScene extends Phaser.Scene {
     const now = performance.now();
     this.rainT += dt;
     this.drawBackground();
-    this.shadowG.clear();
+    this.shadowG.clear(); this.nullG.clear();
+    this.hide2D = !!(this.r3d && this.r3d.propsReady);   // 3D trees/rocks/logs replace the 2D ones
     for (const list of this.pool.values()) { list.used = 0; list.forEach((im) => im.setVisible(false)); }
 
     for (const r of this.runners) {
@@ -155,7 +159,7 @@ export class RaceScene extends Phaser.Scene {
       }
 
       // Scenery: trees and boulders beside the track, in 3D perspective
-      for (const dcr of this.decor) {
+      for (const dcr of this.hide2D ? [] : this.decor) {
         const ahead = dcr.d - r.dist;
         if (ahead < -CAM_Z * 0.7 || ahead > VIEW) continue;
         const sc = scaleAt(ahead), y = groundY(sc);
@@ -244,7 +248,7 @@ export class RaceScene extends Phaser.Scene {
     let im = list[list.used];
     if (!im) { im = this.add.image(0, 0, key); list.push(im); }
     list.used++;
-    return im.setVisible(true).setDepth(depth).setRotation(0).setFlipX(false);
+    return im.setVisible(!this.hide2D).setDepth(depth).setRotation(0).setFlipX(false);
   }
   fitHeight(im, h) { im.setScale(h / im.height); return im; }
 
@@ -287,7 +291,7 @@ export class RaceScene extends Phaser.Scene {
     const high = o.type === 'branch';
     const lift = c.runH * (high ? 0.75 : 0.2) * sc;   // head height vs knee height of the animals
     const sw = c.tw * sc, sh = Math.max(4, c.runH * 0.14 * sc);
-    const sg = this.shadowG;
+    const sg = this.hide2D ? this.nullG : this.shadowG;
     if (high) {
       sg.fillStyle(0x1d3b1a, 0.12 * alpha).fillEllipse(c.cx, y, sw * 1.04, sh * 2.2);
       sg.fillStyle(0x1d3b1a, 0.22 * alpha).fillEllipse(c.cx, y, sw * 0.96, sh * 1.2);
@@ -348,16 +352,7 @@ export class RaceScene extends Phaser.Scene {
         const a1 = Math.max(near, m - dist), a2 = Math.min(VIEW + 20, m + 3 - dist);
         if (a2 > a1) g.fillPoints(quad(a1, a2, -hw, hw), true);
       }
-      // lane guides: dashes on the two lane boundaries
-      g.fillStyle(0xffffff, 0.22);
-      for (let m = Math.floor((dist + near) / 2) * 2; m < dist + VIEW; m += 2) {
-        const a1 = Math.max(near, m - dist), a2 = m + 0.8 - dist;
-        if (a2 <= a1) continue;
-        for (const lx of [-c.tw / 6, c.tw / 6]) g.fillPoints(quad(a1, a2, lx - 3, lx + 3), true);
-      }
-      // track edges
-      g.lineStyle(3, 0x3f7a2e, 0.8);
-      for (const lx of [-hw, hw]) { const A = P(near, lx), B = P(VIEW + 20, lx); g.lineBetween(A.x, A.y, B.x, B.y); }
+      // no lane markings or edge lines: the path should look like grass, not a road
 
       // grass tufts and little flowers, fixed to the ground
       for (let m = Math.floor(dist + near); m <= dist + VIEW; m++) {

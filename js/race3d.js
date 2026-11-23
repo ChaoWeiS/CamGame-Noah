@@ -1,7 +1,13 @@
-// 3D runners on top of the 2.5D race: a transparent Three.js layer over the
-// Phaser canvas draws each player's 3D character (seen from behind) exactly
-// where the 2D sprite would be, with a running animation, jumps and ducks.
+// The race's 3D layer: a transparent Three.js canvas over the Phaser canvas.
+// Phaser still draws the ground, sky and text; this layer draws the 3D world on
+// top of it — the runners, trees, rocks, logs and branches — through a camera
+// that matches the 2.5D ground exactly (same horizon, same perspective), so
+// everything sits on the grass where the 2D version would have put it.
+//
+// World units: metres along the track, "animal heights" across and up
+// (the runner is 1 unit tall and stands at z = 0; things ahead are at z < 0).
 import * as THREE from 'three';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { loadRiggedCharacter } from './autorig.js';
 import { L } from './body.js';
 
@@ -14,12 +20,54 @@ export const MODELS = {
   chicken: 'assets/models/chicken.glb',
   dog: 'assets/models/dog.glb',
 };
-const cache = {};                      // file -> Promise<RiggedCharacter>, loaded once
-const DH = 720;                        // design height of a pane (matches RaceScene)
+const PROPS_FILE = 'assets/models/props.glb';
+const charCache = {};
+let propsPromise = null;
+
+// Small deterministic random generator (same scenery in every pane)
+function rng(seed) {
+  let s = seed >>> 0;
+  return () => {
+    s = (s + 0x6d2b79f5) >>> 0;
+    let t = s;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
+// Load the prop collection once: each named node becomes a reusable template.
+async function loadProps() {
+  const gltf = await new GLTFLoader().loadAsync(PROPS_FILE);
+  gltf.scene.updateMatrixWorld(true);
+  const T = {};
+  gltf.scene.traverse((o) => {
+    if (!o.isMesh) return;
+    const geo = o.geometry.clone();
+    geo.applyMatrix4(o.matrixWorld);              // bake quantization / node transform
+    if (!geo.attributes.normal) geo.computeVertexNormals();
+    geo.computeBoundingBox();
+    const bb = geo.boundingBox, size = bb.getSize(new THREE.Vector3());
+    geo.translate(-(bb.min.x + bb.max.x) / 2, -bb.min.y, -(bb.min.z + bb.max.z) / 2);
+    T[o.name] = { geo, mat: o.material, size };
+  });
+  return T;
+}
+
+// soft round shadow texture for blob shadows under props
+function blobTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 64;
+  const g = c.getContext('2d'), grd = g.createRadialGradient(32, 32, 2, 32, 32, 31);
+  grd.addColorStop(0, 'rgba(20,45,20,0.55)'); grd.addColorStop(1, 'rgba(20,45,20,0)');
+  g.fillStyle = grd; g.fillRect(0, 0, 64, 64);
+  return new THREE.CanvasTexture(c);
+}
 
 export class Race3D {
-  constructor(phaserGame) {
+  // cfg: { DH, TOP_Y, HORIZON_Y, GROUND_Y, CAM_Z, VIEW, TREE_SCALE }
+  constructor(phaserGame, cfg) {
     this.game = phaserGame;
+    this.cfg = cfg;
     this.canvasEl = phaserGame.canvas;
     this.renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
     this.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
@@ -29,33 +77,137 @@ export class Race3D {
     Object.assign(el.style, { position: 'absolute', pointerEvents: 'none', left: '0', top: '0' });
     this.canvasEl.parentElement.appendChild(el);
     this.scene = new THREE.Scene();
-    this.scene.add(new THREE.HemisphereLight(0xe6f4ff, 0x4f8a3c, 1.6));
-    const sun = new THREE.DirectionalLight(0xffffff, 2.0);
-    sun.position.set(0.3, 1, 1.2);     // from above, behind the camera
+    this.scene.fog = new THREE.Fog(0x9fb7a0, cfg.CAM_Z + cfg.VIEW * 0.55, cfg.CAM_Z + cfg.VIEW + 5);
+    this.scene.add(new THREE.HemisphereLight(0xe6f4ff, 0x4f8a3c, 1.7));
+    const sun = new THREE.DirectionalLight(0xfff4e0, 2.2);
+    sun.position.set(-3, 8, 6);
     this.scene.add(sun);
-    this.runners = [];                 // { char, slot }
-    this.cams = [];
+    this.runners = [];               // panes that have a 3D character
+    this.panes = [];                 // every runner's pane (set by setRunners)
+    this.pools = new Map();          // template name -> { list, used }
+    this.blobMat = new THREE.MeshBasicMaterial({ map: blobTexture(), transparent: true, depthWrite: false });
+    this.blobGeo = new THREE.PlaneGeometry(1, 1).rotateX(-Math.PI / 2);
+    this.propsReady = false;
+    propsPromise = propsPromise || loadProps();
+    propsPromise.then((T) => { this.T = T; this.propsReady = true; }).catch((e) => console.warn('3D props', e));
   }
 
-  // panes: RaceScene columns ({x, w, cam, rect}); runners: RaceScene runner objects
+  // all the race's runners (one pane each)
+  setRunners(runners) { this.panes = runners.map((r) => ({ r, ch: null })); }
+
+  // obstacles come from RaceScene; scenery beside the track is generated here
+  setWorld(course, seed, courseLength) {
+    this.course = course;
+    const r = rng(seed ^ 0x3d3d);
+    const pick = (arr) => arr[Math.floor(r() * arr.length)];
+    this.scenery = [];
+    for (let d = -8; d < courseLength + this.cfg.VIEW; d += 2.2 + r() * 2.5) {
+      for (const side of [-1, 1]) {
+        if (r() < 0.25) continue;
+        // rows: low plants at the edge, then bushes and rocks, then a forest of trees
+        const band = r();
+        if (band < 0.3) this.scenery.push({ d: d + r(), side, key: pick(['grass', 'flowers', 'flowerbush', 'pebbles']), h: 0.35 + r() * 0.25, off: 0.15 + r() * 0.5, rot: r() * 6.28 });
+        else if (band < 0.55) this.scenery.push({ d: d + r(), side, key: pick(['bush', 'bush2', 'boulder', 'rock2', 'stump', 'fallen']), h: 0.8 + r() * 0.9, off: 0.6 + r() * 1.6, rot: r() * 6.28 });
+        else this.scenery.push({ d: d + r(), side, key: pick(['oak', 'oak', 'pine', 'pine', 'bare']), h: this.cfg.TREE_SCALE * (0.8 + r() * 0.45), off: 1.2 + r() * 5, rot: r() * 6.28 });
+      }
+    }
+    // each obstacle gets its own turn and size, so no two look the same
+    course.forEach((o) => { o.v = o.v || { rot: r() * 6.28, rot2: r() * 6.28, k: 0.9 + r() * 0.2 }; });
+  }
+
   async addRunner(r) {
     const file = MODELS[r.pl.animal];
     if (!file) return;
-    cache[file] = cache[file] || loadRiggedCharacter(file);
-    const proto = await cache[file];
-    // each runner needs its own copy (same model can be picked twice)
+    charCache[file] = charCache[file] || loadRiggedCharacter(file);
+    const proto = await charCache[file];
     const ch = proto.root.parent ? await loadRiggedCharacter(file) : proto;
     ch.root.rotation.y = Math.PI;      // seen from behind
     this.scene.add(ch.root);
-    const entry = { r, ch, phase: Math.random() * 6 };
-    this.runners.push(entry);
-    r.sprite.setVisible(false);        // the 3D character replaces the 2D one
+    const pane = this.panes.find((p) => p.r === r);
+    if (pane) { pane.ch = ch; pane.phase = Math.random() * 6; }
+    this.runners.push(pane);
+    r.sprite.setVisible(false);
   }
 
-  // called every frame after Phaser has drawn
-  render(dt, jumpK, duck) {
-    const g = this.game, canvas = this.canvasEl, el = this.renderer.domElement;
-    // keep the overlay exactly on top of the Phaser canvas
+  // ---- object pools (reused every frame and in every pane)
+  use(name) {
+    let p = this.pools.get(name);
+    if (!p) { p = { list: [], used: 0 }; this.pools.set(name, p); }
+    let m = p.list[p.used];
+    if (!m) {
+      if (name === '_blob') { m = new THREE.Mesh(this.blobGeo, this.blobMat); m.renderOrder = -1; }
+      else { const t = this.T[name]; m = new THREE.Mesh(t.geo, t.mat); }
+      this.scene.add(m); p.list.push(m);
+    }
+    p.used++;
+    m.visible = true;
+    m.rotation.set(0, 0, 0);
+    m.scale.set(1, 1, 1);
+    return m;
+  }
+  resetPools() { for (const p of this.pools.values()) { p.used = 0; p.list.forEach((m) => { m.visible = false; }); } }
+
+  // a prop standing on the ground at (x, z), h units tall, turned by rot
+  prop(name, x, z, h, rot = 0) {
+    const t = this.T[name], m = this.use(name), k = h / t.size.y;
+    m.scale.setScalar(k);
+    m.position.set(x, 0, z);
+    m.rotation.y = rot;
+    const b = this.use('_blob'), w = Math.max(t.size.x, t.size.z) * k * 1.1;
+    b.scale.set(w, 1, w * 0.8);
+    b.position.set(x, 0.01, z);
+    return m;
+  }
+
+  // ---- build the world as one runner sees it
+  placeWorld(pane) {
+    const { r } = pane, c = r.c, cfg = this.cfg;
+    const runW = c.tw / c.runH;                 // track width in animal heights
+    const lane = runW / 3;
+    for (const s of this.scenery) {
+      const a = s.d - r.dist;
+      if (a < -cfg.CAM_Z * 0.8 || a > cfg.VIEW) continue;
+      const t = this.T[s.key];
+      const halfW = (Math.max(t.size.x, t.size.z) * s.h / t.size.y) / 2;
+      this.prop(s.key, s.side * (runW / 2 + s.off + halfW * 0.6), -a, s.h, s.rot);
+    }
+    for (let i = r.nextObs; i < this.course.length; i++) {
+      const o = this.course[i];
+      const a = o.d - r.dist;
+      if (a > cfg.VIEW) break;
+      const z = -a, v = o.v;
+      if (o.type === 'rock') {
+        const b = [...o.blocked].sort((p, q) => p - q);
+        if (o.kind === 'tree') {
+          b.forEach((l, j) => this.prop(j % 2 ? 'pine' : 'oak', l * lane, z, cfg.TREE_SCALE * v.k, v.rot + j));
+        } else if (b.length === 2 && b[1] - b[0] === 1) {
+          this.prop('rockpile', (b[0] + b[1]) / 2 * lane, z, 1.7 * v.k, v.rot);
+        } else {
+          b.forEach((l, j) => this.prop(j % 2 ? 'rock2' : 'boulder', l * lane, z, 1.4 * v.k, v.rot + j * 2));
+        }
+      } else if (o.type === 'log') {
+        // a log lying across the whole track, about half an animal high
+        const t = this.T.log, m = this.use('log');
+        m.scale.set((runW * 0.95) / t.size.x, 0.45 / t.size.y, 0.45 / t.size.z);
+        m.position.set(0, 0, z);
+        const bl = this.use('_blob'); bl.scale.set(runW, 1, 0.7); bl.position.set(0, 0.01, z);
+      } else {
+        // a branch across the track between two bare trees: high = duck, low = jump
+        const high = o.type === 'branch';
+        this.prop('bare', -runW / 2 - 0.2, z, cfg.TREE_SCALE * v.k, v.rot);
+        this.prop('bare', runW / 2 + 0.2, z, cfg.TREE_SCALE * v.k, v.rot2);
+        const t = this.T.log, m = this.use('log'), th = 0.14;
+        m.scale.set((runW + 0.6) / t.size.x, th / t.size.y, th / t.size.z);
+        m.position.set(0, high ? 0.75 : 0.18, z);
+        // its shadow on the ground: wide and soft when high, tight when low
+        const bl = this.use('_blob'); bl.scale.set(runW, 1, high ? 0.6 : 0.3); bl.position.set(0, 0.01, z);
+      }
+    }
+  }
+
+  // ---- draw every pane (call once per frame)
+  render(dt) {
+    const g = this.game, canvas = this.canvasEl, el = this.renderer.domElement, cfg = this.cfg;
     const cr = canvas.getBoundingClientRect(), pr = canvas.parentElement.getBoundingClientRect();
     const w = cr.width, h = cr.height;
     if (el._w !== w || el._h !== h) { this.renderer.setSize(w, h, false); el._w = w; el._h = h; }
@@ -63,29 +215,40 @@ export class Race3D {
     const sx = w / g.scale.width, sy = h / g.scale.height;
     this.renderer.setScissorTest(true);
     this.renderer.clear();
-    for (const e of this.runners) {
-      const { r, ch } = e, c = r.c, rect = c.rect;
-      // an orthographic camera matching the pane's design coordinates (y down → negate)
-      if (!e.cam) {
-        e.cam = new THREE.OrthographicCamera(c.x, c.x + c.w, 0, -DH, -5000, 5000);
-        e.cam.position.z = 1000;
-      }
-      // place the character where the 2D sprite would stand
-      const st = r.anim || {};
-      const k = ch.height ? r.c.runH / ch.height : 1;
-      ch.root.scale.setScalar(k);
-      ch.root.position.set(st.x ?? c.cx, -(st.y ?? 640), 0);
-      // a slight top-down tilt so it reads as seen from a camera above and behind
-      ch.root.rotation.x = 0.18;
-      this.animate(e, dt, st);
-      const vx = rect.x * sx, vy = h - (rect.y + rect.h) * sy, vw = rect.w * sx, vh = rect.h * sy;
-      this.renderer.setViewport(vx, vy, vw, vh);
-      this.renderer.setScissor(vx, vy, vw, vh);
-      // hide everyone else's character while drawing this pane
-      this.runners.forEach((o) => { o.ch.root.visible = o === e; });
-      this.renderer.render(this.scene, e.cam);
+    for (const pane of this.panes) {
+      const { r } = pane, c = r.c, rect = c.rect;
+      // A camera that reproduces the 2.5D projection exactly: focal length f in pixels,
+      // standing CAM_Z behind the runner at the height that puts the horizon at HORIZON_Y.
+      const f = c.runH * cfg.CAM_Z;
+      if (!pane.cam) pane.cam = new THREE.PerspectiveCamera();
+      const n = 0.1, far = cfg.CAM_Z + cfg.VIEW + 10;
+      pane.cam.position.set(0, (cfg.GROUND_Y - cfg.HORIZON_Y) / c.runH, cfg.CAM_Z);
+      pane.cam.projectionMatrix.makePerspective(
+        n * (c.x - c.cx) / f, n * (c.x + c.w - c.cx) / f,
+        n * cfg.HORIZON_Y / f, n * (cfg.HORIZON_Y - cfg.DH) / f, n, far);
+      pane.cam.projectionMatrixInverse.copy(pane.cam.projectionMatrix).invert();
+      pane.cam.updateMatrixWorld();
+
+      this.resetPools();
+      if (this.propsReady && this.course) this.placeWorld(pane);
+      for (const o of this.runners) o.ch.root.visible = o === pane;   // only this pane's character
+      if (pane.ch) this.placeRunner(pane, dt);
+
+      // draw below the sky band only
+      const top = rect.y + rect.h * (cfg.TOP_Y / cfg.DH);
+      const vx = rect.x * sx, vw = rect.w * sx, vy = h - (rect.y + rect.h) * sy;
+      this.renderer.setViewport(vx, vy, vw, rect.h * sy);
+      this.renderer.setScissor(vx, vy, vw, (rect.y + rect.h - top) * sy);
+      this.renderer.render(this.scene, pane.cam);
     }
     this.renderer.setScissorTest(false);
+  }
+
+  placeRunner(pane, dt) {
+    const st = pane.r.anim || {}, c = pane.r.c;
+    pane.ch.root.position.set(((st.x ?? c.cx) - c.cx) / c.runH, 0, 0);
+    pane.ch.root.scale.setScalar(1 / pane.ch.height);
+    this.animate(pane, dt, st);
   }
 
   // running cycle driven by the runner's speed, plus jump / duck / stumble
@@ -95,39 +258,33 @@ export class Race3D {
     e.phase += dt * (2 + speed * 0.9);
     const run = Math.min(1, speed / 10);
     const sw = Math.sin(e.phase) * 0.9 * run;
-    // legs swing forward/back (about X), knees bend on the back swing
     b.thighL.rotation.set(sw, 0, 0); b.thighR.rotation.set(-sw, 0, 0);
     b.shinL.rotation.set(-Math.max(0, -sw) * 1.2, 0, 0); b.shinR.rotation.set(-Math.max(0, sw) * 1.2, 0, 0);
     if (st.pts) {
       this.copyArms(e, st.pts);
     } else {
-      // arms down by the sides, swinging opposite to the legs
       b.upperL.rotation.set(-sw * 0.8, 0, 1.25); b.upperR.rotation.set(sw * 0.8, 0, -1.25);
       b.foreL.rotation.set(-0.6 * run, 0, 0.1); b.foreR.rotation.set(-0.6 * run, 0, -0.1);
     }
-    // body: bob, jump, duck, stumble wobble
     const bob = Math.abs(Math.cos(e.phase)) * 0.03 * ch.height * run;
     b.hips.position.y = ch.hipY0 + bob + (st.jump || 0) * 0.35 * ch.height - (st.duck ? 0.12 * ch.height : 0);
     b.spine.rotation.set(st.duck ? 0.6 : 0.08 * run, 0, st.wobble || 0);
-    ch.root.scale.y *= st.duck ? 0.8 : 1;
+    if (st.duck) ch.root.scale.y *= 0.8;
   }
 
   // The character's arms copy the player's arms (legs keep running).
-  // We see the character from behind, so the player's arm on the left of the
-  // mirror view drives the character's arm on the left of the screen (its own
-  // left, which is the model's +X side), and rotations flip sign.
+  // Seen from behind, the player's arm on the left of the mirror view drives the
+  // character's arm on the left of the screen (the model's +X side); rotations flip.
   copyArms(e, pts) {
     const b = e.ch.b, ok = (i) => pts[i].v > 0.4;
     const ang = (a, c) => Math.atan2(pts[c].y - pts[a].y, pts[c].x - pts[a].x);
     e.arm = e.arm || { u1: 1.2, f1: 0, u2: 1.2, f2: 0 };
     const ease = (k, t) => { e.arm[k] += wrap(t - e.arm[k]) * 0.5; return e.arm[k]; };
-    // screen-left arm: player's landmarks 11→13→15, rest pointing left (π) → bone upperR
     if (ok(L.lShoulder) && ok(L.lElbow)) {
       const u = ang(L.lShoulder, L.lElbow);
       b.upperR.rotation.set(0, 0, ease('u1', wrap(u - Math.PI)));
       if (ok(L.lWrist)) b.foreR.rotation.set(0, 0, ease('f1', wrap(ang(L.lElbow, L.lWrist) - u)));
     }
-    // screen-right arm: landmarks 12→14→16, rest pointing right (0) → bone upperL
     if (ok(L.rShoulder) && ok(L.rElbow)) {
       const u = ang(L.rShoulder, L.rElbow);
       b.upperL.rotation.set(0, 0, ease('u2', wrap(u)));
@@ -138,6 +295,8 @@ export class Race3D {
   destroy() {
     this.runners.forEach((e) => this.scene.remove(e.ch.root));
     this.runners = [];
+    for (const p of this.pools.values()) p.list.forEach((m) => this.scene.remove(m));
+    this.pools.clear();
     this.renderer.domElement.remove();
     this.renderer.dispose();
   }
