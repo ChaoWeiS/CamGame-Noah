@@ -1,6 +1,7 @@
 import { tracker, input } from '../core.js';
 import { POSES } from '../body.js';
-import { W, H, txt, rng, Hold, session, drawSkeleton, personMap, charById, charImage, setupPanes, UI_X } from './common.js';
+import { W, H, txt, rng, Hold, session, charById, setupPanes, UI_X } from './common.js';
+import { Stage3D } from '../stage3d.js';
 
 const ROUND_MS = 30000;
 const HOLD_MS = 450;
@@ -31,6 +32,9 @@ export class PasswordScene extends Phaser.Scene {
     this.seqs = makeSequences(session.seed, 40);
     const players = tracker.players;
     this.cols = setupPanes(this, players.length, 720).panes;
+    // each player's 3D animal copies them while they make the poses
+    this.stage = new Stage3D(this.game);
+    this.events.once('shutdown', () => this.stage.destroy());
     const bg = this.add.graphics();
     this.g = this.add.graphics().setDepth(2);
 
@@ -38,9 +42,10 @@ export class PasswordScene extends Phaser.Scene {
       const c = this.cols[i];
       const wide = c.w >= 900;
       // wide panes: pose on the left, the player's stick figure on the right
+      // wide panes: the pose to copy on the left, the player's animal on the right
       const L = wide
-        ? { poseX: c.cx - c.w * 0.22, skelX: c.cx + c.w * 0.22, skelY: 470, torso: 110, wrap: c.w * 0.4 }
-        : { poseX: c.cx, skelX: c.cx, skelY: 575, torso: 70, wrap: c.w - 40 };
+        ? { poseX: c.cx - c.w * 0.22, skelX: c.cx + c.w * 0.22, skelY: 470, footY: 640, animH: 380, wrap: c.w * 0.4, scoreX: c.cx }
+        : { poseX: c.cx, skelX: c.cx, skelY: 575, footY: 668, animH: 150, wrap: c.w - 40, scoreX: c.x + 90 };
       bg.fillGradientStyle(0x5b3a1e, 0x5b3a1e, 0x8a5a2b, 0x8a5a2b, 1).fillRect(c.x, 0, c.w, 720);
       bg.fillStyle(0x000000, 0.18).fillRoundedRect(c.x + 12, 12, c.w - 24, 696, 18);
       bg.lineStyle(6, pl.color, 1).strokeRoundedRect(c.x + 12, 12, c.w - 24, 696, 18);
@@ -54,11 +59,11 @@ export class PasswordScene extends Phaser.Scene {
       return {
         pl, c, L, cardSize, cards, k: 0, step: 0, points: 0, hold: new Hold(HOLD_MS),
         head: this.add.text(c.cx, 52, `P${i + 1} · ${charById(pl.animal).name}`, txt(32, pl.css)).setOrigin(0.5),
-        cheer: charImage(this, L.poseX, 470, pl.animal || 'bear', 'tpose', Math.min(260, c.w * 0.45)).setAlpha(0).setDepth(4),
+        cheerAt: -1e9,
         big: this.add.text(L.poseX, 300, '', txt(Math.min(150, c.w * 0.26))).setOrigin(0.5).setDepth(3),
         name: this.add.text(L.poseX, 410, '', txt(40, '#fff8e6')).setOrigin(0.5).setDepth(3),
         hint: this.add.text(L.poseX, 450, '', txt(26, '#f4e3c3', { wordWrap: { width: L.wrap } })).setOrigin(0.5, 0).setDepth(3),
-        score: this.add.text(c.cx, 680, '', txt(40, '#fff8e6')).setOrigin(0.5).setDepth(3),
+        score: this.add.text(L.scoreX, 680, '', txt(40, '#fff8e6')).setOrigin(0.5).setDepth(3),
         flash: this.add.text(c.cx, 215, '', txt(44, '#fff8e6', { stroke: '#2e7d4f', strokeThickness: 8 })).setOrigin(0.5).setDepth(5),
         lost: this.add.text(L.skelX, L.skelY, '', txt(28, '#ffffff', { stroke: '#9b3b2f', strokeThickness: 6, wordWrap: { width: L.wrap } })).setOrigin(0.5).setDepth(3),
       };
@@ -110,10 +115,17 @@ export class PasswordScene extends Phaser.Scene {
       const inp = input(pp.pl);
       pp.lost.setText(inp.present ? '' : 'Come back into view!');
 
-      // live stick figure so kids can see themselves
-      if (pp.pl.kind === 'camera' && pp.pl.body.pts && inp.present) {
-        drawSkeleton(g, pp.pl.body.pts, personMap(pp.pl.body.pts, pp.L.skelX, pp.L.skelY, pp.L.torso), pp.pl.color, 8);
-      } else if (pp.pl.kind === 'keyboard') {
+      // the player's animal copies them so kids can see themselves (it hops for a door code)
+      const zoom = c.rect.h / c.h, cam = pp.pl.kind === 'camera';
+      const hop = Math.max(0, Math.sin(Math.min(1, (time - pp.cheerAt) / 600) * Math.PI * 2)) * 40;
+      const show = !cam || (pp.pl.body.pts && inp.present);
+      if (show) {
+        this.stage.place(pp.pl.slot, pp.pl.animal || 'bear',
+          c.rect.x + (pp.L.skelX - c.x) * zoom, c.rect.y + (pp.L.footY - hop) * zoom, pp.L.animH * zoom,
+          cam ? pp.pl.body.vpts : null, cam ? pp.pl.body.base : null, time / 1000, cam ? pp.pl.body.world : null);
+      } else this.stage.hide(pp.pl.slot);
+      if (!cam) {
+        pp.lost.setY(pp.L.footY - pp.L.animH - 30);
         pp.lost.setText(inp.pose ? `⌨️ ${poseById[inp.pose].emoji}` : '⌨️');
       }
 
@@ -133,14 +145,13 @@ export class PasswordScene extends Phaser.Scene {
           pp.points++; pp.k++; pp.step = 0;
           pp.flash.setText('Door code! +1').setAlpha(1);
           this.tweens.add({ targets: pp.flash, alpha: 0, delay: 700, duration: 400 });
-          pp.cheer.setAlpha(1).setY(470);
-          this.tweens.add({ targets: pp.cheer, y: 440, yoyo: true, duration: 200, repeat: 1 });
-          this.tweens.add({ targets: pp.cheer, alpha: 0, delay: 900, duration: 300 });
+          pp.cheerAt = time;
         }
         this.showCurrent(pp);
         this.tweens.add({ targets: pp.big, scale: { from: 1.3, to: 1 }, duration: 180 });
       }
     }
+    this.stage.render();
   }
 
   finish() {

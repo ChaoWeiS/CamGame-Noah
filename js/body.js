@@ -5,7 +5,8 @@
 // unit is the same physical size horizontally and vertically (1 = frame height).
 
 export const L = {
-  nose: 0, lShoulder: 11, rShoulder: 12, lElbow: 13, rElbow: 14, lWrist: 15, rWrist: 16,
+  nose: 0, lEar: 7, rEar: 8, lShoulder: 11, rShoulder: 12, lElbow: 13, rElbow: 14, lWrist: 15, rWrist: 16,
+  lPinky: 17, rPinky: 18, lIndex: 19, rIndex: 20, lThumb: 21, rThumb: 22,
   lHip: 23, rHip: 24, lKnee: 25, rKnee: 26, lAnkle: 27, rAnkle: 28,
 };
 
@@ -35,6 +36,47 @@ export function toWorld(flat) {
   return w;
 }
 
+// One Euro filter: smooths hard when a point is still (kills jitter) and
+// lets it through quickly when it moves fast (no lag on big moves).
+class OneEuro {
+  constructor(minCutoff = 1.0, beta = 2.0, dCutoff = 1.0) {
+    this.minCutoff = minCutoff; this.beta = beta; this.dCutoff = dCutoff;
+    this.x = null; this.dx = 0;
+  }
+  static alpha(cutoff, dt) { const tau = 1 / (2 * Math.PI * cutoff); return 1 / (1 + tau / dt); }
+  filter(x, dt) {
+    if (this.x === null) { this.x = x; return x; }
+    const dx = (x - this.x) / dt;
+    this.dx += (dx - this.dx) * OneEuro.alpha(this.dCutoff, dt);
+    const cutoff = this.minCutoff + this.beta * Math.abs(this.dx);
+    this.x += (x - this.x) * OneEuro.alpha(cutoff, dt);
+    return this.x;
+  }
+}
+
+// A whole skeleton of One Euro filters (x, y and z if present; visibility eased)
+export class SkeletonSmoother {
+  constructor(minCutoff = 1.0, beta = 2.0) {
+    this.minCutoff = minCutoff; this.beta = beta; this.f = null; this.out = null; this.t = 0;
+  }
+  update(pts, t = performance.now()) {
+    if (!pts) { this.out = null; this.f = null; return null; }
+    const dt = this.t ? Math.min(0.2, Math.max(0.005, (t - this.t) / 1000)) : 1 / 30;
+    this.t = t;
+    if (!this.f) {
+      this.f = pts.map(() => ({ x: new OneEuro(this.minCutoff, this.beta), y: new OneEuro(this.minCutoff, this.beta), z: new OneEuro(this.minCutoff * 0.6, this.beta * 0.7) }));
+      this.out = pts.map((p) => ({ ...p }));
+    }
+    for (let i = 0; i < pts.length; i++) {
+      const p = pts[i], o = this.out[i], f = this.f[i];
+      o.x = f.x.filter(p.x, dt); o.y = f.y.filter(p.y, dt);
+      if (p.z !== undefined) o.z = f.z.filter(p.z, dt);
+      if (p.v !== undefined) o.v = o.v === undefined ? p.v : o.v + (p.v - o.v) * 0.3;
+    }
+    return this.out;
+  }
+}
+
 const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, v: Math.min(a.v, b.v) });
 const dist = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 
@@ -47,7 +89,11 @@ export function keyPoints(pts) {
 
 export class Body {
   constructor() {
-    this.pts = null;        // smoothed points
+    this.pts = null;        // lightly smoothed points (game detection: fast)
+    this.vpts = null;       // well smoothed points for showing the body (animals)
+    this.world = null;      // well smoothed 3D skeleton (if the phone sends it)
+    this.sm2D = new SkeletonSmoother(1.0, 2.0);
+    this.sm3D = new SkeletonSmoother(0.8, 1.5);
     this.base = null;       // calibrated standing posture
     this.lane = 0;
     this.jumping = false;
@@ -62,14 +108,9 @@ export class Body {
 
   // Feed one new frame of points for this person.
   update(pts, world = null) {
-    if (!world) this.world = null;
-    else if (!this.world) this.world = world.map((p) => ({ ...p }));
-    else {
-      for (let i = 0; i < 33; i++) {
-        const s = this.world[i], p = world[i];
-        s.x += (p.x - s.x) * 0.6; s.y += (p.y - s.y) * 0.6; s.z += (p.z - s.z) * 0.6;
-      }
-    }
+    const t = performance.now();
+    this.world = this.sm3D.update(world, t);
+    this.vpts = this.sm2D.update(pts, t);
     if (!this.pts) {
       this.pts = pts.map((p) => ({ ...p }));
     } else {

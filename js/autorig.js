@@ -14,11 +14,12 @@ const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 // scratch objects for the 3D solver
 const _v = (o) => new THREE.Vector3(o.x, o.y, o.z);
 const _q = new THREE.Quaternion(), _pq = new THREE.Quaternion(), _rq = new THREE.Quaternion();
-const _m = new THREE.Matrix4(), _d = new THREE.Vector3();
+const _m = new THREE.Matrix4(), _d = new THREE.Vector3(), _q2 = new THREE.Quaternion();
 // which way each bone points in the T-pose (the rig is built with no rotations)
 const REST = {
   upperL: new THREE.Vector3(-1, 0, 0), foreL: new THREE.Vector3(-1, 0, 0),
   upperR: new THREE.Vector3(1, 0, 0), foreR: new THREE.Vector3(1, 0, 0),
+  handL: new THREE.Vector3(-1, 0, 0), handR: new THREE.Vector3(1, 0, 0),
   thighL: new THREE.Vector3(0, -1, 0), shinL: new THREE.Vector3(0, -1, 0),
   thighR: new THREE.Vector3(0, -1, 0), shinR: new THREE.Vector3(0, -1, 0),
 };
@@ -112,9 +113,12 @@ export async function loadRiggedCharacter(url) {
   const armTipY = tipC ? tipY / tipC : armY;
   const armRootY = shC ? shY / shC : armY;
   const elbowX = sx + (X - sx) * 0.5;
+  const wristX = sx + (X - sx) * 0.8;   // the last part of the arm is the hand (paw / wing tip)
   const hipY = crotchY + H * 0.06;
   const kneeY = crotchY * 0.5;
   const waistY = hipY + (armRootY - hipY) * 0.35;
+  const chestY = hipY + (armRootY - hipY) * 0.7;
+  const neckY = armRootY + (H - armRootY) * 0.12;   // where the head starts turning on its own
 
   // 3. Skeleton: hips → spine → arms ; hips → legs
   const bone = (name, x, y, parent) => {
@@ -126,16 +130,20 @@ export async function loadRiggedCharacter(url) {
     return b;
   };
   const hips = bone('hips', 0, hipY, null);
+  // body: hips (pelvis + legs) → spine (waist) → chest (shoulders + arms) → head
   const spine = bone('spine', 0, waistY, hips);
-  const B = { hips, spine };
+  const chest = bone('chest', 0, chestY, spine);
+  const head = bone('head', 0, neckY, chest);
+  const B = { hips, spine, chest, head };
   for (const [s, side] of [['L', -1], ['R', 1]]) {
     const elbowY = armRootY + (armTipY - armRootY) * 0.5;
-    B['upper' + s] = bone('upper' + s, side * sx, armRootY, spine);
+    B['upper' + s] = bone('upper' + s, side * sx, armRootY, chest);
     B['fore' + s] = bone('fore' + s, side * elbowX, elbowY, B['upper' + s]);
+    B['hand' + s] = bone('hand' + s, side * wristX, armRootY + (armTipY - armRootY) * 0.8, B['fore' + s]);
     B['thigh' + s] = bone('thigh' + s, side * legX, hipY, hips);
     B['shin' + s] = bone('shin' + s, side * legX, kneeY, B['thigh' + s]);
   }
-  const order = ['hips', 'spine', 'upperL', 'foreL', 'thighL', 'shinL', 'upperR', 'foreR', 'thighR', 'shinR'];
+  const order = ['hips', 'spine', 'upperL', 'foreL', 'thighL', 'shinL', 'upperR', 'foreR', 'thighR', 'shinR', 'handL', 'handR', 'chest', 'head'];
   const idx = Object.fromEntries(order.map((k, i) => [k, i]));
 
   // 4. Skin weights: arms, legs, then the rest split between spine and hips
@@ -149,14 +157,19 @@ export async function loadRiggedCharacter(url) {
     const nearArm = 1 - smooth(H * 0.12, H * 0.2, Math.abs(y - armLineY));
     const a = smooth(sx - bA, sx + bA, ax) * nearArm * (y > crotchY + H * 0.1 ? 1 : 0);
     const e = smooth(elbowX - H * 0.05, elbowX + H * 0.05, ax);
-    ws['upper' + s] = a * (1 - e); ws['fore' + s] = a * e;
+    const wr = smooth(wristX - H * 0.03, wristX + H * 0.03, ax);
+    ws['upper' + s] = a * (1 - e); ws['fore' + s] = a * e * (1 - wr); ws['hand' + s] = a * e * wr;
     // leg: below the crotch on that side
     const l = (1 - a) * smooth(crotchY + H * 0.07, crotchY - H * 0.01, y) * smooth(0, legX * 0.6, ax);
     const k = smooth(kneeY + H * 0.05, kneeY - H * 0.05, y);
     ws['thigh' + s] = l * (1 - k); ws['shin' + s] = l * k;
     const r = Math.max(0, 1 - a - l);
+    // the rest of the body: hips → spine → chest → head, blended softly between them
     const up = smooth(waistY - H * 0.08, waistY + H * 0.08, y);
-    ws.spine = r * up; ws.hips = r * (1 - up);
+    const ch = smooth(chestY - H * 0.06, chestY + H * 0.06, y);
+    const hd = smooth(neckY - H * 0.04, neckY + H * 0.04, y) * (1 - smooth(sx * 0.9, sx * 1.3, ax));
+    ws.hips = r * (1 - up); ws.spine = r * up * (1 - ch);
+    ws.chest = r * up * ch * (1 - hd); ws.head = r * up * ch * hd;
     const top4 = Object.entries(ws).filter(([, w]) => w > 1e-4).sort((p, q) => q[1] - p[1]).slice(0, 4);
     const sum = top4.reduce((t, [, w]) => t + w, 0) || 1;
     top4.forEach(([k2, w], j) => { si[i * 4 + j] = idx[k2]; sw[i * 4 + j] = w / sum; });
@@ -175,7 +188,7 @@ export async function loadRiggedCharacter(url) {
   mesh.bind(skeleton);
   const root = new THREE.Group();
   root.add(mesh);
-  return new RiggedCharacter(root, mesh, B, H, { sx, elbowX, crotchY, kneeY, armRootY, armTipY, legX, waistY });
+  return new RiggedCharacter(root, mesh, B, H, { sx, elbowX, wristX, chestY, neckY, crotchY, kneeY, armRootY, armTipY, legX, waistY });
 }
 
 export class RiggedCharacter {
@@ -223,6 +236,7 @@ export class RiggedCharacter {
         set(lo, t2);
       }
     }
+    this.poseHands2D(pts);
   }
 
   // Whole-body copy from the 3D skeleton (body.world): the hips turn and lean,
@@ -245,21 +259,50 @@ export class RiggedCharacter {
       _q.premultiply(_pq.invert());
       bone.quaternion.slerp(_q, k);
     };
-    const aim = (name, from, to, fallback) => { // point a bone from joint `from` to joint `to`
+    // point a bone from joint `from` toward joint `to` (or the middle of two joints);
+    // maxBend limits how far it may turn from straight (wrists don't fold back)
+    const aim = (name, from, to, maxBend = 0) => {
       const bone = this.b[name];
-      if (!(ok(from) && ok(to))) { bone.quaternion.slerp(fallback || new THREE.Quaternion(), k * 0.3); return; }
-      _d.copy(P(to)).sub(P(from)).normalize().applyQuaternion(_rq);
+      const tos = [].concat(to);
+      if (!(ok(from) && tos.every(ok))) { bone.quaternion.slerp(_q.identity(), k * 0.3); return; }
+      _d.set(0, 0, 0);
+      tos.forEach((t) => _d.add(P(t)));
+      _d.multiplyScalar(1 / tos.length).sub(P(from)).normalize().applyQuaternion(_rq);
       bone.parent.getWorldQuaternion(_pq);
       _d.applyQuaternion(_pq.invert());
       _q.setFromUnitVectors(REST[name], _d);
+      if (maxBend) {
+        const bend = 2 * Math.acos(Math.min(1, Math.abs(_q.w)));
+        if (bend > maxBend) _q.slerpQuaternions(_q2.identity(), _q, maxBend / bend);
+      }
       bone.quaternion.slerp(_q, k);
     };
     const hipL = P(L.lHip), hipR = P(L.rHip), shL = P(L.lShoulder), shR = P(L.rShoulder);
     const up = shL.clone().add(shR).sub(hipL).sub(hipR).multiplyScalar(0.5);
-    turn(this.b.hips, frame(hipL, hipR, up));          // facing and leaning of the whole body
-    turn(this.b.spine, frame(shL, shR, up));           // shoulder twist on top of it
+    // lower body follows the hips, upper body the shoulders; the waist takes half the twist
+    const qHip = frame(hipL, hipR, up), qSh = frame(shL, shR, up);
+    turn(this.b.hips, qHip);
+    turn(this.b.spine, qHip.clone().slerp(qSh, 0.5));
+    turn(this.b.chest, qSh);
+    // head: ears give left-right, the nose gives which way the face points
+    if (ok(L.lEar) && ok(L.rEar) && ok(L.nose) && P(L.lEar).distanceTo(P(L.rEar)) > 0.03) {
+      const eL = P(L.lEar), eR = P(L.rEar), earMid = eL.clone().add(eR).multiplyScalar(0.5);
+      const x = eR.clone().sub(eL).normalize();
+      const fwd = P(L.nose).sub(earMid);
+      const zf = fwd.addScaledVector(x, -fwd.dot(x)).normalize();
+      // the nose sits a bit below the ears: tip "forward" back up so a level head reads as level
+      const yv = new THREE.Vector3().crossVectors(zf, x).normalize();
+      const tilt = new THREE.Quaternion().setFromAxisAngle(x, -0.3);
+      const qHead = new THREE.Quaternion().setFromRotationMatrix(_m.makeBasis(x, yv, zf)).premultiply(tilt);
+      // keep it to what a neck can do relative to the chest
+      const rel = qSh.clone().invert().multiply(qHead);
+      const ang = 2 * Math.acos(Math.min(1, Math.abs(rel.w)));
+      if (ang > 1.1) rel.slerpQuaternions(_q2.identity(), rel, 1.1 / ang);
+      turn(this.b.head, qSh.clone().multiply(rel));
+    } else this.b.head.quaternion.slerp(_q.identity(), k * 0.3);
     aim('upperL', L.lShoulder, L.lElbow); aim('foreL', L.lElbow, L.lWrist);
     aim('upperR', L.rShoulder, L.rElbow); aim('foreR', L.rElbow, L.rWrist);
+    aim('handL', L.lWrist, [L.lIndex, L.lPinky], 1.4); aim('handR', L.rWrist, [L.rIndex, L.rPinky], 1.4);
     aim('thighL', L.lHip, L.lKnee); aim('shinL', L.lKnee, L.lAnkle);
     aim('thighR', L.rHip, L.rKnee); aim('shinR', L.rKnee, L.rAnkle);
     if (base) {
@@ -278,11 +321,25 @@ export class RiggedCharacter {
     this.a = {}; this.used3D = false;
   }
 
+  // 2D: bend each wrist toward the fingers (index/pinky middle)
+  poseHands2D(pts) {
+    const ok = (i) => pts[i].v > 0.4;
+    const ang = (a, x, y) => Math.atan2(y - pts[a].y, x - pts[a].x);
+    for (const [h, e, w, i1, i2] of [['handL', L.lElbow, L.lWrist, L.lIndex, L.lPinky], ['handR', L.rElbow, L.rWrist, L.rIndex, L.rPinky]]) {
+      if (!(ok(e) && ok(w) && ok(i1) && ok(i2))) continue;
+      const fx = (pts[i1].x + pts[i2].x) / 2, fy = (pts[i1].y + pts[i2].y) / 2;
+      const t = Math.max(-1.4, Math.min(1.4, wrap(ang(w, fx, fy) - ang(e, pts[w].x, pts[w].y))));
+      const cur = this.a[h] ?? 0;
+      this.a[h] = cur + wrap(t - cur) * 0.5;
+      this.b[h].rotation.z = -this.a[h];
+    }
+  }
+
   idle(t) {
     this.reset3D();
     const w = Math.sin(t * 2) * 0.2;
     const ease = (name, target) => { const cur = this.a[name] ?? 0; this.a[name] = cur + (target - cur) * 0.08; this.b[name].rotation.z = -this.a[name]; };
-    ease('upperL', -1.0 + w); ease('upperR', 1.0 - w); ease('foreL', -0.2); ease('foreR', 0.2);
+    ease('upperL', -1.0 + w); ease('upperR', 1.0 - w); ease('foreL', -0.2); ease('foreR', 0.2); ease('handL', 0); ease('handR', 0);
     ['thighL', 'thighR', 'shinL', 'shinR'].forEach((k) => ease(k, 0));
     this.tilt *= 0.9; this.b.spine.rotation.z = -this.tilt;
     this.hop *= 0.9; this.b.hips.position.y = this.hipY0 + this.hop;

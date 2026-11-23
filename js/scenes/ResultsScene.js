@@ -1,5 +1,6 @@
 import { tracker, input } from '../core.js';
 import { W, H, txt, sky, Hold, session, ordinal, charById, charImage } from './common.js';
+import { Stage3D } from '../stage3d.js';
 
 const RACE_POINTS = { 1: 3, 2: 2, 3: 1 };
 
@@ -38,12 +39,21 @@ export class ResultsScene extends Phaser.Scene {
         txt(22, '#1d3b52')).setOrigin(0.5);
     });
 
-    // Winner celebrates in a T-pose
-    if (rows.length) {
-      const top = rows[0];
-      const champ = charImage(this, W / 2, H - 62, top.pl.animal || 'bear', 'tpose', Math.min(200, H - 62 - (170 + rows.length * 92) + 40));
-      this.tweens.add({ targets: champ, y: champ.y - 16, yoyo: true, repeat: -1, duration: 400, ease: 'Sine.easeInOut' });
-    }
+    // Everyone's 3D animal stands together below the scores, still copying its player;
+    // the winner is in the middle, a bit bigger, with a crown
+    this.stage = new Stage3D(this.game);
+    this.events.once('shutdown', () => this.stage.destroy());
+    const top = 170 + rows.length * 92 - 20, footY = H - 66;
+    const room = Math.max(90, footY - top);
+    const n = rows.length, gap = Math.min(260, (W - 120) / Math.max(1, n));
+    // slots ordered from the centre outwards: 1st in the middle, then either side
+    const xs = Array.from({ length: n }, (_, j) => W / 2 + (j - (n - 1) / 2) * gap)
+      .sort((a, b) => Math.abs(a - W / 2) - Math.abs(b - W / 2) || a - b);
+    this.podium = rows.map((r, i) => {
+      const h = Math.min(gap * 1.05, room * (i === 0 ? 1 : 0.8));
+      if (r.total === best) this.add.text(xs[i], footY - h - 6, '👑', txt(Math.max(28, h * 0.22))).setOrigin(0.5, 1);
+      return { pl: r.pl, x: xs[i], h, win: r.total === best };
+    });
 
     this.add.text(W / 2, H - 40, 'Raise both hands (or press Enter) to play again · press L for a new lobby',
       txt(22, '#1d3b52')).setOrigin(0.5);
@@ -55,6 +65,13 @@ export class ResultsScene extends Phaser.Scene {
   }
 
   update(time) {
+    for (const p of this.podium) {
+      const cam = p.pl.kind === 'camera' && p.pl.body.pts && input(p.pl).present;
+      const bounce = !cam && p.win ? Math.abs(Math.sin(time / 260)) * 14 : 0;
+      this.stage.place(p.pl.slot, p.pl.animal || 'bear', p.x, H - 66 - bounce, p.h,
+        cam ? p.pl.body.vpts : null, cam ? p.pl.body.base : null, time / 1000 + p.pl.slot, cam ? p.pl.body.world : null);
+    }
+    this.stage.render();
     if (!this.ready) return;
     const anyUp = this.enter.isDown || tracker.players.some((pl) => input(pl).handsUp);
     if (this.hold.update(anyUp, time) >= 1) {

@@ -202,7 +202,7 @@ export class RaceScene extends Phaser.Scene {
       r.sprite.setScale(bs * (1 + jumpK * 0.15), bs * (ducking ? 0.55 : 1 + jumpK * 0.15));
       r.sprite.setRotation(wobble);
       r.anim = { x: r.laneX, y: GROUND_Y, speed: r.speed, jump: jumpK, duck: ducking, wobble: wobble * 0.6,
-        pts: r.pl.kind === 'camera' && inp.present ? r.pl.body.pts : null };   // 3D characters copy the player's arms
+        pts: r.pl.kind === 'camera' && inp.present ? r.pl.body.vpts : null };   // 3D characters copy the player's arms
       r.shadow.setPosition(r.laneX, GROUND_Y).setScale(1 - jumpK * 0.4);
       r.msg.setPosition(r.c.cx, GROUND_Y - c_msgOff(r));
 

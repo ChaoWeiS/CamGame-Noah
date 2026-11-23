@@ -43,7 +43,7 @@ export class PickScene extends Phaser.Scene {
       const inp = input(card.pl);
       card.ring.clear();
       // the chosen animal in 3D: copying a camera player, idling for a keyboard player
-      const c = card.c, zoom = c.rect.h / c.h, pts = card.pl.kind === 'camera' ? card.pl.body.pts : null;
+      const c = card.c, zoom = c.rect.h / c.h, pts = card.pl.kind === 'camera' ? card.pl.body.vpts : null;
       const in3D = this.stage.place(card.pl.slot, CHARACTERS[card.idx].id,
         c.rect.x + (c.cx - c.x) * zoom, c.rect.y + (370 + card.imgH / 2) * zoom, card.imgH * 1.1 * zoom,
         pts, card.pl.body?.base, time / 1000 + card.pl.slot, pts ? card.pl.body.world : null);

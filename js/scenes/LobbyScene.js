@@ -2,6 +2,7 @@ import { tracker, stats, net, localCam, PLAYER_COLORS, MAX_PLAYERS } from '../co
 import { W, H, txt, sky, drawSkeleton, Hold, session, loadCharacters, CHARACTERS } from './common.js';
 import { Puppet } from '../puppet.js';
 import { Stage3D, preloadCast } from '../stage3d.js';
+import { SkeletonSmoother } from '../body.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -49,6 +50,8 @@ export class LobbyScene extends Phaser.Scene {
     this.enterKey = this.input.keyboard.addKey('ENTER');
     // 3D animals copy the people in view (the 2D puppets stand in until they load)
     this.stage = new Stage3D(this.game);
+    // smooth each person's points so the animals don't jitter (one smoother per spot, left to right)
+    this.smooth = Array.from({ length: MAX_PLAYERS }, () => ({ s2: new SkeletonSmoother(1.0, 2.0), s3: new SkeletonSmoother(0.8, 1.5) }));
     preloadCast(CHARACTERS.map((c) => c.id), 1);
     this.events.once('shutdown', () => { $('lobby').hidden = true; this.stage.destroy(); });
   }
@@ -94,7 +97,14 @@ export class LobbyScene extends Phaser.Scene {
     this.puppets.forEach((pp, i) => pp.setVisible(i < sk.length));
     for (let i = sk.length; i < MAX_PLAYERS; i++) this.stage.hide(i);
     // where each person stands, so the animals can be sized to fit beside each other
-    const spots = sk.slice(0, MAX_PLAYERS).map((person) => {
+    // (only when a new camera frame has arrived — the game runs faster than the camera)
+    if (stats.lastFrame !== this.lastFrame || !this.smoothed) {
+      this.lastFrame = stats.lastFrame;
+      this.smoothed = sk.slice(0, MAX_PLAYERS).map((person, i) => ({ pts: this.smooth[i].s2.update(person.pts), world: this.smooth[i].s3.update(person.world) }));
+      for (let i = sk.length; i < MAX_PLAYERS; i++) { this.smooth[i].s2.update(null); this.smooth[i].s3.update(null); }
+    }
+    const smoothed = this.smoothed;
+    const spots = smoothed.map((person) => {
       const p3 = person.pts, nose = map(p3[0]), hipL = map(p3[23]), hipR = map(p3[24]), shL = map(p3[11]), shR = map(p3[12]);
       const hipY = (hipL.y + hipR.y) / 2, shY = (shL.y + shR.y) / 2;
       const ank = [27, 28].filter((k) => p3[k].v > 0.4).map((k) => map(p3[k]).y);
@@ -106,9 +116,9 @@ export class LobbyScene extends Phaser.Scene {
       const sp = spots[i], id = CHARACTERS[i % CHARACTERS.length].id;
       const gap = Math.min(...spots.filter((o) => o !== sp).map((o) => Math.abs(o.x - sp.x)), Infinity);
       const h = Math.min(sp.h, gap * 1.15, f.h * 0.85, sp.footY - f.y - 4);
-      const in3D = this.stage.place(i, id, sp.x, sp.footY, h, person.pts, null, time / 1000, person.world);
+      const in3D = this.stage.place(i, id, sp.x, sp.footY, h, smoothed[i].pts, null, time / 1000, smoothed[i].world);
       this.puppets[i].setVisible(!in3D);
-      if (!in3D) this.puppets[i].pose(person.pts, map);
+      if (!in3D) this.puppets[i].pose(smoothed[i].pts, map);
       const p = person.pts;
       if (p[15].v > 0.4 && p[16].v > 0.4 && p[15].y < p[0].y && p[16].y < p[0].y) anyHandsUp = true;
     });

@@ -120,7 +120,7 @@ const bear = params.get('model') === 'simple'
   : await loadRiggedCharacter(pick.file);
 if (params.has('weights') && bear.mesh) {
   // debug: colour each vertex by the bone that moves it most
-  const cols = [0x888888, 0xffffff, 0xff4444, 0xffaa00, 0x4488ff, 0x00ddff, 0xff44ff, 0xffff44, 0x44ff44, 0x22aa22];
+  const cols = [0x888888, 0xffffff, 0xff4444, 0xffaa00, 0x4488ff, 0x00ddff, 0xff44ff, 0xffff44, 0x44ff44, 0x22aa22, 0x880000, 0x884400, 0x9966ff, 0xff88cc]; // … handL, handR, chest, head
   const g = bear.mesh.geometry, si = g.attributes.skinIndex, c = new Float32Array(si.count * 3), col = new THREE.Color();
   for (let i = 0; i < si.count; i++) { col.set(cols[si.getX(i)]); c[i * 3] = col.r; c[i * 3 + 1] = col.g; c[i * 3 + 2] = col.b; }
   g.setAttribute('color', new THREE.BufferAttribute(c, 3));
@@ -147,8 +147,8 @@ renderer.setAnimationLoop(() => {
     }
   }
   const tracking = performance.now() - seenAt < 800 && body.pts;
-  if (tracking && body.world) bear.pose3D(body.world, body.pts, calibrated ? body.base : null);   // whole body in 3D
-  else if (tracking) bear.pose(body.pts, calibrated ? body.base : null);
+  if (tracking && body.world) bear.pose3D(body.world, body.vpts, calibrated ? body.base : null);   // whole body in 3D
+  else if (tracking) bear.pose(body.vpts, calibrated ? body.base : null);
   else { bear.idle(t); calibrated = false; calibT = 0; }
   $('status').textContent = tracking ? `Tracking you · ${stats.fps} fps` : (stats.source === 'none' ? 'Scan the QR code or use the webcam' : 'Step into view…');
   controls.update();

@@ -310,17 +310,20 @@ export class Race3D {
   copyArms(e, pts) {
     const b = e.ch.b, ok = (i) => pts[i].v > 0.4;
     const ang = (a, c) => Math.atan2(pts[c].y - pts[a].y, pts[c].x - pts[a].x);
-    e.arm = e.arm || { u1: 1.2, f1: 0, u2: 1.2, f2: 0 };
+    e.arm = e.arm || { u1: 1.2, f1: 0, u2: 1.2, f2: 0, h1: 0, h2: 0 };
+    const clampW = (a) => Math.max(-1.4, Math.min(1.4, a));
     const ease = (k, t) => { e.arm[k] += wrap(t - e.arm[k]) * 0.5; return e.arm[k]; };
     if (ok(L.lShoulder) && ok(L.lElbow)) {
       const u = ang(L.lShoulder, L.lElbow);
       b.upperR.rotation.set(0, 0, ease('u1', wrap(u - Math.PI)));
       if (ok(L.lWrist)) b.foreR.rotation.set(0, 0, ease('f1', wrap(ang(L.lElbow, L.lWrist) - u)));
+      if (ok(L.lWrist) && ok(L.lIndex)) b.handR.rotation.set(0, 0, ease('h1', clampW(wrap(ang(L.lWrist, L.lIndex) - ang(L.lElbow, L.lWrist)))));
     }
     if (ok(L.rShoulder) && ok(L.rElbow)) {
       const u = ang(L.rShoulder, L.rElbow);
       b.upperL.rotation.set(0, 0, ease('u2', wrap(u)));
       if (ok(L.rWrist)) b.foreL.rotation.set(0, 0, ease('f2', wrap(ang(L.rElbow, L.rWrist) - u)));
+      if (ok(L.rWrist) && ok(L.rIndex)) b.handL.rotation.set(0, 0, ease('h2', clampW(wrap(ang(L.rWrist, L.rIndex) - ang(L.rElbow, L.rWrist)))));
     }
   }
 
