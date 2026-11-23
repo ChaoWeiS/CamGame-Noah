@@ -29,7 +29,7 @@ export const SIZES = {
   grass: [0.22, 0.38], flowers: [0.2, 0.34], pebbles: [0.1, 0.16],
   flowerbush: [0.5, 0.8], bush2: [0.6, 0.9], bush: [0.9, 1.3],
   rock: [0.3, 0.55], rock2: [0.7, 1.1], boulder: [1.2, 2.0],
-  stump: [0.45, 0.7], fallen: [0.9, 1.3],
+  stump: [0.45, 0.7], fallen: [0.9, 1.3], rockpile: [1.5, 2.3],
 };
 // rocks are round underneath: sink them a little so they sit in the grass instead of on a point
 const SINK = { boulder: 0.15, rock2: 0.2, rock: 0.1, rockpile: 0.06, pebbles: 0.2, stump: 0.04, fallen: 0.04 };
@@ -114,16 +114,28 @@ export class Race3D {
     const r = rng(seed ^ 0x3d3d);
     const pick = (arr) => arr[Math.floor(r() * arr.length)];
     this.scenery = [];
-    for (let d = -8; d < courseLength + this.cfg.VIEW; d += 2.2 + r() * 2.5) {
-      for (const side of [-1, 1]) {
-        if (r() < 0.25) continue;
-        // rows: low plants at the edge, then bushes and rocks, then a forest of trees
-        const band = r();
-        if (band < 0.3) { const key = pick(['grass', 'grass', 'flowers', 'flowerbush', 'pebbles', 'rock']); this.scenery.push({ d: d + r(), side, key, h: sizeOf(key, r()), off: 0.1 + r() * 0.5, rot: r() * 6.28 }); }
-        else if (band < 0.55) { const key = pick(['bush', 'bush2', 'boulder', 'rock2', 'stump', 'fallen']); this.scenery.push({ d: d + r(), side, key, h: sizeOf(key, r()), off: 0.6 + r() * 1.6, rot: r() * 6.28 }); }
-        else this.scenery.push({ d: d + r(), side, key: pick(['oak', 'oak', 'pine', 'pine', 'bare']), h: this.cfg.TREE_SCALE * (0.8 + r() * 0.45), off: 1.2 + r() * 5, rot: r() * 6.28 });
+    // Both sides are lined with a wall of nature, in rows going back from the track:
+    //   edge:   grass, flowers, pebbles and small rocks right beside the path
+    //   middle: bushes, boulders, stumps, fallen logs and rock piles
+    //   trees:  three rows of oaks, pines and bare trees, the far ones fading into the haze
+    const T = this.cfg.TREE_SCALE;
+    const ROWS = [
+      { keys: ['grass', 'grass', 'flowers', 'flowers', 'pebbles', 'rock', 'flowerbush'], gap: [0.7, 1.5], off: [0.0, 0.45], shadow: false },
+      { keys: ['bush', 'bush', 'bush2', 'flowerbush', 'boulder', 'rock2', 'rock2', 'stump', 'fallen', 'rockpile'], gap: [1.3, 2.6], off: [0.5, 1.6], shadow: true },
+      { keys: ['oak', 'oak', 'pine', 'pine', 'bare'], gap: [2.0, 3.2], off: [1.6, 3.4], tree: 1, shadow: true },
+      { keys: ['oak', 'pine', 'pine', 'oak', 'bare'], gap: [2.2, 3.6], off: [4.2, 6.8], tree: 1, shadow: false },
+      { keys: ['pine', 'oak', 'pine'], gap: [2.6, 4.2], off: [7.5, 11], tree: 1, shadow: false },
+    ];
+    for (const side of [-1, 1]) {
+      for (const row of ROWS) {
+        for (let d = -10 + r() * 2; d < courseLength + this.cfg.VIEW; d += row.gap[0] + r() * (row.gap[1] - row.gap[0])) {
+          const key = pick(row.keys);
+          const h = row.tree ? T * (0.8 + r() * 0.45) : sizeOf(key, r());
+          this.scenery.push({ d, side, key, h, off: row.off[0] + r() * (row.off[1] - row.off[0]), rot: r() * 6.28, shadow: row.shadow });
+        }
       }
     }
+    this.scenery.sort((p, q) => p.d - q.d);
     // each obstacle gets its own turn and size, so no two look the same
     course.forEach((o) => { o.v = o.v || { rot: r() * 6.28, rot2: r() * 6.28, k: 0.9 + r() * 0.2 }; });
   }
@@ -162,12 +174,13 @@ export class Race3D {
 
   // a prop standing on the ground at (x, z), h units tall, turned by rot
   // maxW (optional) keeps its footprint no wider than that, so a lane blocker stays in its lane
-  prop(name, x, z, h, rot = 0, maxW = 0) {
+  prop(name, x, z, h, rot = 0, maxW = 0, shadow = true) {
     const t = this.T[name], m = this.use(name), k = h / t.size.y;
     const kw = maxW ? Math.min(k, maxW / Math.max(t.size.x, t.size.z)) : k;
     m.scale.set(kw, k, kw);
     m.position.set(x, -(SINK[name] || 0) * h, z);
     m.rotation.y = rot;
+    if (!shadow) return m;
     const b = this.use('_blob'), w = Math.max(t.size.x, t.size.z) * kw * 1.1;
     b.scale.set(w, 1, w * 0.8);
     b.position.set(x, 0.01, z);
@@ -179,12 +192,16 @@ export class Race3D {
     const { r } = pane, c = r.c, cfg = this.cfg;
     const runW = c.tw / c.runH;                 // track width in animal heights
     const lane = runW / 3;
-    for (const s of this.scenery) {
-      const a = s.d - r.dist;
-      if (a < -cfg.CAM_Z * 0.8 || a > cfg.VIEW) continue;
+    // scenery is sorted by distance: jump to the first piece behind the camera, stop past the view
+    const sc = this.scenery, from = r.dist - cfg.CAM_Z * 0.8;
+    let lo = 0, hi = sc.length;
+    while (lo < hi) { const mid = (lo + hi) >> 1; if (sc[mid].d < from) lo = mid + 1; else hi = mid; }
+    for (let i = lo; i < sc.length; i++) {
+      const s = sc[i], a = s.d - r.dist;
+      if (a > cfg.VIEW) break;
       const t = this.T[s.key];
       const halfW = (Math.max(t.size.x, t.size.z) * s.h / t.size.y) / 2;
-      this.prop(s.key, s.side * (runW / 2 + s.off + halfW * 0.6), -a, s.h, s.rot);
+      this.prop(s.key, s.side * (runW / 2 + s.off + halfW * 0.6), -a, s.h, s.rot, 0, s.shadow);
     }
     for (let i = r.nextObs; i < this.course.length; i++) {
       const o = this.course[i];
