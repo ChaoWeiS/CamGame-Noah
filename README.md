@@ -118,3 +118,15 @@ triangles, original textures, fine precision — practically identical to the or
 ~7 MB each). `assets/models/` holds the light ones used in phone mode (~3–4 MB).
 Rebuild with `tools/optimize_model.sh original.glb out.glb hd|lite`.
 Force a choice with `?models=hd` or `?models=lite`.
+
+## Flow (Nov 2026)
+
+1. **Lobby:** the main camera's view fills the screen, with a faint live picture (the phone
+   sends a small 320 px picture 4× a second, only while the lobby is open) so everyone can
+   see the edges. The QR code to add more cameras is a small card in the corner.
+2. **Start:** everyone in view raises both hands → **3, 2, 1** (stops if anyone lowers theirs).
+3. **Choose your animal:** portraits along the top (rendered from the 3D models,
+   `assets/portraits/`), framed in each player's colour (P1 red, P2 blue, P3 green, P4 yellow).
+   Swipe a raised hand sideways to change; hold both hands up 3 s (a ring in your colour fills)
+   to choose. Chosen animals are locked and can't be taken by anyone else.
+4. **Race:** READY?? → 3! → 2! → 1! → GO!!! (standing posture is measured during READY??).

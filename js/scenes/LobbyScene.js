@@ -15,30 +15,29 @@ export class LobbyScene extends Phaser.Scene {
 
   create() {
     tracker.unlock();
-    sky(this, 0x2f6f9f, 0x8fc6e6);
-    this.add.text(W / 2, 48, 'Race to the Ark', txt(52, '#fff8e6', { stroke: '#1d3b52', strokeThickness: 8 })).setOrigin(0.5);
-
-    // Camera preview frame (right side)
-    this.frame = { x: 560, y: 120, w: 680, h: H - 210 };
-    const f = this.frame;
-    this.add.rectangle(f.x + f.w / 2, f.y + f.h / 2, f.w, f.h, 0x0d1b26, 0.85).setStrokeStyle(4, 0xfff8e6, 0.6);
+    this.cameras.main.setBackgroundColor('#0d1b26');
+    // The camera's view fills the screen, with a faint live picture so everyone can see
+    // where its edges are. (Phones send a small picture 4× a second; a webcam is drawn directly.)
+    this.feedTex = this.textures.exists('camfeed') ? this.textures.get('camfeed') : this.textures.createCanvas('camfeed', 320, 240);
+    this.feed = this.add.image(W / 2, H / 2, 'camfeed').setFlipX(true).setAlpha(0.55).setVisible(false);
+    this.feedImg = new Image();
+    this.feedImg.onload = () => this.drawFeed(this.feedImg, this.feedImg.width, this.feedImg.height);
+    net.previews(true);
     this.g = this.add.graphics();
-    // live puppets: everyone in view becomes a character that copies them
+    this.frameG = this.add.graphics();
+    // live puppets (stand-ins until the 3D animals load)
     this.puppets = Array.from({ length: MAX_PLAYERS }, (_, i) => new Puppet(this, CHARACTERS[i % CHARACTERS.length].id, 2).setVisible(false));
-    this.count = this.add.text(f.x + f.w / 2, f.y + f.h + 30, '', txt(24, '#fff8e6')).setOrigin(0.5);
-    this.prompt = this.add.text(W / 2, H - 24, 'Everyone stand in a row facing the camera · everyone raise both hands for 3 seconds to start (or hold Enter)',
-      txt(20, '#fff8e6')).setOrigin(0.5);
-    // countdown / messages: at the top of the camera frame, above the 3D animals
-    this.big = new OverlayText(this.game, f.x + f.w / 2, f.y + 58, 54);
+    this.add.text(W / 2, 34, 'Race to the Ark', txt(40, '#fff8e6', { stroke: '#1d3b52', strokeThickness: 7 })).setOrigin(0.5);
+    this.count = this.add.text(24, 24, '', txt(24, '#fff8e6', { stroke: '#0d1b26', strokeThickness: 5 })).setOrigin(0, 0.5);
+    this.prompt = this.add.text(24, H - 26, 'Stand where the camera can see you — then everyone raise both hands!',
+      txt(24, '#fff8e6', { stroke: '#0d1b26', strokeThickness: 5 })).setOrigin(0, 0.5);
+    // countdown numbers and messages, drawn above the 3D animals
+    this.big = new OverlayText(this.game, W / 2, H / 2, 150);
+    this.msg = new OverlayText(this.game, W / 2, 96, 40);
+    this.countFrom = null;          // when everyone's hands went up (the 3-2-1 runs while they stay up)
 
-    // everyone in view must hold their hands up for 3 s (so a stray wave doesn't start the game)
-    this.startHold = new Hold(3000);
-    this.counting = false;
-
-    // HTML panel (QR code, buttons)
+    // the corner card (QR code, buttons)
     $('lobby').hidden = false;
-    $('lobby').style.top = (120 / H * 100) + '%';
-    $('lobby').style.height = ((H - 210) / H * 100) + '%';
     $('kbBtn').textContent = `Keyboard players: ${session.kbCount}`;
     $('kbBtn').onclick = () => {
       session.kbCount = (session.kbCount + 1) % 3;
@@ -50,12 +49,13 @@ export class LobbyScene extends Phaser.Scene {
       if (PHONE) await goFullLandscape();
       try {
         await localCam.start((s) => { $('status').textContent = s; }, PHONE ? { facing: 'user', numPoses: PHONE_PLAYERS } : {});
-        if (PHONE) $('camBtn').hidden = true;
+        if (PHONE) { $('camBtn').hidden = true; $('lobby').classList.remove('center'); }
       } catch (e) { $('status').textContent = 'Camera error: ' + e.message; $('camBtn').disabled = false; }
     };
-    // Phone mode: play with this phone's front camera; the QR code is still there if wanted
+    // Phone mode: play with this phone's front camera (big button in the middle until it starts)
     if (PHONE) {
       document.body.classList.add('phone');
+      if (!localCam.running) $('lobby').classList.add('center');
       $('lobbyTitle').textContent = '📱 Play on this phone';
       $('camBtn').textContent = '▶ Play on this phone';
       $('camBtn').classList.add('big');
@@ -69,46 +69,51 @@ export class LobbyScene extends Phaser.Scene {
     this.enterKey = this.input.keyboard.addKey('ENTER');
     // 3D animals copy the people in view (the 2D puppets stand in until they load)
     this.stage = new Stage3D(this.game);
-    // smooth each person's points so the animals don't jitter (one smoother per spot, left to right)
     preloadCast(CHARACTERS.map((c) => c.id), 1);
-    this.events.once('shutdown', () => { $('lobby').hidden = true; this.stage.destroy(); this.big.destroy(); });
-  }
-
-  beginCountdown() {
-    if (this.counting) return;
-    if (tracker.people().length === 0 && session.kbCount === 0) {
-      this.big.setText('No players yet!');
-      this.time.delayedCall(1200, () => this.big.setText(''));
-      return;
-    }
-    this.counting = true;
-    let n = 3;
-    this.big.setText('Stand still! 3');
-    this.time.addEvent({
-      delay: 1000, repeat: 2, callback: () => {
-        n--;
-        if (n > 0) { this.big.setText('Stand still! ' + n); return; }
-        tracker.lock(session.kbCount);
-        if (tracker.players.length === 0) {
-          this.counting = false;
-          this.big.setText('Couldn’t see anyone');
-          this.time.delayedCall(1200, () => this.big.setText(''));
-          return;
-        }
-        this.scene.start('Pick');
-      },
+    this.events.once('shutdown', () => {
+      $('lobby').hidden = true; $('lobby').classList.remove('center');
+      net.previews(false);
+      this.stage.destroy(); this.big.destroy(); this.msg.destroy();
     });
   }
 
+  // put a camera picture into the backdrop texture (mirrored by the image, like the players)
+  drawFeed(src, w, h) {
+    if (!w || !h) return;
+    const tex = this.feedTex;
+    if (tex.width !== w || tex.height !== h) tex.setSize(w, h);
+    tex.context.drawImage(src, 0, 0, w, h);
+    tex.refresh();
+    this.feedShown = performance.now();
+  }
+
+  // everyone's hands stayed up for the whole 3-2-1: lock the players in and go and pick animals
+  startGame() {
+    tracker.lock(session.kbCount);
+    if (tracker.players.length === 0) { this.msg.setText('Couldn’t see anyone'); this.countFrom = null; return; }
+    this.scene.start('Pick');
+  }
+
   update(time) {
-    const f = this.frame, g = this.g;
+    const g = this.g;
     g.clear();
     const aspect = tracker.aspect;
-    // Fit camera frame (aspect wide, 1 tall) into the preview box
-    const s = Math.min(f.w / aspect, f.h);
-    const ox = f.x + (f.w - aspect * s) / 2, oy = f.y + (f.h - s) / 2;
-    g.lineStyle(2, 0xffffff, 0.15).strokeRect(ox, oy, aspect * s, s);
+    // the camera's view, as big as the screen allows (its picture's shape, centred)
+    const s = Math.min(W / aspect, H);
+    const ox = (W - aspect * s) / 2, oy = (H - s) / 2;
+    const f = this.frame = { x: ox, y: oy, w: aspect * s, h: s };
     const map = (p) => ({ x: ox + p.x * s, y: oy + p.y * s });
+    // live picture behind it all
+    if (stats.source === 'webcam' && localCam.video && time - (this.lastWebcam || 0) > 100) {
+      this.lastWebcam = time;
+      const v = localCam.video, k = 320 / (v.videoWidth || 320);
+      this.drawFeed(v, 320, Math.round((v.videoHeight || 240) * k));
+    } else if (net.pic && net.pic.at !== this.picAt) { this.picAt = net.pic.at; this.feedImg.src = net.pic.data; }
+    const fresh = performance.now() - (this.feedShown || -1e9) < 2000;
+    this.feed.setVisible(fresh).setPosition(ox + f.w / 2, oy + f.h / 2).setDisplaySize(f.w, f.h);
+    // the edges of what the camera sees
+    this.frameG.clear().lineStyle(6, 0xfff8e6, 0.55).strokeRect(ox + 3, oy + 3, f.w - 6, f.h - 6);
+    if (!fresh) this.frameG.fillStyle(0x16303f, 1).fillRect(ox + 6, oy + 6, f.w - 12, f.h - 12);
 
     // Each tracked person keeps the same animal (by track id), wherever they move.
     const people = tracker.people().slice(0, MAX_PLAYERS);
@@ -165,14 +170,21 @@ export class LobbyScene extends Phaser.Scene {
       ? `${n} ${n === 1 ? 'person' : 'people'} in view${session.kbCount ? ` + ${session.kbCount} keyboard` : ''}${turnTip}`
       : (session.kbCount ? `${session.kbCount} keyboard player(s)` : 'No camera yet — scan the QR code with a phone'));
 
-    if (!this.counting) {
-      // all hands up (a hand dipping for a moment doesn't reset it)
-      const allUp = n > 0 && people.every((t) => time - (t.handsUpAt ?? -1e9) < 300);
-      const k = this.startHold.update(allUp || this.enterKey.isDown, time);
-      if (k > 0 && k < 1) this.big.setText(`🙌 Keep them up… ${Math.ceil(3 - k * 3)}`);
-      else if (k === 0 && handsUp > 0 && n > 1) this.big.setText(`🙌 Everyone hands up! (${handsUp} of ${n})`);
-      else if (!this.big.text.startsWith('No') && !this.big.text.startsWith('Couldn')) this.big.setText('');
-      if (k >= 1) { this.startHold.reset(); this.beginCountdown(); }
+    // Everyone raises both hands → 3, 2, 1 (it stops if anyone lowers theirs) → pick animals
+    const allUp = (n > 0 && people.every((t) => time - (t.handsUpAt ?? -1e9) < 300)) || this.enterKey.isDown;
+    if (allUp) {
+      if (this.countFrom === null) this.countFrom = time;
+      const left = 3 - Math.floor((time - this.countFrom) / 1000);
+      this.big.setText(left > 0 ? String(left) : '');
+      this.msg.setText('🙌 Keep them up!');
+      if (time - this.countFrom >= 3000) { this.countFrom = null; this.big.setText(''); this.startGame(); return; }
+    } else {
+      if (this.countFrom !== null) { this.stopMsgAt = time; }      // someone dropped: stop
+      this.countFrom = null;
+      this.big.setText('');
+      if (time - (this.stopMsgAt ?? -1e9) < 1500) this.msg.setText('✋ Everyone keep your hands up!');
+      else if (handsUp > 0 && n > 1) this.msg.setText(`🙌 Everyone hands up! (${handsUp} of ${n})`);
+      else if (!this.msg.text.startsWith('Couldn')) this.msg.setText('');
     }
     this.stage.render();
   }

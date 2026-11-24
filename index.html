@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="build" content="1124-230620-detailed-models">
+<meta name="build" content="1125-025254-new-lobby-and-pick">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Race to the Ark</title>
@@ -9,21 +9,24 @@
   html, body { margin: 0; height: 100%; background: #10202b; overflow: hidden; font-family: system-ui, -apple-system, sans-serif; }
   #wrap { --ar: 1.7778; position: absolute; inset: 0; margin: auto; width: min(100vw, calc(100vh * var(--ar))); height: min(100vh, calc(100vw / var(--ar))); }
   #game { position: absolute; inset: 0; }
+  /* the lobby's corner card: QR code to add a camera, buttons (the camera view fills the screen) */
   #lobby {
-    position: absolute; left: 3.1%; top: 16.7%; width: 37.5%; height: 70.8%;
-    background: rgba(13, 27, 38, 0.85); border-radius: 18px; color: #fff8e6;
-    display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 1.1vh;
-    padding: 2%; box-sizing: border-box; text-align: center; font-size: clamp(11px, 1.6vh, 18px);
+    position: absolute; right: 1.2%; bottom: 2%; max-width: 19%;
+    background: rgba(13, 27, 38, 0.82); border-radius: 14px; color: #fff8e6;
+    display: flex; flex-direction: column; align-items: center; gap: 0.7vh;
+    padding: 1.2vh 1vw; box-sizing: border-box; text-align: center; font-size: clamp(10px, 1.35vh, 15px);
   }
+  #lobby.center { right: 50%; bottom: 50%; transform: translate(50%, 50%); max-width: 60%; font-size: clamp(12px, 2.2vh, 20px); padding: 3vh 3vw; }
   #lobby[hidden] { display: none; }
-  #lobby h2 { margin: 0; font-size: 1.5em; }
-  #qr { width: 52%; image-rendering: pixelated; background: #fff; border-radius: 10px; }
-  #room { font-size: 1.8em; font-weight: 800; letter-spacing: 0.08em; color: #f2b544; }
-  #link { color: #9fd6ef; font-size: 0.8em; word-break: break-all; }
-  #status { min-height: 1.3em; }
-  #lobby button { font: inherit; padding: 0.6em 1em; border-radius: 10px; border: 0; background: #2b3b47; color: #fff8e6; cursor: pointer; }
+  #lobby h2 { margin: 0; font-size: 1.15em; }
+  #qr { width: 13vh; max-width: 100%; image-rendering: pixelated; background: #fff; border-radius: 8px; }
+  #room { font-size: 1.4em; font-weight: 800; letter-spacing: 0.08em; color: #f2b544; }
+  #link { color: #9fd6ef; font-size: 0.75em; word-break: break-all; }
+  #status { min-height: 1.2em; font-size: 0.9em; opacity: 0.9; }
+  #lobby .row { display: flex; gap: 0.4vw; flex-wrap: wrap; justify-content: center; }
+  #lobby button { font: inherit; padding: 0.45em 0.8em; border-radius: 8px; border: 0; background: #2b3b47; color: #fff8e6; cursor: pointer; }
   #lobby button:hover { background: #3a4f5e; }
-  #kbhelp { font-size: 0.7em; opacity: 0.7; }
+  #kbhelp { font-size: 0.65em; opacity: 0.6; max-width: 22em; }
   /* linking cameras */
   #calib { position: absolute; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center;
     background: rgba(8, 18, 26, 0.72); color: #fff8e6; font: 16px system-ui, sans-serif; text-align: center; }
@@ -61,20 +64,18 @@
 <div id="wrap">
   <div id="game"></div>
   <div id="lobby">
-    <h2 id="lobbyTitle">📱 Scan to use your phone as the camera</h2>
+    <h2 id="lobbyTitle">📱 Scan to add a camera</h2>
     <img id="qr" class="pc-only" alt="QR code for the phone camera page">
-    <div class="pc-only">Room code</div>
     <div id="room" class="pc-only">…</div>
     <a id="link" class="pc-only" target="_blank"></a>
     <div id="status">Starting…</div>
-    <div>
+    <div class="row">
       <button id="camBtn">Use this computer’s webcam</button>
       <button id="kbBtn">Keyboard players: 0</button>
     </div>
-    <div id="kbhelp" class="pc-only"></div>
     <button id="qrBtn" hidden>Use another phone as the camera</button>
     <button id="linkBtn" hidden>🔗 Link cameras</button>
-    <a href="bear3d.html" style="color:#9fd6ef;font-size:0.8em">🐻 Try the 3D bear test →</a>
+    <div id="kbhelp" class="pc-only"></div>
   </div>
   <div id="hud"></div>
   <div id="turnPhone">↻<br>Turn your phone sideways</div>

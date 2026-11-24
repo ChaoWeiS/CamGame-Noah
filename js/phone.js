@@ -8,7 +8,8 @@ $('room').value = params.get('room') || location.hash.replace('#', '') || '';
 
 let detector = null, stream = null, running = false, conn = null, peer = null;
 let frames = 0, lastFpsT = performance.now(), fps = 0, lastInf = 0;
-let showPreview = true, wakeLock = null, standby = false;
+let showPreview = true, wakeLock = null, standby = false, wantPics = false, lastPic = 0;
+const picCv = document.createElement('canvas'), pctx = picCv.getContext('2d');
 const frameCv = document.createElement('canvas'), fctx = frameCv.getContext('2d');
 let rot = 0;                     // how far the picture is turned before detection (degrees)
 
@@ -38,6 +39,8 @@ function openConn(room) {
   conn.on('data', (d) => {
     if (d && d.type === 'ping') conn.send({ type: 'pong', t: d.t });
     // another phone is already the camera: wait on standby (until it goes, or "Use this camera")
+    // the big screen's lobby shows a small, faint copy of this camera's picture
+    if (d && d.type === 'pics') wantPics = !!d.on;
     if (d && d.type === 'role') {
       standby = !d.active && !d.linked;
       setConn(d.active ? 'Connected — main camera' : d.linked ? 'Connected — linked camera' : 'Standby — another phone is the camera (calibrate on the big screen to use both)', standby ? 'wait' : 'ok');
@@ -203,6 +206,14 @@ function loop() {
   if (!running) return;
   if (video.readyState >= 2 && video.videoWidth) {
     const src = uprightFrame();
+    // a small preview picture for the lobby, 4 a second (~10 KB each)
+    if (wantPics && performance.now() - lastPic > 250) {
+      lastPic = performance.now();
+      const w = 320, h = Math.round(320 * src.height / src.width);
+      if (picCv.width !== w || picCv.height !== h) { picCv.width = w; picCv.height = h; }
+      pctx.drawImage(src, 0, 0, w, h);
+      send({ type: 'pic', data: picCv.toDataURL('image/jpeg', 0.5) });
+    }
     const { poses, worlds, ms } = detector.detect(src);
     lastInf = ms;
     frames++;

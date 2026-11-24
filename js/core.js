@@ -3,8 +3,9 @@
 import { Body, toPoints, toWorld, keyPoints } from './body.js';
 import { multicam } from './multicam.js';
 
-export const PLAYER_COLORS = [0xf2b544, 0x5ec8e5, 0xf27a9b, 0x8be07a];
-export const PLAYER_CSS = ['#f2b544', '#5ec8e5', '#f27a9b', '#8be07a'];
+// soft pastel player colours: P1 red, P2 blue, P3 green, P4 yellow
+export const PLAYER_COLORS = [0xef8f86, 0x86b6e8, 0x93d18e, 0xf1d074];
+export const PLAYER_CSS = ['#ef8f86', '#86b6e8', '#93d18e', '#f1d074'];
 export const MAX_PLAYERS = 4;
 
 // ---------------------------------------------------------------- stats
@@ -233,6 +234,17 @@ window.addEventListener('keyup', (e) => {
 export const net = {
   roomId: null, peer: null, conn: null, conns: [], phoneUrl: '', onStatus: () => {},
   onMoved: () => {},          // (camera id) a phone was knocked — set by the calibration screen
+  wantPics: false,            // the lobby wants small preview pictures from the main camera
+  pic: null,                  // latest preview { data (jpeg data URL), at }
+  // ask the main camera (only) for preview pictures, or stop
+  previews(on) {
+    this.wantPics = on;
+    for (const c of this.conns) if (c.open) { try { c.send({ type: 'pics', on: on && c === this.viewConn() }); } catch (_) {} }
+  },
+  viewConn() {
+    const v = multicam.active() ? multicam.view : null;
+    return (v && this.conns.find((c) => c.peer === v && c.open)) || this.conn;
+  },
   start() {
     const id = 'ark-' + Math.random().toString(36).slice(2, 8);
     this.roomId = id;
@@ -254,6 +266,7 @@ export const net = {
       c.on('data', (d) => {
         if (!d) return;
         if (d.type === 'take') { this.conn = c; this.roles(); return; }
+        if (d.type === 'pic') { if (c === this.viewConn()) this.pic = { data: d.data, at: performance.now() }; return; }
         if (d.type === 'moved') {
           // only matters if this phone is in use: linked, or the main camera
           const inUse = !!multicam.cams.get(c.peer)?.calib || c === this.conn;
@@ -301,6 +314,7 @@ export const net = {
   },
   // tell every phone whether it is the camera or on standby
   roles() {
+    this.previews(this.wantPics);
     for (const c of this.conns) if (c.open) { try { c.send({ type: 'role', active: c === this.conn, linked: !!multicam.cams.get(c.peer)?.calib }); } catch (_) {} }
     if (this.conn) {
       stats.connected = true; stats.source = 'phone';
@@ -322,6 +336,7 @@ export const localCam = {
     onStatus('Starting webcam…');
     const stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 480 }, ...(opts.facing ? { facingMode: opts.facing } : {}) }, audio: false });
     video.srcObject = stream; await video.play();
+    this.video = video;               // the lobby shows this picture
     const det = await createPoseDetector({ numPoses: opts.numPoses || 4, onStatus });
     stats.source = 'webcam'; stats.camera = stream.getVideoTracks()[0].label;
     this.running = true;

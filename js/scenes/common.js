@@ -68,6 +68,8 @@ export function loadCharacters(scene) {
     if (!scene.textures.exists(key)) scene.load.image(key, `assets/characters/${key}.png`);
   }
   loadPuppets(scene, CHARACTERS.map((c) => c.id));
+  // face portraits for the character select (rendered from the 3D models)
+  for (const c of CHARACTERS) if (!scene.textures.exists('portrait_' + c.id)) scene.load.image('portrait_' + c.id, `assets/portraits/${c.id}.png`);
   for (const p of PROPS) {
     if (!scene.textures.exists('prop_' + p)) scene.load.image('prop_' + p, `assets/props/${p}.png`);
   }

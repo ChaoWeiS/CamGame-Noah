@@ -157,6 +157,7 @@ export class Body {
     }
 
     this.detectRunning(p, T);
+    this.detectSwipe(p, T);
 
     const nose = p[L.nose], wl = p[L.lWrist], wr = p[L.rWrist];
     const armsSeen = wl.v > 0.4 && wr.v > 0.4;
@@ -167,6 +168,34 @@ export class Body {
 
 // Running on the spot: knees take turns lifting. Each switch of the higher knee
 // counts as a step; steps per second over the last ~1.5 s gives the running speed.
+// Swipe: a raised hand (above the hips) moving quickly sideways — at least about a
+// shoulder-and-a-bit across, within 0.45 s, much more sideways than up/down. Measured
+// against the shoulders, so leaning or walking doesn't count. After a swipe there is a
+// short pause, so the hand coming back isn't read as a swipe the other way.
+// takeSwipe() returns +1 (to the right on screen), -1 (left) or 0, once per swipe.
+Body.prototype.detectSwipe = function (p, T) {
+  const now = performance.now();
+  const shX = (p[L.lShoulder].x + p[L.rShoulder].x) / 2, hipY = (p[L.lHip].y + p[L.rHip].y) / 2;
+  const shW = Math.max(0.5 * T, Math.abs(p[L.lShoulder].x - p[L.rShoulder].x));
+  this.swipeHist = this.swipeHist || { l: [], r: [] };
+  if (now - (this.swipeAt || 0) < 700) { this.swipeHist.l = []; this.swipeHist.r = []; return; }
+  for (const [k, i] of [['l', L.lWrist], ['r', L.rWrist]]) {
+    const w = p[i], h = this.swipeHist[k];
+    if (w.v < 0.4 || w.y > hipY) { h.length = 0; continue; }
+    h.push({ t: now, x: w.x - shX, y: w.y });
+    while (h.length && now - h[0].t > 450) h.shift();
+    for (const o of h) {
+      const dx = w.x - shX - o.x, dy = w.y - o.y;
+      if (Math.abs(dx) > 1.1 * shW && Math.abs(dy) < 0.6 * Math.abs(dx)) {
+        this.swipe = Math.sign(dx); this.swipeAt = now;
+        this.swipeHist.l = []; this.swipeHist.r = [];
+        return;
+      }
+    }
+  }
+};
+Body.prototype.takeSwipe = function () { const s = this.swipe || 0; this.swipe = 0; return s; };
+
 Body.prototype.detectRunning = function (p, T) {
   const now = performance.now();
   const kl = p[L.lKnee], kr = p[L.rKnee];

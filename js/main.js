@@ -1,5 +1,6 @@
 import { net, stats, tracker, input, keyboardHelp } from './core.js';
 import { multicam } from './multicam.js';
+import { session } from './scenes/common.js';
 import { initCalibration, linkCameras } from './calibui.js';
 import { W, H, ASPECT } from './scenes/common.js';
 import { LobbyScene } from './scenes/LobbyScene.js';
@@ -33,6 +34,9 @@ $('linkBtn').onclick = () => { $('linkBtn').blur(); linkCameras(); };
 setInterval(() => {
   const phones = net.conns.filter((c) => c.open).length, linked = multicam.linked().length;
   $('linkBtn').hidden = phones < 2;
+  // keep the corner card small: the address only until a phone joins, key help only with keyboard players
+  $('link').hidden = phones > 0;
+  $('kbhelp').hidden = !session.kbCount;
   $('linkBtn').textContent = linked >= 2 ? `🔗 ${linked} cameras linked — link again` : `🔗 Link ${phones} cameras`;
 }, 500);
 

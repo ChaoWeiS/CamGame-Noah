@@ -1,102 +1,133 @@
-import { tracker, input } from '../core.js';
-import { W, H, txt, setupPanes, CHARACTERS, charImage, Hold, session } from './common.js';
-import { Puppet } from '../puppet.js';
-import { Stage3D } from '../stage3d.js';
+// Character select. One screen for everyone:
+//   • the animals' portraits in a row along the top — each square shows, in the
+//     player's colour, who is looking at it (P1 red, P2 blue, P3 green, P4 yellow);
+//   • below, a column per player with their animal copying their body.
+// Swipe a raised hand sideways to flip to the next animal (keyboard: ← →).
+// Hold both hands up for 3 seconds to choose — a ring in your colour fills up around
+// your animal. Once chosen it's yours (no take-backs), and nobody else can pick it.
+// When everyone has chosen, off to the race.
+import { tracker, input, PLAYER_COLORS, PLAYER_CSS } from '../core.js';
+import { W, H, txt, sky, Hold, session, CHARACTERS } from './common.js';
+import { Stage3D, preloadCast, OverlayText } from '../stage3d.js';
+
+const HOLD_MS = 3000;
 
 export class PickScene extends Phaser.Scene {
   constructor() { super('Pick'); }
 
   create() {
     const players = tracker.players;
-    const cols = setupPanes(this, players.length, 720).panes;
-    this.stage = new Stage3D(this.game);
-    this.events.once('shutdown', () => this.stage.destroy());
-    this.cards = players.map((pl, i) => {
-      const c = cols[i];
-      const sky = this.add.graphics();
-      sky.fillGradientStyle(0x7cc0e8, 0x7cc0e8, 0xe4f3fb, 0xe4f3fb, 1).fillRect(c.x, 0, c.w, 720);
-      const bg = this.add.rectangle(c.cx, 360, c.w - 24, 696, pl.color, 0.22).setStrokeStyle(6, pl.color, 1);
-      const label = this.add.text(c.cx, 52, `Player ${i + 1}${pl.kind === 'keyboard' ? ' ⌨️' : ''}`, txt(38, '#1d3b52')).setOrigin(0.5);
-      this.add.text(c.cx, 100, 'Lean ◀ ▶ to change · 🙌 to choose', txt(26, '#1d3b52')).setOrigin(0.5);
-      const idx = pl.slot % CHARACTERS.length;   // everyone starts on a different character
-      const imgH = Math.min(320, c.w * 0.75);
-      const emoji = charImage(this, c.cx, 370 + imgH / 2, CHARACTERS[idx].id, 'front', imgH);
-      const name = this.add.text(c.cx, 580, CHARACTERS[idx].name, txt(40, '#1d3b52')).setOrigin(0.5);
-      const off = Math.min(280, c.w * 0.4);
-      const arrows = this.add.container(0, 0, [
-        this.add.text(c.cx - off, 370, '◀', txt(56, '#1d3b52')).setOrigin(0.5),
-        this.add.text(c.cx + off, 370, '▶', txt(56, '#1d3b52')).setOrigin(0.5),
-      ]);
-      const status = this.add.text(c.cx, 650, '🙌 to choose', txt(32, '#1d3b52')).setOrigin(0.5);
-      const ring = this.add.graphics();
-      // camera players see their character copying them; keyboard players get the picture
-      const puppet = pl.kind === 'camera' ? new Puppet(this, CHARACTERS[idx].id, 2) : null;
-      if (puppet) emoji.setVisible(false);
-      return { pl, c, bg, label, idx, emoji, name, imgH, puppet, arrows, status, ring, prevLane: 0, hold: new Hold(800), done: false };
+    sky(this, 0x8fcbe8, 0xe3f2d0);
+    this.add.text(W / 2, 40, 'Choose your animal!', txt(44, '#1d3b52')).setOrigin(0.5);
+    this.add.text(W / 2, 82, 'Swipe a hand sideways to change · hold both hands up for 3 seconds to choose',
+      txt(22, '#1d3b52')).setOrigin(0.5);
+
+    // the portrait row
+    const n = CHARACTERS.length, S = Math.min(150, (W - 160) / n - 34), gap = Math.min(40, (W - n * S) / (n + 1));
+    const x0 = (W - (n * S + (n - 1) * gap)) / 2;
+    this.row = { y: 110, S };
+    this.squares = CHARACTERS.map((ch, i) => {
+      const x = x0 + i * (S + gap), cx = x + S / 2, cy = this.row.y + S / 2;
+      const bg = this.add.rectangle(cx, cy, S, S, 0xfff8e6).setStrokeStyle(5, 0x1d3b52, 0.25);
+      const img = this.add.image(cx, cy, 'portrait_' + ch.id).setDisplaySize(S - 10, S - 10);
+      const name = this.add.text(cx, this.row.y + S + 18, ch.name, txt(22, '#1d3b52')).setOrigin(0.5);
+      const badge = this.add.text(cx, this.row.y + S - 4, '', txt(22, '#ffffff', { stroke: '#1d3b52', strokeThickness: 5 })).setOrigin(0.5, 1).setDepth(5);
+      return { ch, x, cx, cy, bg, img, name, badge, owner: null };
     });
-    this.deadline = this.time.now + 30000;
-    this.leaving = false;
+    this.g = this.add.graphics().setDepth(4);
+
+    // a column per player under the row
+    const top = this.row.y + S + 60;
+    this.foot = H - 70;
+    const colW = W / Math.max(1, players.length);
+    this.cards = players.map((pl, i) => {
+      const cx = colW * (i + 0.5);
+      const label = this.add.text(cx, H - 34, `P${pl.slot + 1}`, txt(32, PLAYER_CSS[pl.slot], { stroke: '#1d3b52', strokeThickness: 6 })).setOrigin(0.5);
+      return { pl, cx, label, h: Math.min(this.foot - top, colW * 1.25), idx: -1, hold: new Hold(HOLD_MS), done: false, prevLane: 0, armed: false };
+    });
+    // everyone starts on a different free animal
+    this.cards.forEach((c, i) => { c.idx = this.nextFree(i % n, 1, c); });
+    for (const c of this.cards) c.pl.body?.takeSwipe?.();          // ignore swipes from before this screen
+
+    this.stage = new Stage3D(this.game);
+    preloadCast(CHARACTERS.map((c) => c.id), players.length);
+    this.msg = new OverlayText(this.game, W / 2, H / 2, 72);
+    this.events.once('shutdown', () => { this.stage.destroy(); this.msg.destroy(); });
+  }
+
+  taken(idx, except) { return this.cards.some((c) => c !== except && c.done && c.idx === idx); }
+  // the next animal (from idx, in direction dir) that nobody else has chosen
+  nextFree(idx, dir, card) {
+    const n = CHARACTERS.length;
+    for (let k = 0; k < n; k++) { const j = ((idx + dir * k) % n + n) % n; if (!this.taken(j, card)) return j; }
+    return idx;
   }
 
   update(time) {
+    if (this.leaving && performance.now() > this.leaveAt) { this.leaving = false; this.scene.start('Race'); return; }
+    const g = this.g; g.clear();
+    const S = this.row.S;
+    // who is looking at each portrait (nested frames in their colours)
+    this.squares.forEach((sq, i) => {
+      const lookers = this.cards.filter((c) => c.idx === i);
+      lookers.forEach((c, k) => {
+        const inset = -6 - k * 8;
+        g.lineStyle(c.done ? 9 : 6, PLAYER_COLORS[c.pl.slot], 1).strokeRoundedRect(sq.x + inset, this.row.y + inset, S - 2 * inset, S - 2 * inset, 12);
+      });
+      const owner = this.cards.find((c) => c.done && c.idx === i);
+      sq.badge.setText(owner ? `P${owner.pl.slot + 1} ✓` : lookers.map((c) => `P${c.pl.slot + 1}`).join(' '));
+      sq.img.setAlpha(owner ? 1 : 0.92);
+    });
+
     for (const card of this.cards) {
-      const inp = input(card.pl);
-      card.ring.clear();
-      // the chosen animal in 3D: copying a camera player, idling for a keyboard player
-      const c = card.c, zoom = c.rect.h / c.h, pts = card.pl.kind === 'camera' ? card.pl.body.vpts : null;
-      const in3D = this.stage.place(card.pl.slot, CHARACTERS[card.idx].id,
-        c.rect.x + (c.cx - c.x) * zoom, c.rect.y + (370 + card.imgH / 2) * zoom, card.imgH * 1.1 * zoom,
-        pts, card.pl.body?.base, time / 1000 + card.pl.slot, pts ? card.pl.body.world : null);
-      card.emoji.setVisible(!in3D && !card.puppet);
-      if (card.puppet) card.puppet.setVisible(!in3D);
-      if (!in3D && card.puppet && pts) {
-        card.puppet.pose(pts, (p) => p, { cx: card.c.cx, top: 370 - card.imgH / 2, height: card.imgH });
+      const pl = card.pl, inp = input(pl), cam = pl.kind === 'camera';
+      // browse: swipe (camera) or ← → (keyboard)
+      if (!card.done) {
+        let dir = 0;
+        if (cam) dir = pl.body.takeSwipe();
+        else { if (inp.lane !== 0 && card.prevLane === 0) dir = inp.lane; card.prevLane = inp.lane; }
+        if (dir) { card.idx = this.nextFree(card.idx + dir, dir, card); card.hold.reset(); }
+        if (this.taken(card.idx, card)) card.idx = this.nextFree(card.idx, 1, card);   // someone just chose it
       }
-      if (!inp.present) { card.status.setText('Step back into view!'); continue; }
-      if (card.done) continue;
+      const ch = CHARACTERS[card.idx];
+      // their animal, copying them
+      const show = !cam || inp.present;
+      if (show) {
+        this.stage.place(pl.slot, ch.id, card.cx, this.foot, card.h * 0.9,
+          cam ? pl.body.vpts : null, cam ? pl.body.base : null, time / 1000 + pl.slot, cam ? pl.body.world : null);
+      } else this.stage.hide(pl.slot);
+      card.label.setText(`P${pl.slot + 1} · ${card.done ? ch.name + ' ✓' : !show ? 'step into view' : ch.name}`);
 
-      // Lean edge: centre → side changes animal
-      if (inp.lane !== 0 && card.prevLane === 0) {
-        card.idx = (card.idx + inp.lane + CHARACTERS.length) % CHARACTERS.length;
-        const ch = CHARACTERS[card.idx];
-        card.emoji.setTexture(`${ch.id}_front`);
-        card.emoji.setScale(card.imgH / card.emoji.height);
-        card.emoji.baseScale = card.emoji.scaleX;
-        card.name.setText(ch.name);
-        if (card.puppet) card.puppet.setCharacter(ch.id);
-        this.tweens.add({ targets: card.emoji, scale: { from: card.emoji.baseScale * 1.15, to: card.emoji.baseScale }, duration: 200 });
-        if (card.pl.kind === 'keyboard') card.pl.kb.lane = 0;
+      // choose: both hands up for 3 s — a ring in their colour fills up around the animal
+      const cy = this.foot - card.h * 0.47, r = card.h * 0.47;
+      if (card.done) {
+        g.lineStyle(10, PLAYER_COLORS[pl.slot], 1).strokeCircle(card.cx, cy, r);
+        continue;
       }
-      card.prevLane = card.pl.kind === 'keyboard' ? 0 : inp.lane;
-
-      const k = card.hold.update(inp.handsUp, time);
-      card.status.setText('🙌 to choose');
+      // hands still up from the lobby countdown don't count: they must come down once first
+      if (!inp.handsUp) card.armed = true;
+      const k = card.hold.update(card.armed && inp.handsUp && show, time);
       if (k > 0) {
-        card.ring.lineStyle(10, card.pl.color, 1);
-        card.ring.beginPath();
-        card.ring.arc(card.c.cx, 370, Math.min(190, card.c.w * 0.42), -Math.PI / 2, -Math.PI / 2 + k * Math.PI * 2);
-        card.ring.strokePath();
+        g.lineStyle(10, PLAYER_COLORS[pl.slot], 0.25).strokeCircle(card.cx, cy, r);
+        g.lineStyle(10, PLAYER_COLORS[pl.slot], 1).beginPath();
+        g.arc(card.cx, cy, r, -Math.PI / 2, -Math.PI / 2 + k * Math.PI * 2, false).strokePath();
       }
-      if (k >= 1) this.choose(card);
+      if (k >= 1 && !this.taken(card.idx, card)) this.choose(card);
     }
-
     this.stage.render();
-    if (!this.leaving && time > this.deadline) this.cards.forEach((c) => c.done || this.choose(c));
-    if (!this.leaving && this.cards.every((c) => c.done)) {
-      this.leaving = true;
-      this.time.delayedCall(1200, () => this.scene.start('Race'));
-    }
   }
 
   choose(card) {
     card.done = true;
     card.pl.animal = CHARACTERS[card.idx].id;
-    card.arrows.setVisible(false);
-    card.status.setText('Ready! ✅');
-    card.ring.clear();
-    if (card.puppet) return; // the puppet keeps copying the player
-    card.emoji.setTexture(`${card.pl.animal}_tpose`);
-    card.emoji.setScale(card.imgH / card.emoji.height);
-    this.tweens.add({ targets: card.emoji, y: card.emoji.y - 30, yoyo: true, duration: 180, repeat: 1 });
+    const sq = this.squares[card.idx];
+    this.tweens.add({ targets: sq.bg, scale: { from: 1.15, to: 1 }, duration: 300, ease: 'Back.easeOut' });
+    const k = sq.img.scale;
+    this.tweens.add({ targets: sq.img, scale: { from: k * 1.15, to: k }, duration: 300, ease: 'Back.easeOut' });
+    if (this.cards.every((c) => c.done) && !this.leaving) {
+      this.leaving = true;
+      this.msg.setText('Let’s go! 🌊');
+      this.leaveAt = performance.now() + 1500;        // real time (game timers crawl on a slow computer)
+    }
   }
 }

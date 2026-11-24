@@ -1,5 +1,5 @@
 {
- "build": "1124-230620-detailed-models",
+ "build": "1125-025254-new-lobby-and-pick",
  "files": [
   "js/autorig.js",
   "js/bear3d.js",

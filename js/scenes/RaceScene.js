@@ -1,5 +1,6 @@
 import { tracker, input } from '../core.js';
 import { W, H, txt, rng, session, ordinal, charImage, charById, setupPanes, UI_X } from './common.js';
+import { OverlayText } from '../stage3d.js';
 import { Race3D } from '../race3d.js';
 
 const DH = 720;            // design height of one player's pane
@@ -92,7 +93,9 @@ export class RaceScene extends Phaser.Scene {
       for (let i = 0; i < 6; i++) r.labels.push(this.add.text(0, 0, '', txt(24, '#ffffff', { stroke: '#000', strokeThickness: 5 })).setOrigin(0.5).setVisible(false).setDepth(39));
     });
 
-    this.banner = this.add.text(UI_X + W / 2, H / 2 - 40, '', txt(90, '#fff8e6', { stroke: '#1d3b52', strokeThickness: 12 })).setOrigin(0.5).setDepth(10);
+    // big messages drawn above the 3D layer (so trees never hide them)
+    this.banner = new OverlayText(this.game, W / 2, H / 2 - 40, 110);
+    this.events.once('shutdown', () => this.banner.destroy());
     this.help = this.add.text(UI_X + W / 2, H / 2 + 60, 'The flood is coming — run on the spot and swing your arms to go faster!\nLean around rocks and trees · jump over logs and low branches · duck under high ones',
       txt(26, '#fff8e6', { stroke: '#1d3b52', strokeThickness: 6 })).setOrigin(0.5).setDepth(10);
 
@@ -109,16 +112,20 @@ export class RaceScene extends Phaser.Scene {
     this.finishCount = 0;
     this.firstFinishAt = 0;
     this.rainT = 0;
-    let n = 3;
-    this.banner.setText('3');
-    this.time.addEvent({
-      delay: 1000, repeat: 3, callback: () => {
-        n--;
-        if (n > 0) this.banner.setText(String(n));
-        else if (n === 0) { this.banner.setText('GO!'); this.help.setText(''); this.state = 'run'; }
-        else this.banner.setText('');
-      },
-    });
+    // READY?? 3! 2! 1! GO!!!  — while "READY??" is up everyone is standing facing the
+    // screen, so that's when each player's normal standing posture is measured again
+    this.banner.setText('READY??');
+    const steps = [
+      [1800, () => {
+        for (const r of this.runners) if (r.pl.kind === 'camera' && r.pl.body && input(r.pl).present) r.pl.body.calibrateFromCurrent();
+        this.banner.setText('3!');
+      }],
+      [2800, () => this.banner.setText('2!')],
+      [3800, () => this.banner.setText('1!')],
+      [4800, () => { this.banner.setText('GO!!!'); this.help.setText(''); this.state = 'run'; }],
+      [5800, () => { if (this.banner.text === 'GO!!!') this.banner.setText(''); }],
+    ];
+    for (const [ms, fn] of steps) this.time.delayedCall(ms, fn);
   }
 
   update(time, delta) {
