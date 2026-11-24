@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="build" content="1124-035214-pose-demos">
+<meta name="build" content="1124-202320-tracking-landscape">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Race to the Ark — Camera</title>
@@ -15,7 +15,7 @@
   .ok { background: #2e7d4f; } .bad { background: #9b3b2f; } .wait { background: #8a6d1f; }
   #stage { position: relative; width: 100%; background: #000; aspect-ratio: 4 / 3; overflow: hidden; }
   video, canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
-  .hidden-preview video { visibility: hidden; }
+  .hidden-preview video, .rotated video { visibility: hidden; }
   .controls { padding: 12px 16px; display: grid; gap: 10px; }
   button, select, input { font: inherit; font-size: 16px; padding: 12px; border-radius: 10px; border: 0; }
   button { background: #f2b544; color: #1d1d1d; font-weight: 600; }
@@ -43,13 +43,22 @@
     <span class="pill" id="inf">– ms</span>
     <span class="pill" id="people">0 people</span>
     <span class="pill" id="engine">engine –</span>
+    <span class="pill" id="turn">upright</span>
   </div>
   <div id="msg"></div>
   <input id="room" placeholder="Room code (shown on the big screen)" autocomplete="off" autocapitalize="off">
   <button id="start">Start camera</button>
   <select id="camera" hidden></select>
+  <select id="rotate" hidden>
+    <option value="auto">Picture: turn automatically (tilt sensor)</option>
+    <option value="0">Picture: as the camera sees it</option>
+    <option value="90">Picture: turn right ↻</option>
+    <option value="-90">Picture: turn left ↺</option>
+    <option value="180">Picture: upside down</option>
+  </select>
+  <div id="caminfo" class="tip"></div>
   <button id="preview" class="secondary" hidden>Hide preview (saves battery)</button>
-  <p class="tip">Prop the phone up sideways (landscape), about 3 m from the players, so everyone fits head to toe. Everything stays on this phone and the big screen — only stick-figure points are sent, never video.</p>
+  <p class="tip"><b>Turn the phone sideways (landscape)</b> for a much wider view — the picture is turned upright for you. Pick the widest camera in the list (try each one and keep the one that shows the most). Stand it about 3 m from the players so everyone fits head to toe. Everything stays on this phone and the big screen — only stick-figure points are sent, never video.</p>
 </div>
 
 <script src="vendor/peerjs.min.js"></script>

@@ -9,6 +9,8 @@ $('room').value = params.get('room') || location.hash.replace('#', '') || '';
 let detector = null, stream = null, running = false, conn = null, peer = null;
 let frames = 0, lastFpsT = performance.now(), fps = 0, lastInf = 0;
 let showPreview = true, wakeLock = null;
+const frameCv = document.createElement('canvas'), fctx = frameCv.getContext('2d');
+let rot = 0;                     // how far the picture is turned before detection (degrees)
 
 function setConn(text, cls) { const el = $('conn'); el.textContent = text; el.className = 'pill ' + cls; }
 function msg(t) { $('msg').textContent = t; }
@@ -51,7 +53,40 @@ function currentCameraLabel() {
   const t = stream && stream.getVideoTracks()[0];
   return t ? t.label : '';
 }
-async function startCamera(deviceId) {
+// The widest view: 4:3 uses the whole sensor (16:9 crops it), the lens is zoomed all the
+// way out if the phone allows it, and a camera called "ultra wide" is preferred.
+// The camera picked in the list is remembered for next time.
+const SAVED = 'ark-camera';
+async function startCamera(deviceId = null, firstTime = false) {
+  if (!deviceId && firstTime) { try { deviceId = localStorage.getItem(SAVED); } catch (_) {} }
+  try { await openCamera(deviceId); } catch (e) { if (!deviceId) throw e; await openCamera(null); }
+  if (firstTime && !deviceId) {
+    // labels are only readable once the camera is allowed: look for an ultra-wide back camera
+    const devices = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput');
+    const wide = devices.find((d) => /ultra|wide|0[.,]5/i.test(d.label) && !/front|user|face/i.test(d.label));
+    if (wide && wide.deviceId !== stream.getVideoTracks()[0].getSettings().deviceId) {
+      try { await openCamera(wide.deviceId); } catch (_) { await openCamera(null); }
+    }
+  }
+  await zoomOut();
+  await fillCameraList();
+  showCamInfo();
+  send({ type: 'hello', ua: navigator.userAgent, camera: currentCameraLabel(), build: document.querySelector('meta[name=build]')?.content });
+}
+async function zoomOut() {
+  const track = stream.getVideoTracks()[0];
+  const caps = track.getCapabilities ? track.getCapabilities() : {};
+  if (caps.zoom && caps.zoom.min !== undefined) {
+    try { await track.applyConstraints({ advanced: [{ zoom: caps.zoom.min }] }); } catch (_) {}
+  }
+}
+function showCamInfo() {
+  const track = stream.getVideoTracks()[0], st = track.getSettings();
+  const caps = track.getCapabilities ? track.getCapabilities() : {};
+  const zoom = st.zoom !== undefined ? ` · zoom ${(+st.zoom).toFixed(1)}×${caps.zoom ? ` (min ${caps.zoom.min})` : ''}` : '';
+  $('caminfo').textContent = `Camera: ${track.label || 'camera'} · ${st.width}×${st.height}${zoom}`;
+}
+async function openCamera(deviceId) {
   if (stream) stream.getTracks().forEach((t) => t.stop());
   const constraints = {
     audio: false,
@@ -62,8 +97,6 @@ async function startCamera(deviceId) {
   stream = await navigator.mediaDevices.getUserMedia(constraints);
   video.srcObject = stream;
   await video.play();
-  await fillCameraList();
-  send({ type: 'hello', ua: navigator.userAgent, camera: currentCameraLabel(), build: document.querySelector('meta[name=build]')?.content });
 }
 async function fillCameraList() {
   const devices = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput');
@@ -78,7 +111,54 @@ async function fillCameraList() {
   });
   sel.hidden = devices.length < 2;
 }
-$('camera').addEventListener('change', (e) => startCamera(e.target.value).catch((err) => msg('Camera error: ' + err.message)));
+$('camera').addEventListener('change', (e) => {
+  try { localStorage.setItem(SAVED, e.target.value); } catch (_) {}
+  startCamera(e.target.value).catch((err) => msg('Camera error: ' + err.message));
+});
+
+// ---------- landscape: turn the picture upright ----------
+// With the phone on its side (and auto-rotate off) the camera picture is sideways.
+// The tilt sensor says which way is down; the picture is turned to match before
+// the people are detected, so standing people are upright and a sideways phone
+// gives a wide view. "Picture: …" can also be set by hand.
+// gravityAngle: how far the phone is turned anticlockwise (0 upright, 90 = top to the left,
+// -90 = top to the right, 180 upside down) — the same way round as screen.orientation.angle
+let gravityAngle = 0;
+const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent);   // iPhones report gravity the other way round
+window.addEventListener('devicemotion', (e) => {
+  const g = e.accelerationIncludingGravity; if (!g || g.x === null) return;
+  const gx = IOS ? -g.x : g.x, gy = IOS ? -g.y : g.y;        // "up" in the phone's own x (right) / y (top)
+  const ax = Math.abs(gx), ay = Math.abs(gy);
+  if (Math.max(ax, ay) < 4) return;                                  // lying flat: keep the last answer
+  const a = ax > ay * 1.3 ? (gx > 0 ? 90 : -90) : ay > ax * 1.3 ? (gy > 0 ? 0 : 180) : gravityAngle;
+  gravityAngle = a;
+});
+function wantedRotation() {
+  const mode = $('rotate').value;
+  if (mode !== 'auto') return +mode;
+  const screenAngle = (screen.orientation && screen.orientation.angle) || window.orientation || 0;
+  // the picture is turned by however much more the phone is turned than the screen is,
+  // back the other way (canvas angles go clockwise)
+  let r = -(gravityAngle - screenAngle) % 360;
+  if (r > 180) r -= 360; if (r <= -180) r += 360;
+  return r;
+}
+// the current camera picture, turned upright (returns the canvas to detect on)
+function uprightFrame() {
+  rot = wantedRotation();
+  const vw = video.videoWidth, vh = video.videoHeight, side = Math.abs(rot) === 90;
+  const w = side ? vh : vw, h = side ? vw : vh;
+  if (frameCv.width !== w || frameCv.height !== h) { frameCv.width = w; frameCv.height = h; }
+  fctx.setTransform(1, 0, 0, 1, 0, 0);
+  fctx.translate(w / 2, h / 2);
+  fctx.rotate(rot * Math.PI / 180);
+  fctx.drawImage(video, -vw / 2, -vh / 2);
+  document.body.classList.toggle('rotated', rot !== 0);
+  const turn = rot === 0 ? 'upright' : rot === 180 ? 'upside down' : rot > 0 ? 'turned ↻' : 'turned ↺';
+  if ($('turn').textContent !== turn) $('turn').textContent = turn;
+  $('stage').style.aspectRatio = `${w} / ${h}`;
+  return frameCv;
+}
 
 async function keepAwake() {
   try {
@@ -93,10 +173,11 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 function loop() {
   if (!running) return;
   if (video.readyState >= 2 && video.videoWidth) {
-    const { poses, worlds, ms } = detector.detect(video);
+    const src = uprightFrame();
+    const { poses, worlds, ms } = detector.detect(src);
     lastInf = ms;
     frames++;
-    const aspect = video.videoWidth / video.videoHeight;
+    const aspect = src.width / src.height;
     send({ type: 'pose', t: performance.now(), inf: Math.round(ms), fps, aspect, poses, worlds });
     draw(poses);
     $('people').textContent = `${poses.length} ${poses.length === 1 ? 'person' : 'people'}`;
@@ -113,10 +194,11 @@ function loop() {
 
 const COLORS = ['#f2b544', '#5ec8e5', '#f27a9b', '#8be07a'];
 function draw(poses) {
-  const vw = video.videoWidth, vh = video.videoHeight;
-  if (overlay.width !== vw) { overlay.width = vw; overlay.height = vh; }
+  const vw = frameCv.width, vh = frameCv.height;
+  if (overlay.width !== vw || overlay.height !== vh) { overlay.width = vw; overlay.height = vh; }
   ctx.clearRect(0, 0, vw, vh);
   if (!showPreview) { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, vw, vh); }
+  else if (rot !== 0) ctx.drawImage(frameCv, 0, 0);       // the turned picture (the <video> is hidden then)
   poses.forEach((p, k) => {
     ctx.strokeStyle = COLORS[k % COLORS.length]; ctx.lineWidth = 4; ctx.lineCap = 'round';
     for (const [a, b] of BONES) {
@@ -150,7 +232,10 @@ $('start').addEventListener('click', async () => {
   try {
     connect();
     msg('Starting camera…');
-    await startCamera();
+    // iPhone needs permission for the tilt sensor (asked on this tap)
+    try { if (window.DeviceMotionEvent && DeviceMotionEvent.requestPermission) await DeviceMotionEvent.requestPermission(); } catch (_) {}
+    await startCamera(null, true);
+    $('rotate').hidden = false;
     if (!detector) {
       detector = await createPoseDetector({ numPoses: 4, onStatus: msg });
       $('engine').textContent = 'engine ' + detector.delegate;

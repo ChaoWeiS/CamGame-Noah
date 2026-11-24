@@ -12,42 +12,114 @@ export const stats = {
   connected: false,
   fps: 0, inf: 0, rtt: null, people: 0, lastFrame: 0, camera: '',
   world3D: false,
-  phoneBuild: null,      // the phone page's build (from its hello)        // is the phone sending the 3D skeleton (new phone page)?
+  phoneBuild: null,      // the phone page's build (from its hello)
+  tracks: 0,             // people being tracked (confirmed boxes)
 };
 
 // ---------------------------------------------------------------- tracker
+// Every detected person gets a box (around their visible joints) and a track id that
+// stays with them: each frame, boxes are matched to last frame's tracks by how much
+// they overlap (best pairs first, over all pairs). Duplicate detections of one person
+// are merged, new people must be seen for a few frames, and a person who drops out
+// for a moment keeps their id. Players and lobby animals follow track ids.
+const CONFIRM_HITS = 3;      // frames before a new person counts
+const KEEP_MS = 800;         // how long a missing person keeps their id
+
+function boxOf(pts) {
+  let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity, n = 0, vis = 0;
+  for (let i = 0; i < 33; i++) {
+    const p = pts[i]; vis += p.v;
+    if (p.v < 0.3) continue;
+    n++; x0 = Math.min(x0, p.x); y0 = Math.min(y0, p.y); x1 = Math.max(x1, p.x); y1 = Math.max(y1, p.y);
+  }
+  if (n < 4) return null;
+  return { x0, y0, x1, y1, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, w: x1 - x0, h: y1 - y0, vis: vis / 33 };
+}
+function iou(a, b) {
+  const ix = Math.max(0, Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0));
+  const iy = Math.max(0, Math.min(a.y1, b.y1) - Math.max(a.y0, b.y0));
+  const inter = ix * iy, u = a.w * a.h + b.w * b.h - inter;
+  return u > 0 ? inter / u : 0;
+}
+
 class Tracker {
   constructor() {
-    this.skeletons = [];   // latest raw people: [{pts, key}]
+    this.skeletons = [];   // this frame's people (deduplicated): [{pts, key, world, box, track}]
+    this.tracks = [];      // [{id, box, vx, vy, pts, key, world, hits, lastSeen, confirmed, seen}]
+    this.nextId = 1;
     this.aspect = 4 / 3;
     this.players = [];     // locked players (camera or keyboard)
     this.locked = false;
   }
 
+  // confirmed tracks currently (or very recently) seen, left to right
+  people() {
+    return this.tracks.filter((t) => t.confirmed && t.seen).sort((a, b) => a.box.cx - b.box.cx);
+  }
+
   ingest(posesFlat, aspect, worlds = null) {
     this.aspect = aspect || this.aspect;
     stats.world3D = !!(worlds && worlds.length);
-    this.skeletons = posesFlat.map((flat, k) => {
+    const now = performance.now();
+    let dets = posesFlat.map((flat, k) => {
       const pts = toPoints(flat, this.aspect);
-      return { pts, key: keyPoints(pts), world: worlds && worlds[k] ? toWorld(worlds[k]) : null };
+      return { pts, key: keyPoints(pts), world: worlds && worlds[k] ? toWorld(worlds[k]) : null, box: boxOf(pts) };
+    }).filter((d) => d.box);
+    // merge duplicates: two detections that mostly overlap are one person (keep the clearer one)
+    dets.sort((a, b) => b.box.vis - a.box.vis);
+    dets = dets.filter((d, i) => !dets.slice(0, i).some((e) => iou(d.box, e.box) > 0.55));
+
+    // match to tracks: score every (track, detection) pair, take the best pairs first
+    const pairs = [];
+    for (const t of this.tracks) {
+      const dt = Math.min(0.3, (now - t.lastSeen) / 1000);
+      const pred = { ...t.box, x0: t.box.x0 + t.vx * dt, x1: t.box.x1 + t.vx * dt, y0: t.box.y0 + t.vy * dt, y1: t.box.y1 + t.vy * dt };
+      pred.cx = (pred.x0 + pred.x1) / 2; pred.cy = (pred.y0 + pred.y1) / 2;
+      dets.forEach((d, j) => {
+        const ov = iou(pred, d.box);
+        const dist = Math.hypot(pred.cx - d.box.cx, pred.cy - d.box.cy) / Math.max(0.05, Math.max(t.box.w, t.box.h, d.box.w));
+        const score = ov - 0.5 * dist;             // overlap good, distance (in body sizes) bad
+        if (ov > 0.1 || dist < 0.6) pairs.push({ t, j, score });
+      });
+    }
+    pairs.sort((a, b) => b.score - a.score);
+    const usedT = new Set(), usedD = new Set();
+    for (const { t, j } of pairs) {
+      if (usedT.has(t) || usedD.has(j)) continue;
+      usedT.add(t); usedD.add(j);
+      const d = dets[j], dt = Math.max(0.01, (now - t.lastSeen) / 1000);
+      t.vx += ((d.box.cx - t.box.cx) / dt - t.vx) * 0.3;
+      t.vy += ((d.box.cy - t.box.cy) / dt - t.vy) * 0.3;
+      Object.assign(t, { box: d.box, pts: d.pts, key: d.key, world: d.world, lastSeen: now, seen: true });
+      t.hits++; if (t.hits >= CONFIRM_HITS) t.confirmed = true;
+      d.track = t;
+    }
+    dets.forEach((d, j) => {
+      if (usedD.has(j)) return;
+      const t = { id: this.nextId++, box: d.box, vx: 0, vy: 0, pts: d.pts, key: d.key, world: d.world, hits: 1, lastSeen: now, confirmed: false, seen: true };
+      this.tracks.push(t); d.track = t;
     });
+    for (const t of this.tracks) if (!usedT.has(t) && t.lastSeen < now) t.seen = now - t.lastSeen < 250;
+    this.tracks = this.tracks.filter((t) => now - t.lastSeen < (t.confirmed ? KEEP_MS : 200));
+
+    this.skeletons = dets.filter((d) => d.track.confirmed);
     stats.people = this.skeletons.length;
-    stats.lastFrame = performance.now();
+    stats.tracks = this.tracks.filter((t) => t.confirmed).length;
+    stats.lastFrame = now;
     if (this.locked) this.match();
   }
 
   // Lock the people currently in view as players, left to right.
   lock(keyboardCount = 0) {
-    const seen = [...this.skeletons]
-      .filter((s) => s.key.sh.v > 0.4)
-      .sort((a, b) => a.key.sh.x - b.key.sh.x)
-      .slice(0, MAX_PLAYERS - keyboardCount);
+    const seen = this.people().filter((t) => t.key.sh.v > 0.4).slice(0, MAX_PLAYERS - keyboardCount);
     this.players = [];
-    seen.forEach((s) => {
+    seen.forEach((t) => {
       const body = new Body();
-      body.update(s.pts, s.world);
+      body.update(t.pts, t.world);
       body.calibrateFromCurrent();
-      this.players.push(makePlayer(this.players.length, 'camera', body, s.key.sh));
+      const pl = makePlayer(this.players.length, 'camera', body, t.key.sh);
+      pl.trackId = t.id;
+      this.players.push(pl);
     });
     for (let i = 0; i < keyboardCount && this.players.length < MAX_PLAYERS; i++) {
       this.players.push(makePlayer(this.players.length, 'keyboard', null, null, i));
@@ -58,25 +130,26 @@ class Tracker {
 
   unlock() { this.locked = false; this.players = []; }
 
-  // Keep each player attached to the same person: nearest skeleton to where they last were.
+  // Each player follows their own track. If their track is gone (they left the view),
+  // they take over a new, unclaimed track that appears near where they were.
   match() {
-    const cams = this.players.filter((p) => p.kind === 'camera');
-    const free = this.skeletons.map((s, i) => i);
     const now = performance.now();
-    // Present players first (tight radius), then lost ones (wider radius) re-acquire.
-    const order = [...cams].sort((a, b) => (b.present ? 1 : 0) - (a.present ? 1 : 0));
-    for (const pl of order) {
-      let best = -1, bestD = pl.present ? 0.45 : 0.9;
-      for (const i of free) {
-        const sh = this.skeletons[i].key.sh;
-        const d = Math.hypot(sh.x - pl.anchor.x, sh.y - pl.anchor.y);
-        if (d < bestD) { bestD = d; best = i; }
+    const cams = this.players.filter((p) => p.kind === 'camera');
+    const claimed = new Set(cams.map((p) => p.trackId));
+    for (const pl of cams) {
+      let t = this.tracks.find((x) => x.id === pl.trackId);
+      if (!t) {
+        let best = null, bestD = 0.9;
+        for (const x of this.tracks) {
+          if (!x.confirmed || claimed.has(x.id)) continue;
+          const d = Math.hypot(x.key.sh.x - pl.anchor.x, x.key.sh.y - pl.anchor.y);
+          if (d < bestD) { bestD = d; best = x; }
+        }
+        if (best) { t = best; pl.trackId = best.id; claimed.add(best.id); }
       }
-      if (best >= 0) {
-        free.splice(free.indexOf(best), 1);
-        const s = this.skeletons[best];
-        pl.body.update(s.pts, s.world);
-        pl.anchor = { x: s.key.sh.x, y: s.key.sh.y };
+      if (t && t.lastSeen === stats.lastFrame) {
+        pl.body.update(t.pts, t.world);
+        pl.anchor = { x: t.key.sh.x, y: t.key.sh.y };
         pl.present = true;
         pl.lastSeen = now;
       } else if (now - pl.lastSeen > 400) {
@@ -88,7 +161,7 @@ class Tracker {
 
 function makePlayer(slot, kind, body, anchor, keyboardIndex = 0) {
   return {
-    slot, kind, body, keyboardIndex,
+    slot, kind, body, keyboardIndex, trackId: null,
     color: PLAYER_COLORS[slot], css: PLAYER_CSS[slot],
     anchor: anchor ? { x: anchor.x, y: anchor.y } : { x: 0, y: 0 },
     present: kind === 'keyboard', lastSeen: performance.now(),
