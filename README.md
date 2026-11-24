@@ -96,3 +96,17 @@ Opening the game link on a phone switches to **phone mode** automatically: a big
 landscape (portrait shows "Turn your phone sideways"), lighter graphics, up to 2
 players. "Use another phone as the camera" still shows the QR code. Force a mode
 with `?mode=phone` or `?mode=pc`.
+
+## Linking several cameras
+
+Connect 2+ phones (each scans the QR code), then press **🔗 Link cameras** in the lobby:
+one person walks slowly around the play area waving while everyone else steps out of
+view (~10 s). The game works out where each phone is (`js/multicam.js`: each camera's
+view of the person is placed in 3D, the cameras are fitted to each other, the feet set
+the floor) and from then on merges everyone the cameras see — someone hidden from one
+phone is still seen by another. A top-down map shows the cameras and people.
+
+**If a phone is knocked** (its tilt sensor notices), the game pauses, waits for it to be
+put back and left still, calls out one player by their animal to walk about, re-links
+that camera, has everyone stand still for a moment, counts down and carries on
+(`js/calibui.js`). With a single camera it just does the "stand still" part.

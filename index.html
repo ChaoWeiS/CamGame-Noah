@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="build" content="1124-203314-camera-standby">
+<meta name="build" content="1124-210551-link-cameras">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Race to the Ark</title>
@@ -24,6 +24,23 @@
   #lobby button { font: inherit; padding: 0.6em 1em; border-radius: 10px; border: 0; background: #2b3b47; color: #fff8e6; cursor: pointer; }
   #lobby button:hover { background: #3a4f5e; }
   #kbhelp { font-size: 0.7em; opacity: 0.7; }
+  /* linking cameras */
+  #calib { position: absolute; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center;
+    background: rgba(8, 18, 26, 0.72); color: #fff8e6; font: 16px system-ui, sans-serif; text-align: center; }
+  #calib[hidden] { display: none; }
+  #calib .cbox { background: rgba(16, 32, 43, 0.96); border-radius: 18px; padding: 2.2vh 2.5vw; width: min(640px, 80%);
+    display: flex; flex-direction: column; gap: 1.2vh; align-items: center; box-shadow: 0 10px 40px rgba(0,0,0,0.4); }
+  #calib h2 { margin: 0; font-size: clamp(22px, 4vh, 40px); }
+  #cSay { font-size: clamp(16px, 2.6vh, 26px); line-height: 1.4; }
+  #cNote { font-size: 13px; opacity: 0.7; }
+  #cMap { width: 100%; max-width: 520px; height: auto; border-radius: 10px; }
+  #cBars { width: 100%; display: grid; gap: 6px; }
+  .cbar { display: flex; align-items: center; gap: 10px; font-size: 14px; }
+  .cbar div { flex: 1; height: 10px; background: #2b3b47; border-radius: 6px; overflow: hidden; }
+  .cbar i { display: block; height: 100%; background: #8be07a; transition: width 0.2s; }
+  #calib button { font: inherit; padding: 0.6em 1.2em; border-radius: 10px; border: 0; background: #2b3b47; color: #fff8e6; cursor: pointer; }
+  #calib #cRetry { background: #f2b544; color: #1d1d1d; font-weight: 700; }
+  .cbtns { display: flex; gap: 10px; }
   /* phone mode */
   #turnPhone { display: none; }
   @media (orientation: portrait) {
@@ -56,6 +73,7 @@
     </div>
     <div id="kbhelp" class="pc-only"></div>
     <button id="qrBtn" hidden>Use another phone as the camera</button>
+    <button id="linkBtn" hidden>🔗 Link cameras</button>
     <a href="bear3d.html" style="color:#9fd6ef;font-size:0.8em">🐻 Try the 3D bear test →</a>
   </div>
   <div id="hud"></div>

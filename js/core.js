@@ -1,6 +1,7 @@
 // Core platform: connection (phone → PC), local webcam fallback,
 // player tracking/identity and keyboard test players.
 import { Body, toPoints, toWorld, keyPoints } from './body.js';
+import { multicam } from './multicam.js';
 
 export const PLAYER_COLORS = [0xf2b544, 0x5ec8e5, 0xf27a9b, 0x8be07a];
 export const PLAYER_CSS = ['#f2b544', '#5ec8e5', '#f27a9b', '#8be07a'];
@@ -14,6 +15,7 @@ export const stats = {
   world3D: false,
   phoneBuild: null,      // the phone page's build (from its hello)
   tracks: 0,             // people being tracked (confirmed boxes)
+  linked: 0,             // cameras merged into the picture (0 = one camera)
 };
 
 // ---------------------------------------------------------------- tracker
@@ -223,12 +225,14 @@ window.addEventListener('keyup', (e) => {
 });
 
 // ---------------------------------------------------------------- phone connection (PeerJS / WebRTC)
-// Several phones may connect. Only ONE is the camera at a time (mixing two camera
-// angles without calibrating them makes players jump about); the others wait on
-// standby. If the active phone goes, the next one takes over; a standby phone can
-// also tap "Use this camera" to take over.
+// Several phones may connect. Until they are linked (calibrated together), only ONE is
+// the camera (mixing two unlinked camera angles makes players jump about); the others
+// wait on standby but keep sending, so they can be linked. If the main phone goes,
+// the next one takes over; a standby phone can tap "Use this camera" to take over.
+// Once 2+ cameras are linked, everyone they see is merged (multicam.js).
 export const net = {
   roomId: null, peer: null, conn: null, conns: [], phoneUrl: '', onStatus: () => {},
+  onMoved: () => {},          // (camera id) a phone was knocked — set by the calibration screen
   start() {
     const id = 'ark-' + Math.random().toString(36).slice(2, 8);
     this.roomId = id;
@@ -250,12 +254,34 @@ export const net = {
       c.on('data', (d) => {
         if (!d) return;
         if (d.type === 'take') { this.conn = c; this.roles(); return; }
-        if (c !== this.conn) return;                     // standby phones are ignored
+        if (d.type === 'moved') {
+          // only matters if this phone is in use: linked, or the main camera
+          const inUse = !!multicam.cams.get(c.peer)?.calib || c === this.conn;
+          multicam.moved(c.peer); this.roles();
+          if (inUse) this.onMoved(c.peer);
+          return;
+        }
         if (d.type === 'pose') {
+          multicam.addFrame(c.peer, { poses: d.poses, worlds: d.worlds, aspect: d.aspect, still: d.still });
           if (stats.source !== 'phone') return;
+          if (multicam.active()) {
+            // linked cameras: the game sees everyone, merged, through the view camera
+            if (!multicam.cams.get(multicam.view)?.calib) multicam.view = multicam.linked()[0].id;
+            if (c.peer !== multicam.view) return;
+            const f = multicam.fuse();
+            if (!f) return;
+            stats.fps = d.fps; stats.inf = d.inf; stats.linked = f.cams;
+            tracker.ingest(f.poses, f.aspect, f.worlds);
+            return;
+          }
+          stats.linked = 0;
+          if (c !== this.conn) return;                   // standby phones only help with linking
           stats.fps = d.fps; stats.inf = d.inf;
           tracker.ingest(d.poses, d.aspect, d.worlds);
-        } else if (d.type === 'pong') {
+          return;
+        }
+        if (c !== this.conn) return;
+        if (d.type === 'pong') {
           stats.rtt = Math.round(performance.now() - d.t);
         } else if (d.type === 'hello') {
           stats.camera = d.camera || '';
@@ -264,6 +290,7 @@ export const net = {
       });
       c.on('close', () => {
         this.conns = this.conns.filter((x) => x !== c);
+        if (!this.conns.some((x) => x.peer === c.peer)) multicam.disconnect(c.peer);
         if (this.conn === c) { this.conn = this.conns.find((x) => x.open) || null; this.roles(); }
         if (!this.conn) { stats.connected = false; this.onStatus('Phone disconnected — waiting…'); }
       });
@@ -274,7 +301,7 @@ export const net = {
   },
   // tell every phone whether it is the camera or on standby
   roles() {
-    for (const c of this.conns) if (c.open) { try { c.send({ type: 'role', active: c === this.conn }); } catch (_) {} }
+    for (const c of this.conns) if (c.open) { try { c.send({ type: 'role', active: c === this.conn, linked: !!multicam.cams.get(c.peer)?.calib }); } catch (_) {} }
     if (this.conn) {
       stats.connected = true; stats.source = 'phone';
       const extra = this.conns.filter((c) => c.open).length - 1;

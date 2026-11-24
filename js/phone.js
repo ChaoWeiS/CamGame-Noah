@@ -39,9 +39,9 @@ function openConn(room) {
     if (d && d.type === 'ping') conn.send({ type: 'pong', t: d.t });
     // another phone is already the camera: wait on standby (until it goes, or "Use this camera")
     if (d && d.type === 'role') {
-      standby = !d.active;
-      setConn(standby ? 'Standby — another phone is the camera' : 'Connected — this is the camera', standby ? 'wait' : 'ok');
-      $('take').hidden = !standby;
+      standby = !d.active && !d.linked;
+      setConn(d.active ? 'Connected — main camera' : d.linked ? 'Connected — linked camera' : 'Standby — another phone is the camera (calibrate on the big screen to use both)', standby ? 'wait' : 'ok');
+      $('take').hidden = d.active;
     }
   });
   conn.on('close', () => { setConn('Disconnected — retrying', 'bad'); conn = null; retry(); });
@@ -131,8 +131,28 @@ $('camera').addEventListener('change', (e) => {
 // -90 = top to the right, 180 upside down) — the same way round as screen.orientation.angle
 let gravityAngle = 0;
 const IOS = /iPhone|iPad|iPod/.test(navigator.userAgent);   // iPhones report gravity the other way round
+// ---------- knocked over? ----------
+// A jolt (shake far beyond gravity), or the phone settling at a clearly different angle
+// than before, means the camera moved: tell the big screen (it pauses and re-links it).
+// "still" goes out with every frame: no jolt for 1.5 s and a settled angle.
+let baseG = null, lastJolt = 0, sentMoved = false, smoothG = null, motionSeen = false;
+function watchKnocks(g, now) {
+  motionSeen = true;
+  const mag = Math.hypot(g.x, g.y, g.z);
+  if (Math.abs(mag - 9.81) > 4.5) lastJolt = now;
+  smoothG = smoothG ? smoothG.map((v, i) => v + ([g.x, g.y, g.z][i] - v) * 0.1) : [g.x, g.y, g.z];
+  const settled = now - lastJolt > 1500;
+  if (baseG) {
+    const c = (baseG[0] * smoothG[0] + baseG[1] * smoothG[1] + baseG[2] * smoothG[2]) / (Math.hypot(...baseG) * Math.hypot(...smoothG));
+    const tilted = Math.acos(Math.max(-1, Math.min(1, c))) > 12 * Math.PI / 180;
+    if ((tilted || now - lastJolt < 50) && !sentMoved) { sentMoved = true; send({ type: 'moved' }); baseG = null; }
+  } else if (settled) { baseG = [...smoothG]; sentMoved = false; }
+}
+const isStill = () => !motionSeen || (!!baseG && performance.now() - lastJolt > 1500);   // no sensor: assume still
+
 window.addEventListener('devicemotion', (e) => {
   const g = e.accelerationIncludingGravity; if (!g || g.x === null) return;
+  watchKnocks(g, performance.now());
   const gx = IOS ? -g.x : g.x, gy = IOS ? -g.y : g.y;        // "up" in the phone's own x (right) / y (top)
   const ax = Math.abs(gx), ay = Math.abs(gy);
   if (Math.max(ax, ay) < 4) return;                                  // lying flat: keep the last answer
@@ -184,7 +204,7 @@ function loop() {
     lastInf = ms;
     frames++;
     const aspect = src.width / src.height;
-    if (!standby) send({ type: 'pose', t: performance.now(), inf: Math.round(ms), fps, aspect, poses, worlds });
+    send({ type: 'pose', t: performance.now(), inf: Math.round(ms), fps, aspect, poses, worlds, still: isStill() });
     draw(poses);
     $('people').textContent = `${poses.length} ${poses.length === 1 ? 'person' : 'people'}`;
   }
