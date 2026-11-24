@@ -122,7 +122,9 @@ export class LobbyScene extends Phaser.Scene {
       shown.add(slot);
       // a faint box in the person's colour shows who the tracker thinks is who
       const b0 = map({ x: t.box.x0, y: t.box.y0 }), b1 = map({ x: t.box.x1, y: t.box.y1 });
-      g.lineStyle(3, PLAYER_COLORS[slot], 0.5).strokeRoundedRect(b0.x - 8, b0.y - 8, b1.x - b0.x + 16, b1.y - b0.y + 16, 10);
+      const bx0 = Math.max(ox + 2, b0.x - 8), by0 = Math.max(oy + 2, b0.y - 8);
+      const bx1 = Math.min(ox + aspect * s - 2, b1.x + 8), by1 = Math.min(oy + s - 2, b1.y + 8);
+      g.lineStyle(3, PLAYER_COLORS[slot], 0.5).strokeRoundedRect(bx0, by0, bx1 - bx0, by1 - by0, 10);
       const gap = Math.min(...spots.filter((o) => o !== sp).map((o) => Math.abs(o.x - sp.x)), Infinity);
       const h = Math.min(sp.h, gap * 1.15, f.h * 0.85, sp.footY - f.y - 4);
       const in3D = this.stage.place(slot, id, sp.x, sp.footY, h, t.view.pts, null, time / 1000, t.view.world);
