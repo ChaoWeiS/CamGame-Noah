@@ -55,7 +55,7 @@ const REST = {
 // how far in from the body's edge the shoulder joint sits (1 = at the edge)
 export const SHOULDER_IN = 0.62;
 // rounder animals need their arms a bit further out, or the arms sink into the belly
-const SHOULDER_FOR = { bear: 0.7, dog: 0.6, chicken: 0.66, hamster: 0.82 };
+const SHOULDER_FOR = { bear: 0.7, dog: 0.38, chicken: 0.66, hamster: 0.82 };
 
 export async function loadRiggedCharacter(url, opts = {}) {
   const id = Object.keys(SHOULDER_FOR).find((k) => url.includes(k));
@@ -280,8 +280,9 @@ export class RiggedCharacter {
       const b = this.b['upper' + s];
       const d = _d.set(side, 0, 0).applyQuaternion(b.quaternion);      // where the upper arm points (in the chest)
       const t = Math.min(1, Math.max(0, (d.y + 0.3) / 1.2)), f = t * t * (3 - 2 * t);
+      // relaxed arms: shoulders drop and slope (not a square, boxy top); raised: they lift
       b.position.set(side * (j.shoulderInner + (j.shoulderOuter - j.shoulderInner) * f),
-        j.shoulderY - this.chestY + f * this.height * 0.025, 0);
+        j.shoulderY - this.chestY + (f - 0.45) * this.height * 0.055, 0);
     }
   }
 
