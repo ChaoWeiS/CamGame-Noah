@@ -1,3 +1,4 @@
+import { MODELS } from './race3d.js';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { net, localCam, tracker, stats } from './core.js';
@@ -58,10 +59,10 @@ addEventListener('resize', () => {
 // Tripo models, auto-rigged so they bend at shoulders, elbows, hips and knees.
 // ?char=hamster picks one; ?model=simple uses the older shape-built bear.
 const CHARS = [
-  { id: 'bear', name: 'Barnaby', emoji: '🐻', file: 'assets/models/bear_tripo.glb' },
-  { id: 'hamster', name: 'Hammy', emoji: '🐹', file: 'assets/models/hamster.glb' },
-  { id: 'chicken', name: 'Cluck', emoji: '🐔', file: 'assets/models/chicken.glb' },
-  { id: 'dog', name: 'Scout', emoji: '🐶', file: 'assets/models/dog.glb' },
+  { id: 'bear', name: 'Barnaby', emoji: '🐻', file: MODELS.bear },
+  { id: 'hamster', name: 'Hammy', emoji: '🐹', file: MODELS.hamster },
+  { id: 'chicken', name: 'Cluck', emoji: '🐔', file: MODELS.chicken },
+  { id: 'dog', name: 'Scout', emoji: '🐶', file: MODELS.dog },
 ];
 const pick = CHARS.find((c) => c.id === params.get('char')) || CHARS[0];
 $('title').textContent = `${pick.emoji} ${pick.name} — 3D test`;

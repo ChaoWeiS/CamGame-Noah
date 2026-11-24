@@ -15,11 +15,14 @@ import { L } from './body.js';
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
 // characters that have a 3D model (others keep their 2D sprite)
+// Detailed models on the big screen (assets/models/hd, ~7 MB each, look like the originals);
+// the light ones (~3-4 MB) in phone mode. Add ?models=lite or ?models=hd to choose.
+const MODEL_DIR = (new URLSearchParams(location.search).get('models') || (LITE ? 'lite' : 'hd')) === 'lite' ? 'assets/models/' : 'assets/models/hd/';
 export const MODELS = {
-  bear: 'assets/models/bear_tripo.glb',
-  hamster: 'assets/models/hamster.glb',
-  chicken: 'assets/models/chicken.glb',
-  dog: 'assets/models/dog.glb',
+  bear: MODEL_DIR + 'bear_tripo.glb',
+  hamster: MODEL_DIR + 'hamster.glb',
+  chicken: MODEL_DIR + 'chicken.glb',
+  dog: MODEL_DIR + 'dog.glb',
 };
 const PROPS_FILE = 'assets/models/props.glb';
 

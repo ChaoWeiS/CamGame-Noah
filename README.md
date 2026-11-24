@@ -110,3 +110,11 @@ phone is still seen by another. A top-down map shows the cameras and people.
 put back and left still, calls out one player by their animal to walk about, re-links
 that camera, has everyone stand still for a moment, counts down and carries on
 (`js/calibui.js`). With a single camera it just does the "stand still" part.
+
+## Model detail
+
+`assets/models/hd/` holds the detailed animals used on the big screen (~10% of Tripo's
+triangles, original textures, fine precision — practically identical to the originals,
+~7 MB each). `assets/models/` holds the light ones used in phone mode (~3–4 MB).
+Rebuild with `tools/optimize_model.sh original.glb out.glb hd|lite`.
+Force a choice with `?models=hd` or `?models=lite`.
