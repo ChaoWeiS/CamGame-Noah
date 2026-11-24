@@ -88,3 +88,11 @@ of old and new code, every page (`index.html`, `phone.html`, `bear3d.html`) chec
 **Before each push run `python3 tools/stamp.py "short note"`** — it writes a new build
 id into `version.json` and each page's `<meta name="build">`. The PC's HUD (F9) shows
 the build it is running, and warns when the phone page is on a different one.
+
+## Phone mode
+
+Opening the game link on a phone switches to **phone mode** automatically: a big
+"▶ Play on this phone" button uses the phone's own front camera, goes full screen in
+landscape (portrait shows "Turn your phone sideways"), lighter graphics, up to 2
+players. "Use another phone as the camera" still shows the QR code. Force a mode
+with `?mode=phone` or `?mode=pc`.

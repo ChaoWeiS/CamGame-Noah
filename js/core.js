@@ -262,15 +262,16 @@ export const net = {
 // ---------------------------------------------------------------- PC webcam fallback
 export const localCam = {
   running: false,
-  async start(onStatus = () => {}) {
+  // opts: { facing: 'user' (front camera, for phone mode), numPoses }
+  async start(onStatus = () => {}, opts = {}) {
     if (this.running) return;
     const { createPoseDetector } = await import('./pose.js');
     const video = document.createElement('video');
     video.playsInline = true; video.muted = true;
     onStatus('Starting webcam…');
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 480 } }, audio: false });
+    const stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 480 }, ...(opts.facing ? { facingMode: opts.facing } : {}) }, audio: false });
     video.srcObject = stream; await video.play();
-    const det = await createPoseDetector({ numPoses: 4, onStatus });
+    const det = await createPoseDetector({ numPoses: opts.numPoses || 4, onStatus });
     stats.source = 'webcam'; stats.camera = stream.getVideoTracks()[0].label;
     this.running = true;
     let frames = 0, t0 = performance.now();
@@ -285,6 +286,6 @@ export const localCam = {
       requestAnimationFrame(loop);
     };
     loop();
-    onStatus('Using this computer’s webcam');
+    onStatus(opts.facing === 'user' ? 'Using this phone’s front camera' : 'Using this computer’s webcam');
   },
 };

@@ -7,6 +7,7 @@
 // World units: metres along the track, "animal heights" across and up
 // (the runner is 1 unit tall and stands at z = 0; things ahead are at z < 0).
 import * as THREE from 'three';
+import { LITE } from './mode.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { loadRiggedCharacter, PHYSICS_FOR } from './autorig.js';
 import { L } from './body.js';
@@ -82,8 +83,8 @@ export class Race3D {
     this.game = phaserGame;
     this.cfg = cfg;
     this.canvasEl = phaserGame.canvas;
-    this.renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-    this.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
+    this.renderer = new THREE.WebGLRenderer({ alpha: true, antialias: !LITE });
+    this.renderer.setPixelRatio(LITE ? 1 : Math.min(2, window.devicePixelRatio));   // phones: fewer pixels to draw
     this.renderer.setClearColor(0x000000, 0);
     this.renderer.autoClear = false;
     const el = this.renderer.domElement;
@@ -126,6 +127,11 @@ export class Race3D {
       { keys: ['oak', 'pine', 'pine', 'oak', 'bare'], gap: [2.2, 3.6], off: [4.2, 6.8], tree: 1, shadow: false },
       { keys: ['pine', 'oak', 'pine'], gap: [2.6, 4.2], off: [7.5, 11], tree: 1, shadow: false },
     ];
+    if (LITE) {          // phones: no far tree row, sparser plants, fewer shadows
+      ROWS.pop();
+      ROWS[0].gap = [1.4, 2.6];
+      ROWS.forEach((r) => { r.shadow = false; });
+    }
     for (const side of [-1, 1]) {
       for (const row of ROWS) {
         for (let d = -10 + r() * 2; d < courseLength + this.cfg.VIEW; d += row.gap[0] + r() * (row.gap[1] - row.gap[0])) {

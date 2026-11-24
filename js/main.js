@@ -10,7 +10,11 @@ const $ = (id) => document.getElementById(id);
 $('wrap').style.setProperty('--ar', String(ASPECT));
 
 // ---- phone connection + QR code
-net.onStatus = (s) => { $('status').textContent = s; };
+net.onStatus = (s) => {
+  // in phone mode the camera-phone connection is only shown when its QR code is shown
+  const b = document.body.classList;
+  if (!b.contains('phone') || b.contains('show-qr')) $('status').textContent = s;
+};
 net.start();
 $('room').textContent = net.roomId;
 $('link').textContent = net.phoneUrl;

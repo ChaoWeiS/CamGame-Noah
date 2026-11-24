@@ -4,6 +4,7 @@
 // camera in Phaser's screen pixels, so an actor is placed by where its feet go
 // and how tall it is, in the same coordinates the scenes already use.
 import * as THREE from 'three';
+import { LITE } from './mode.js';
 import { loadRiggedCharacter, EXAGGERATE_FOR, PHYSICS_FOR } from './autorig.js';
 import { MODELS } from './race3d.js';
 
@@ -35,7 +36,7 @@ export class Stage3D {
     this.game = phaserGame;
     this.canvasEl = phaserGame.canvas;
     this.renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
-    this.renderer.setPixelRatio(Math.min(2, window.devicePixelRatio));
+    this.renderer.setPixelRatio(LITE ? 1 : Math.min(2, window.devicePixelRatio));   // phones: fewer pixels to draw
     this.renderer.setClearColor(0x000000, 0);
     const el = this.renderer.domElement;
     Object.assign(el.style, { position: 'absolute', pointerEvents: 'none', left: '0', top: '0' });

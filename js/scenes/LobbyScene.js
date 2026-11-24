@@ -3,6 +3,7 @@ import { W, H, txt, sky, drawSkeleton, Hold, session, loadCharacters, CHARACTERS
 import { Puppet } from '../puppet.js';
 import { Stage3D, preloadCast, OverlayText } from '../stage3d.js';
 import { SkeletonSmoother } from '../body.js';
+import { PHONE, PHONE_PLAYERS, goFullLandscape } from '../mode.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -44,9 +45,24 @@ export class LobbyScene extends Phaser.Scene {
     };
     $('camBtn').onclick = async () => {
       $('camBtn').disabled = true;
-      try { await localCam.start((s) => { $('status').textContent = s; }); }
-      catch (e) { $('status').textContent = 'Webcam error: ' + e.message; $('camBtn').disabled = false; }
+      if (PHONE) await goFullLandscape();
+      try {
+        await localCam.start((s) => { $('status').textContent = s; }, PHONE ? { facing: 'user', numPoses: PHONE_PLAYERS } : {});
+        if (PHONE) $('camBtn').hidden = true;
+      } catch (e) { $('status').textContent = 'Camera error: ' + e.message; $('camBtn').disabled = false; }
     };
+    // Phone mode: play with this phone's front camera; the QR code is still there if wanted
+    if (PHONE) {
+      document.body.classList.add('phone');
+      $('lobbyTitle').textContent = '📱 Play on this phone';
+      $('camBtn').textContent = '▶ Play on this phone';
+      $('camBtn').classList.add('big');
+      $('kbBtn').hidden = true;
+      $('qrBtn').hidden = false;
+      $('qrBtn').onclick = () => { document.body.classList.toggle('show-qr'); $('qrBtn').blur(); };
+      $('status').textContent = 'Prop the phone up sideways, step back until you fit, and wave!';
+      $('hud').hidden = true;
+    }
 
     this.enterKey = this.input.keyboard.addKey('ENTER');
     // 3D animals copy the people in view (the 2D puppets stand in until they load)

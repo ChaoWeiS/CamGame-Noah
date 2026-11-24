@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="build" content="1124-202441-boxes-clipped">
+<meta name="build" content="1124-203149-phone-mode">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Race to the Ark</title>
@@ -24,6 +24,16 @@
   #lobby button { font: inherit; padding: 0.6em 1em; border-radius: 10px; border: 0; background: #2b3b47; color: #fff8e6; cursor: pointer; }
   #lobby button:hover { background: #3a4f5e; }
   #kbhelp { font-size: 0.7em; opacity: 0.7; }
+  /* phone mode */
+  #turnPhone { display: none; }
+  @media (orientation: portrait) {
+    body.phone #turnPhone { display: flex; position: fixed; inset: 0; z-index: 50; background: #10202b; color: #fff8e6;
+      align-items: center; justify-content: center; text-align: center; font: 700 28px system-ui, sans-serif; line-height: 1.6; }
+  }
+  body.phone #lobby .pc-only { display: none; }
+  body.phone.show-qr #lobby .pc-only { display: revert; }
+  #lobby button.big { font-size: 1.5em; padding: 0.8em 1.4em; background: #f2b544; color: #1d1d1d; font-weight: 700; }
+  #lobby button.big:hover { background: #ffc85c; }
   #hud {
     position: absolute; right: 0.6%; top: 1%; padding: 4px 8px; border-radius: 8px;
     background: rgba(0, 0, 0, 0.5); color: #e8f4fa; font: 11px/1.35 ui-monospace, Menlo, monospace; pointer-events: none;
@@ -34,20 +44,22 @@
 <div id="wrap">
   <div id="game"></div>
   <div id="lobby">
-    <h2>📱 Scan to use your phone as the camera</h2>
-    <img id="qr" alt="QR code for the phone camera page">
-    <div>Room code</div>
-    <div id="room">…</div>
-    <a id="link" target="_blank"></a>
+    <h2 id="lobbyTitle">📱 Scan to use your phone as the camera</h2>
+    <img id="qr" class="pc-only" alt="QR code for the phone camera page">
+    <div class="pc-only">Room code</div>
+    <div id="room" class="pc-only">…</div>
+    <a id="link" class="pc-only" target="_blank"></a>
     <div id="status">Starting…</div>
     <div>
       <button id="camBtn">Use this computer’s webcam</button>
       <button id="kbBtn">Keyboard players: 0</button>
     </div>
-    <div id="kbhelp"></div>
+    <div id="kbhelp" class="pc-only"></div>
+    <button id="qrBtn" hidden>Use another phone as the camera</button>
     <a href="bear3d.html" style="color:#9fd6ef;font-size:0.8em">🐻 Try the 3D bear test →</a>
   </div>
   <div id="hud"></div>
+  <div id="turnPhone">↻<br>Turn your phone sideways</div>
 </div>
 <script type="importmap">
 { "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }
