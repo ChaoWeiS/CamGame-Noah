@@ -52,7 +52,14 @@ const REST = {
   thighR: new THREE.Vector3(0, -1, 0), shinR: new THREE.Vector3(0, -1, 0),
 };
 
-export async function loadRiggedCharacter(url) {
+// how far in from the body's edge the shoulder joint sits (1 = at the edge)
+export const SHOULDER_IN = 0.62;
+// rounder animals need their arms a bit further out, or the arms sink into the belly
+const SHOULDER_FOR = { bear: 0.7, dog: 0.6, chicken: 0.66, hamster: 0.82 };
+
+export async function loadRiggedCharacter(url, opts = {}) {
+  const id = Object.keys(SHOULDER_FOR).find((k) => url.includes(k));
+  const shoulderIn = opts.shoulderIn ?? SHOULDER_FOR[id] ?? SHOULDER_IN;
   const gltf = await new GLTFLoader().loadAsync(url);
   gltf.scene.updateMatrixWorld(true);
   let src = null;
@@ -190,7 +197,8 @@ export async function loadRiggedCharacter(url) {
   const B = { hips, spine, chest, head, belly, tail };
   for (const [s, side] of [['L', -1], ['R', 1]]) {
     const elbowY = armRootY + (armTipY - armRootY) * 0.5;
-    B['upper' + s] = bone('upper' + s, side * sx, armRootY, chest);
+    // the shoulder joint sits inside the body (not at its edge), so arms hang close to the sides
+    B['upper' + s] = bone('upper' + s, side * sx * shoulderIn, armRootY - H * 0.01, chest);
     B['fore' + s] = bone('fore' + s, side * elbowX, elbowY, B['upper' + s]);
     B['hand' + s] = bone('hand' + s, side * wristX, armRootY + (armTipY - armRootY) * 0.8, B['fore' + s]);
     B['thigh' + s] = bone('thigh' + s, side * legX, hipY, hips);
@@ -201,7 +209,7 @@ export async function loadRiggedCharacter(url) {
 
   // 4. Skin weights: arms, legs, then the rest split between spine and hips
   const si = new Uint16Array(n * 4), sw = new Float32Array(n * 4);
-  const bA = H * 0.05;                      // softness at the shoulders
+  const bA = H * 0.08;                      // softness at the shoulders (a gentle blend, no square edge)
   for (let i = 0; i < n; i++) {
     const x = pos[i * 3], y = pos[i * 3 + 1], ax = Math.abs(x), s = x < 0 ? 'L' : 'R';
     const ws = {};
@@ -250,7 +258,7 @@ export async function loadRiggedCharacter(url) {
   mesh.bind(skeleton);
   const root = new THREE.Group();
   root.add(mesh);
-  return new RiggedCharacter(root, mesh, B, H, { hasTail, frontZ, backZ, sx, elbowX, wristX, chestY, neckY, crotchY, kneeY, armRootY, armTipY, legX, waistY });
+  return new RiggedCharacter(root, mesh, B, H, { shoulderInner: sx * shoulderIn, shoulderOuter: sx * 0.98, shoulderY: armRootY - H * 0.01, hasTail, frontZ, backZ, sx, elbowX, wristX, chestY, neckY, crotchY, kneeY, armRootY, armTipY, legX, waistY });
 }
 
 export class RiggedCharacter {
@@ -260,7 +268,21 @@ export class RiggedCharacter {
     // rest directions of each bone (screen angle, y down): arms point out, legs point down
     this.rest = { upperL: Math.PI, upperR: 0, thighL: Math.PI / 2, thighR: Math.PI / 2 };
     this.restPos = { belly: bones.belly.position.clone(), chest: bones.chest.position.clone() };
+    this.chestY = bones.chest.userData.world.y;
     this.phys = null;
+  }
+
+  // Shoulders roll out and up as an arm lifts: arms hang close to the body when down,
+  // and go up beside the head (not behind it) when raised. Call after posing the arms.
+  adjustShoulders() {
+    const j = this.joints;
+    for (const [s, side] of [['L', -1], ['R', 1]]) {
+      const b = this.b['upper' + s];
+      const d = _d.set(side, 0, 0).applyQuaternion(b.quaternion);      // where the upper arm points (in the chest)
+      const t = Math.min(1, Math.max(0, (d.y + 0.3) / 1.2)), f = t * t * (3 - 2 * t);
+      b.position.set(side * (j.shoulderInner + (j.shoulderOuter - j.shoulderInner) * f),
+        j.shoulderY - this.chestY + f * this.height * 0.025, 0);
+    }
   }
 
   // Secondary motion: springs that lag behind the body and wobble back.
@@ -368,6 +390,7 @@ export class RiggedCharacter {
       }
     }
     this.poseHands2D(pts);
+    this.adjustShoulders();
   }
 
   // Whole-body copy from the 3D skeleton (body.world): the hips turn and lean,
@@ -440,6 +463,7 @@ export class RiggedCharacter {
       this.hop += (dy * 0.45 * this.height - this.hop) * 0.5;
       this.b.hips.position.y = this.hipY0 + this.hop;
     }
+    this.adjustShoulders();
     this.used3D = true;
   }
 
@@ -473,5 +497,6 @@ export class RiggedCharacter {
     ['thighL', 'thighR', 'shinL', 'shinR'].forEach((k) => ease(k, 0));
     this.tilt *= 0.9; this.b.spine.rotation.z = -this.tilt;
     this.hop *= 0.9; this.b.hips.position.y = this.hipY0 + this.hop;
+    this.adjustShoulders();
   }
 }

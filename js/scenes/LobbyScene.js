@@ -3,6 +3,7 @@ import { W, H, txt, sky, drawSkeleton, Hold, session, loadCharacters, CHARACTERS
 import { Puppet } from '../puppet.js';
 import { Stage3D, preloadCast, OverlayText } from '../stage3d.js';
 import { SkeletonSmoother } from '../body.js';
+import { multicam } from '../multicam.js';
 import { PHONE, PHONE_PLAYERS, goFullLandscape } from '../mode.js';
 
 const $ = (id) => document.getElementById(id);
@@ -25,12 +26,13 @@ export class LobbyScene extends Phaser.Scene {
     // live puppets: everyone in view becomes a character that copies them
     this.puppets = Array.from({ length: MAX_PLAYERS }, (_, i) => new Puppet(this, CHARACTERS[i % CHARACTERS.length].id, 2).setVisible(false));
     this.count = this.add.text(f.x + f.w / 2, f.y + f.h + 30, '', txt(24, '#fff8e6')).setOrigin(0.5);
-    this.prompt = this.add.text(W / 2, H - 24, 'Everyone stand in a row facing the camera · raise both hands to start (or press Enter)',
+    this.prompt = this.add.text(W / 2, H - 24, 'Everyone stand in a row facing the camera · everyone raise both hands for 3 seconds to start (or hold Enter)',
       txt(20, '#fff8e6')).setOrigin(0.5);
     // countdown / messages: at the top of the camera frame, above the 3D animals
     this.big = new OverlayText(this.game, f.x + f.w / 2, f.y + 58, 54);
 
-    this.startHold = new Hold(1000);
+    // everyone in view must hold their hands up for 3 s (so a stray wave doesn't start the game)
+    this.startHold = new Hold(3000);
     this.counting = false;
 
     // HTML panel (QR code, buttons)
@@ -131,7 +133,7 @@ export class LobbyScene extends Phaser.Scene {
       const footY = Math.min(f.y + f.h - 6, ank.length ? Math.max(...ank) : hipY + (hipY - shY) * 1.3);
       return { x: (hipL.x + hipR.x) / 2, footY, h: (footY - nose.y) * 1.1 };
     });
-    let anyHandsUp = false;
+    let handsUp = 0;
     const shown = new Set();
     people.forEach((t, i) => {
       const slot = this.slotOf.get(t.id), sp = spots[i], id = CHARACTERS[slot % CHARACTERS.length].id;
@@ -140,26 +142,35 @@ export class LobbyScene extends Phaser.Scene {
       const b0 = map({ x: t.box.x0, y: t.box.y0 }), b1 = map({ x: t.box.x1, y: t.box.y1 });
       const bx0 = Math.max(ox + 2, b0.x - 8), by0 = Math.max(oy + 2, b0.y - 8);
       const bx1 = Math.min(ox + aspect * s - 2, b1.x + 8), by1 = Math.min(oy + s - 2, b1.y + 8);
-      g.lineStyle(3, PLAYER_COLORS[slot], 0.5).strokeRoundedRect(bx0, by0, bx1 - bx0, by1 - by0, 10);
+      const raised = time - (t.handsUpAt ?? -1e9) < 300;
+      g.lineStyle(raised ? 6 : 3, PLAYER_COLORS[slot], raised ? 1 : 0.5).strokeRoundedRect(bx0, by0, bx1 - bx0, by1 - by0, 10);
       const gap = Math.min(...spots.filter((o) => o !== sp).map((o) => Math.abs(o.x - sp.x)), Infinity);
       const h = Math.min(sp.h, gap * 1.15, f.h * 0.85, sp.footY - f.y - 4);
       const in3D = this.stage.place(slot, id, sp.x, sp.footY, h, t.view.pts, null, time / 1000, t.view.world);
       this.puppets[slot].setVisible(!in3D);
       if (!in3D) this.puppets[slot].pose(t.view.pts, map);
       const p = t.pts;
-      if (p[15].v > 0.4 && p[16].v > 0.4 && p[15].y < p[0].y && p[16].y < p[0].y) anyHandsUp = true;
+      const up = p[15].v > 0.4 && p[16].v > 0.4 && p[15].y < p[0].y && p[16].y < p[0].y;
+      if (up) handsUp++;
+      t.handsUpAt = up ? time : t.handsUpAt;
     });
     for (let k = 0; k < MAX_PLAYERS; k++) if (!shown.has(k)) { this.stage.hide(k); this.puppets[k].setVisible(false); }
 
     const live = performance.now() - stats.lastFrame < 1500;
     const n = people.length;
+    // camera phones still standing upright (portrait) see far fewer people
+    const tall = multicam.connectedCams().filter((c) => c.frame && performance.now() - c.at < 2000 && c.frame.aspect < 0.95).map((c) => c.num);
+    const turnTip = tall.length ? ` · ↻ turn camera ${tall.join(' & ')} sideways` : '';
     this.count.setText(live
-      ? `${n} ${n === 1 ? 'person' : 'people'} in view${session.kbCount ? ` + ${session.kbCount} keyboard` : ''}`
+      ? `${n} ${n === 1 ? 'person' : 'people'} in view${session.kbCount ? ` + ${session.kbCount} keyboard` : ''}${turnTip}`
       : (session.kbCount ? `${session.kbCount} keyboard player(s)` : 'No camera yet — scan the QR code with a phone'));
 
     if (!this.counting) {
-      const k = this.startHold.update(anyHandsUp || this.enterKey.isDown, time);
-      if (k > 0 && k < 1) this.big.setText('🙌');
+      // all hands up (a hand dipping for a moment doesn't reset it)
+      const allUp = n > 0 && people.every((t) => time - (t.handsUpAt ?? -1e9) < 300);
+      const k = this.startHold.update(allUp || this.enterKey.isDown, time);
+      if (k > 0 && k < 1) this.big.setText(`🙌 Keep them up… ${Math.ceil(3 - k * 3)}`);
+      else if (k === 0 && handsUp > 0 && n > 1) this.big.setText(`🙌 Everyone hands up! (${handsUp} of ${n})`);
       else if (!this.big.text.startsWith('No') && !this.big.text.startsWith('Couldn')) this.big.setText('');
       if (k >= 1) { this.startHold.reset(); this.beginCountdown(); }
     }

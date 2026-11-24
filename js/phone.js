@@ -183,6 +183,9 @@ function uprightFrame() {
   const turn = rot === 0 ? 'upright' : rot === 180 ? 'upside down' : rot > 0 ? 'turned ↻' : 'turned ↺';
   if ($('turn').textContent !== turn) $('turn').textContent = turn;
   $('stage').style.aspectRatio = `${w} / ${h}`;
+  // a tall (portrait) picture sees far fewer people: ask for the phone to go sideways
+  const tall = h > w * 1.05;
+  if ($('turnTip').hidden === tall) $('turnTip').hidden = !tall;
   return frameCv;
 }
 
