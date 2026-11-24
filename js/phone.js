@@ -8,7 +8,7 @@ $('room').value = params.get('room') || location.hash.replace('#', '') || '';
 
 let detector = null, stream = null, running = false, conn = null, peer = null;
 let frames = 0, lastFpsT = performance.now(), fps = 0, lastInf = 0;
-let showPreview = true, wakeLock = null;
+let showPreview = true, wakeLock = null, standby = false;
 const frameCv = document.createElement('canvas'), fctx = frameCv.getContext('2d');
 let rot = 0;                     // how far the picture is turned before detection (degrees)
 
@@ -37,6 +37,12 @@ function openConn(room) {
   });
   conn.on('data', (d) => {
     if (d && d.type === 'ping') conn.send({ type: 'pong', t: d.t });
+    // another phone is already the camera: wait on standby (until it goes, or "Use this camera")
+    if (d && d.type === 'role') {
+      standby = !d.active;
+      setConn(standby ? 'Standby — another phone is the camera' : 'Connected — this is the camera', standby ? 'wait' : 'ok');
+      $('take').hidden = !standby;
+    }
   });
   conn.on('close', () => { setConn('Disconnected — retrying', 'bad'); conn = null; retry(); });
   conn.on('error', () => { setConn('Connection error', 'bad'); });
@@ -178,7 +184,7 @@ function loop() {
     lastInf = ms;
     frames++;
     const aspect = src.width / src.height;
-    send({ type: 'pose', t: performance.now(), inf: Math.round(ms), fps, aspect, poses, worlds });
+    if (!standby) send({ type: 'pose', t: performance.now(), inf: Math.round(ms), fps, aspect, poses, worlds });
     draw(poses);
     $('people').textContent = `${poses.length} ${poses.length === 1 ? 'person' : 'people'}`;
   }
@@ -252,6 +258,8 @@ $('start').addEventListener('click', async () => {
     $('start').disabled = false;
   }
 });
+
+$('take').addEventListener('click', () => send({ type: 'take' }));
 
 $('preview').addEventListener('click', () => {
   showPreview = !showPreview;

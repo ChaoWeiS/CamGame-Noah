@@ -223,8 +223,12 @@ window.addEventListener('keyup', (e) => {
 });
 
 // ---------------------------------------------------------------- phone connection (PeerJS / WebRTC)
+// Several phones may connect. Only ONE is the camera at a time (mixing two camera
+// angles without calibrating them makes players jump about); the others wait on
+// standby. If the active phone goes, the next one takes over; a standby phone can
+// also tap "Use this camera" to take over.
 export const net = {
-  roomId: null, peer: null, conn: null, phoneUrl: '', onStatus: () => {},
+  roomId: null, peer: null, conn: null, conns: [], phoneUrl: '', onStatus: () => {},
   start() {
     const id = 'ark-' + Math.random().toString(36).slice(2, 8);
     this.roomId = id;
@@ -235,11 +239,18 @@ export const net = {
     this.peer.on('error', (e) => { console.warn(e); this.onStatus('Connection error: ' + e.type); });
     this.peer.on('disconnected', () => { try { this.peer.reconnect(); } catch (_) {} });
     this.peer.on('connection', (c) => {
-      if (this.conn) { try { this.conn.close(); } catch (_) {} }
-      this.conn = c;
-      c.on('open', () => { stats.connected = true; stats.source = 'phone'; this.onStatus('Phone connected'); });
+      // the same phone reconnecting replaces its old connection (and keeps its role)
+      const old = this.conns.find((x) => x.peer === c.peer);
+      if (old) { this.conns = this.conns.filter((x) => x !== old); if (this.conn === old) this.conn = c; try { old.close(); } catch (_) {} }
+      this.conns.push(c);
+      c.on('open', () => {
+        if (!this.conn || !this.conn.open) this.conn = c;
+        this.roles();
+      });
       c.on('data', (d) => {
         if (!d) return;
+        if (d.type === 'take') { this.conn = c; this.roles(); return; }
+        if (c !== this.conn) return;                     // standby phones are ignored
         if (d.type === 'pose') {
           if (stats.source !== 'phone') return;
           stats.fps = d.fps; stats.inf = d.inf;
@@ -251,11 +262,24 @@ export const net = {
           stats.phoneBuild = d.build || 'old';
         }
       });
-      c.on('close', () => { if (this.conn === c) { stats.connected = false; this.conn = null; this.onStatus('Phone disconnected — waiting…'); } });
+      c.on('close', () => {
+        this.conns = this.conns.filter((x) => x !== c);
+        if (this.conn === c) { this.conn = this.conns.find((x) => x.open) || null; this.roles(); }
+        if (!this.conn) { stats.connected = false; this.onStatus('Phone disconnected — waiting…'); }
+      });
     });
     setInterval(() => {
       if (this.conn && this.conn.open) { try { this.conn.send({ type: 'ping', t: performance.now() }); } catch (_) {} }
     }, 1000);
+  },
+  // tell every phone whether it is the camera or on standby
+  roles() {
+    for (const c of this.conns) if (c.open) { try { c.send({ type: 'role', active: c === this.conn }); } catch (_) {} }
+    if (this.conn) {
+      stats.connected = true; stats.source = 'phone';
+      const extra = this.conns.filter((c) => c.open).length - 1;
+      this.onStatus(extra > 0 ? `Phone connected (+${extra} on standby)` : 'Phone connected');
+    }
   },
 };
 
