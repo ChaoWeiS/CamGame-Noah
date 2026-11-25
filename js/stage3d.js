@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { LITE } from './mode.js';
 import { loadRiggedCharacter, EXAGGERATE_FOR, PHYSICS_FOR } from './autorig.js';
-import { MODELS } from './models.js';
+import { MODELS, ANIMAL_SIZE } from './models.js';
 
 // one character instance per (animal, slot), kept between scenes so they load once
 const cache = new Map();
@@ -83,7 +83,7 @@ export class Stage3D {
     if (view.bones && !a.helper) { a.helper = bonesHelper(ch); this.scene.add(a.helper); }
     if (a.helper) a.helper.visible = view.bones;
     ch.root.position.set(x, -footY, 0);
-    ch.root.scale.setScalar(heightPx / ch.height);
+    ch.root.scale.setScalar(heightPx * (ANIMAL_SIZE[id] ?? 1) / ch.height);   // the animals to scale: the bear is the biggest
     ch.unfixArms();
     if (pts && world) ch.pose3D(world, pts, base);
     else if (pts) ch.pose(pts, base); else ch.idle(t);

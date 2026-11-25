@@ -10,3 +10,7 @@ export const MODELS = {
   chicken: MODEL_DIR + 'chicken.glb',
   dog: MODEL_DIR + 'dog.glb',
 };
+
+// How big each animal is next to the others (the bear is the biggest). Every scene sizes
+// the animals by this, so they look to scale side by side. Storybook scale, not real life.
+export const ANIMAL_SIZE = { bear: 1.0, dog: 0.82, chicken: 0.68, hamster: 0.58 };

@@ -6,7 +6,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { LITE } from '../../js/mode.js';
 import { loadRiggedCharacter, PHYSICS_FOR } from '../../js/autorig.js';
-import { MODELS } from '../../js/models.js';
+import { MODELS, ANIMAL_SIZE } from '../../js/models.js';
 import { L } from '../../js/body.js';
 import { PLAYER_CSS } from '../../js/core.js';
 
@@ -352,7 +352,7 @@ export class Ski3D {
       ch.b[bone].add(m);
       return m;
     });
-    ch.root.scale.setScalar(ANIMAL_M / H);
+    ch.root.scale.setScalar(ANIMAL_M * (ANIMAL_SIZE[sk.pl.animal] ?? 1) / H);
     this.scene.add(ch.root);
     sk.ch = ch;
     sk.arm = null;

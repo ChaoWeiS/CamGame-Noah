@@ -8,6 +8,7 @@ import { tracker, input, PLAYER_CSS } from '../../js/core.js';
 import { W, H, rng, session, charById } from '../../js/scenes/common.js';
 import { Stage3D, OverlayText } from '../../js/stage3d.js';
 import { finishGame } from '../../js/games.js';
+import { ANIMAL_SIZE } from '../../js/models.js';
 
 const ROUND_MS = 60000;
 const HOLD_MS = 2500;          // a caught fruit slips out of the paw after this long
@@ -303,7 +304,8 @@ export class FruitScene extends Phaser.Scene {
       // bounce off the animals' heads and bodies
       for (const pp of this.p) {
         if (!pp.ch) continue;
-        for (const [c, rr] of [[pp.headC, this.hpx * 0.15], [pp.chest, this.hpx * 0.19], [pp.hips, this.hpx * 0.17]]) {
+        const sz = this.hpx * (ANIMAL_SIZE[pp.pl.animal] ?? 1);
+        for (const [c, rr] of [[pp.headC, sz * 0.15], [pp.chest, sz * 0.19], [pp.hips, sz * 0.17]]) {
           const dx = f.x - c.x, dy = f.y - c.y, d = Math.hypot(dx, dy), min = rr + f.r * 0.8;
           if (d < min && d > 0.01) {
             const nx = dx / d, ny = dy / d, vn = f.vx * nx + f.vy * ny;

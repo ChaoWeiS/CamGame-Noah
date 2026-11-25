@@ -14,7 +14,7 @@ import { L } from '../../js/body.js';
 
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
-import { MODELS } from '../../js/models.js';
+import { MODELS, ANIMAL_SIZE } from '../../js/models.js';
 export { MODELS };
 const PROPS_FILE = new URL('./props.glb', import.meta.url).href;   // this game's own forest set
 
@@ -281,7 +281,7 @@ export class Race3D {
   placeRunner(pane, dt) {
     const st = pane.r.anim || {}, c = pane.r.c;
     pane.ch.root.position.set(((st.x ?? c.cx) - c.cx) / c.runH, 0, 0);
-    pane.ch.root.scale.setScalar(1 / pane.ch.height);
+    pane.ch.root.scale.setScalar((ANIMAL_SIZE[pane.r.pl.animal] ?? 1) / pane.ch.height);
     this.animate(pane, dt, st);
     pane.ch.root.updateMatrixWorld(true);
     pane.ch.physics();                 // belly wobble, tail swing, body bob
