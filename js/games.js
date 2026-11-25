@@ -46,6 +46,7 @@ export function loadGame(id) {
     rec.ready = true;
     return rec;
   })().catch((e) => { rec.error = e; console.warn('game failed to load', id, e); throw e; });
+  rec.promise.catch(() => {});
   loading.set(id, rec);
   return rec;
 }
@@ -55,7 +56,10 @@ export const gameProgress = (id) => { const r = loading.get(id); return r ? (r.r
 export function setQueue(ids) {
   session.queue = ids.filter((id) => GAME_IDS.includes(id));
   try { localStorage.setItem('ark-queue', JSON.stringify(session.queue)); } catch (_) {}
-  session.queue.forEach(loadGame);
+  // one game at a time, in queue order: the first game arrives soonest and the lobby and
+  // character select (busy drawing the 3D animals) don't have to share with every download at once
+  const order = [...new Set(session.queue)];
+  (async () => { for (const id of order) { try { await loadGame(id).promise; } catch (_) { /* skipped later */ } } })();
 }
 export function savedQueue() {
   try { const q = JSON.parse(localStorage.getItem('ark-queue')); if (Array.isArray(q) && q.length) return q; } catch (_) {}
