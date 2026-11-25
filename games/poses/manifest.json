@@ -1,0 +1,13 @@
+{
+ "id": "poses",
+ "title": "The Ark's Password",
+ "blurb": "Copy the animal poses to open the ark's door.",
+ "players": [
+  1,
+  4
+ ],
+ "minutes": 1,
+ "card": "card.png",
+ "entry": "index.js",
+ "files": []
+}

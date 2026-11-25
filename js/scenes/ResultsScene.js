@@ -2,7 +2,6 @@ import { tracker, input } from '../core.js';
 import { W, H, txt, sky, Hold, session, ordinal, charById, charImage } from './common.js';
 import { Stage3D } from '../stage3d.js';
 
-const RACE_POINTS = { 1: 3, 2: 2, 3: 1 };
 
 export class ResultsScene extends Phaser.Scene {
   constructor() { super('Results'); }
@@ -20,11 +19,12 @@ export class ResultsScene extends Phaser.Scene {
 
     this.add.text(W / 2, 56, 'Everyone made it onto the ark! 🌈', txt(44, '#1d3b52')).setOrigin(0.5);
 
+    // points from every game played (by placing in each game), added up
+    const played = session.games.filter((g) => !g.skipped);
     const rows = tracker.players.map((pl) => {
-      const race = session.race.find((r) => r.slot === pl.slot) || { place: 0 };
-      const pw = session.pw.find((r) => r.slot === pl.slot) || { points: 0 };
-      const racePts = RACE_POINTS[race.place] || 0;
-      return { pl, place: race.place, pw: pw.points, total: racePts + pw.points, racePts };
+      const per = played.map((g) => ({ title: g.title, r: g.results.find((x) => x.slot === pl.slot) }));
+      const total = per.reduce((s, p) => s + (p.r ? p.r.points : 0), 0);
+      return { pl, per, total };
     }).sort((a, b) => b.total - a.total);
 
     const best = rows.length ? rows[0].total : 0;
@@ -34,9 +34,8 @@ export class ResultsScene extends Phaser.Scene {
       const crown = r.total === best ? '👑 ' : '';
       charImage(this, W / 2 - 400, y + 36, r.pl.animal || 'bear', 'front', 70);
       this.add.text(W / 2 - 350, y, `${crown}${charById(r.pl.animal).name} (P${r.pl.slot + 1})`, txt(28, '#1d3b52')).setOrigin(0, 0.5);
-      this.add.text(W / 2 + 180, y,
-        `Race: ${r.place ? ordinal(r.place) : '–'} (+${r.racePts})   Password: ⭐ ${r.pw}   =  ${r.total}`,
-        txt(22, '#1d3b52')).setOrigin(0.5);
+      const parts = r.per.map((p) => `${p.title}: ${p.r ? p.r.label : '–'}`).join('   ·   ');
+      this.add.text(W / 2 + 180, y, `${parts}   =  ${r.total} pts`, txt(20, '#1d3b52')).setOrigin(0.5);
     });
 
     // Everyone's 3D animal stands together below the scores, still copying its player;

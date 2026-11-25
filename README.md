@@ -139,3 +139,20 @@ keep the camera running with the screen switched off — the browser pauses the 
 the camera page instead goes **fully black** after 25 s without a touch (or with
 "🌙 Dark screen now"): on OLED phones black pixels are off, so it looks off and uses
 little power while tracking carries on. Tap to wake it.
+
+## Mini games (base + games)
+
+The base (`js/`) is everything shared: cameras and linking, tracking, the animals,
+lobby, character select, scores/podium. Each mini game is a folder in `games/`:
+
+```
+games/<id>/manifest.json   { id, title, blurb, players: [min, max], minutes, card, entry, files }
+games/<id>/card.png        square picture for the host's menu
+games/<id>/index.js        export default { scenes: [SceneClass…], start: 'SceneKey' }  (each class: static KEY)
+games/<id>/…               the game's own code and assets (downloaded only when queued)
+```
+
+A game imports what it needs from `../../js/…` and, when it's over, calls
+`finishGame(this, [{ slot, score, label }])` (`js/games.js`): higher score is better,
+label is what the podium shows. Players get points by placing in each game; the podium
+adds them up. Add a game: make the folder and add its id to `GAME_IDS` in `js/games.js`.

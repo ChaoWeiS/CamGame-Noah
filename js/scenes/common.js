@@ -85,7 +85,8 @@ export function charImage(scene, x, y, id, view, height) {
 }
 export const FONT = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 
-export const session = { kbCount: 0, race: [], pw: [], seed: 1 };
+// session: keyboard players, the host's game queue, each played game's results, random seed
+export const session = { kbCount: 0, queue: [], games: [], current: null, seed: 1 };
 
 export function txt(size, color = '#ffffff', extra = {}) {
   return { fontFamily: FONT, fontSize: size + 'px', color, fontStyle: 'bold', align: 'center', ...extra };

@@ -5,12 +5,15 @@ import { keepAwake } from './awake.js';
 
 // the game screen must never go to sleep (phone mode especially; on a PC it stops the display blanking)
 keepAwake(true);
+
+// the host's game queue (the menu will set this; for now the last queue, or every game)
+// — queued games start downloading straight away, in the background
+setQueue(savedQueue());
 import { initCalibration, linkCameras } from './calibui.js';
 import { W, H, ASPECT } from './scenes/common.js';
 import { LobbyScene } from './scenes/LobbyScene.js';
 import { PickScene } from './scenes/PickScene.js';
-import { RaceScene } from './scenes/RaceScene.js';
-import { PasswordScene } from './scenes/PasswordScene.js';
+import { setQueue, savedQueue } from './games.js';
 import { ResultsScene } from './scenes/ResultsScene.js';
 
 const $ = (id) => document.getElementById(id);
@@ -71,5 +74,5 @@ window.game = new Phaser.Game({
   height: H,
   backgroundColor: '#10202b',
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-  scene: [LobbyScene, PickScene, RaceScene, PasswordScene, ResultsScene],
+  scene: [LobbyScene, PickScene, ResultsScene],          // the mini games are added when they're loaded (js/games.js)
 });

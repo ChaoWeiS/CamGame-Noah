@@ -13,7 +13,7 @@ root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 os.chdir(root)
 now = datetime.datetime.now(datetime.timezone(datetime.timedelta(hours=8)))
 build = now.strftime('%m%d-%H%M%S') + (('-' + re.sub(r'[^a-z0-9]+', '-', sys.argv[1].lower()).strip('-')) if len(sys.argv) > 1 else '')
-files = sorted(glob.glob('js/**/*.js', recursive=True)) + ['assets/puppets/rig.json']
+files = sorted(glob.glob('js/**/*.js', recursive=True)) + sorted(glob.glob('games/**/*.js', recursive=True)) + sorted(glob.glob('games/*/manifest.json')) + ['assets/puppets/rig.json']
 json.dump({'build': build, 'files': files}, open('version.json', 'w'), indent=1)
 for page in ['index.html', 'phone.html', 'bear3d.html']:
     s = open(page).read()

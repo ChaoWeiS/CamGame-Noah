@@ -1,7 +1,7 @@
 // Demo skeletons for the password poses, so a 3D animal can show each pose.
 // Built like a real camera skeleton (2D points + 3D world points), then posed
 // through the same whole-body mapping the players use.
-import { toPoints, toWorld, keyPoints } from './body.js';
+import { toPoints, toWorld, keyPoints } from '../../js/body.js';
 
 // joints in metres, camera image axes: x right in the image (= the person's left), y down, z away
 const STAND = {

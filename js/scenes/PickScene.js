@@ -9,6 +9,7 @@
 import { tracker, input, PLAYER_COLORS, PLAYER_CSS } from '../core.js';
 import { W, H, txt, sky, Hold, session, CHARACTERS } from './common.js';
 import { Stage3D, preloadCast, OverlayText } from '../stage3d.js';
+import { startQueue } from '../games.js';
 
 const HOLD_MS = 3000;
 
@@ -64,7 +65,7 @@ export class PickScene extends Phaser.Scene {
   }
 
   update(time) {
-    if (this.leaving && performance.now() > this.leaveAt) { this.leaving = false; this.scene.start('Race'); return; }
+    if (this.leaving && performance.now() > this.leaveAt) { this.leaving = false; startQueue(this); return; }
     const g = this.g; g.clear();
     const S = this.row.S;
     // who is looking at each portrait (nested frames in their colours)

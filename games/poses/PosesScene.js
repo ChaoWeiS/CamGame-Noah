@@ -1,8 +1,9 @@
-import { tracker, input } from '../core.js';
-import { POSES } from '../body.js';
-import { W, H, txt, rng, Hold, session, charById, setupPanes, UI_X } from './common.js';
-import { Stage3D } from '../stage3d.js';
-import { demoPose } from '../posedemo.js';
+import { tracker, input } from '../../js/core.js';
+import { POSES } from '../../js/body.js';
+import { W, H, txt, rng, Hold, session, charById, setupPanes, UI_X } from '../../js/scenes/common.js';
+import { Stage3D } from '../../js/stage3d.js';
+import { demoPose } from './posedemo.js';
+import { finishGame } from '../../js/games.js';
 
 const ROUND_MS = 30000;
 const HOLD_MS = 450;
@@ -27,6 +28,7 @@ function makeSequences(seed, count) {
 const poseById = Object.fromEntries(POSES.map((p) => [p.id, p]));
 
 export class PasswordScene extends Phaser.Scene {
+  static KEY = 'Password';
   constructor() { super('Password'); }
 
   create() {
@@ -169,8 +171,7 @@ export class PasswordScene extends Phaser.Scene {
   finish() {
     this.state = 'done';
     this.timerText.setText('0');
-    session.pw = this.p.map((pp) => ({ slot: pp.pl.slot, points: pp.points }));
     this.intro.setText('The door opens! 🚪');
-    this.time.delayedCall(2200, () => this.scene.start('Results'));
+    finishGame(this, this.p.map((pp) => ({ slot: pp.pl.slot, score: pp.points, label: `⭐ ${pp.points}` })), 2200);
   }
 }

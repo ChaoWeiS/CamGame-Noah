@@ -1,0 +1,15 @@
+{
+ "id": "race",
+ "title": "Race to the Ark",
+ "blurb": "Run on the spot, dodge, jump and duck through the forest to the ark.",
+ "players": [
+  1,
+  4
+ ],
+ "minutes": 2,
+ "card": "card.png",
+ "entry": "index.js",
+ "files": [
+  "props.glb"
+ ]
+}

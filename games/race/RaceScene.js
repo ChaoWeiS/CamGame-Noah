@@ -1,7 +1,8 @@
-import { tracker, input } from '../core.js';
-import { W, H, txt, rng, session, ordinal, charImage, charById, setupPanes, UI_X } from './common.js';
-import { OverlayText } from '../stage3d.js';
-import { Race3D } from '../race3d.js';
+import { tracker, input } from '../../js/core.js';
+import { W, H, txt, rng, session, ordinal, charImage, charById, setupPanes, UI_X } from '../../js/scenes/common.js';
+import { OverlayText } from '../../js/stage3d.js';
+import { Race3D } from './race3d.js';
+import { finishGame } from '../../js/games.js';
 
 const DH = 720;            // design height of one player's pane
 
@@ -47,6 +48,7 @@ function makeCourse(seed) {
 }
 
 export class RaceScene extends Phaser.Scene {
+  static KEY = 'Race';
   constructor() { super('Race'); }
 
   create() {
@@ -227,9 +229,9 @@ export class RaceScene extends Phaser.Scene {
         // Anyone still running is placed by distance
         [...this.runners].filter((r) => !r.place).sort((a, b) => b.dist - a.dist)
           .forEach((r) => { r.place = ++this.finishCount; });
-        session.race = this.runners.map((r) => ({ slot: r.pl.slot, place: r.place }));
         this.banner.setText('Made it! 🛶');
-        this.time.delayedCall(2500, () => this.scene.start('Password'));
+        // scores for the base: an earlier place is better
+        finishGame(this, this.runners.map((r) => ({ slot: r.pl.slot, score: -r.place, label: ordinal(r.place) })), 2500);
       }
     }
   }

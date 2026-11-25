@@ -1,4 +1,4 @@
-import { MODELS } from './race3d.js';
+import { MODELS } from './models.js';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { net, localCam, tracker, stats } from './core.js';

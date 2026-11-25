@@ -7,24 +7,16 @@
 // World units: metres along the track, "animal heights" across and up
 // (the runner is 1 unit tall and stands at z = 0; things ahead are at z < 0).
 import * as THREE from 'three';
-import { LITE } from './mode.js';
+import { LITE } from '../../js/mode.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
-import { loadRiggedCharacter, PHYSICS_FOR } from './autorig.js';
-import { L } from './body.js';
+import { loadRiggedCharacter, PHYSICS_FOR } from '../../js/autorig.js';
+import { L } from '../../js/body.js';
 
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 
-// characters that have a 3D model (others keep their 2D sprite)
-// Detailed models on the big screen (assets/models/hd, ~7 MB each, look like the originals);
-// the light ones (~3-4 MB) in phone mode. Add ?models=lite or ?models=hd to choose.
-const MODEL_DIR = (new URLSearchParams(location.search).get('models') || (LITE ? 'lite' : 'hd')) === 'lite' ? 'assets/models/' : 'assets/models/hd/';
-export const MODELS = {
-  bear: MODEL_DIR + 'bear_tripo.glb',
-  hamster: MODEL_DIR + 'hamster.glb',
-  chicken: MODEL_DIR + 'chicken.glb',
-  dog: MODEL_DIR + 'dog.glb',
-};
-const PROPS_FILE = 'assets/models/props.glb';
+import { MODELS } from '../../js/models.js';
+export { MODELS };
+const PROPS_FILE = new URL('./props.glb', import.meta.url).href;   // this game's own forest set
 
 // How big each prop really is, measured in animal heights (an animal = 1),
 // the same way the 2D version sized things by the runner: [min, max] height.

@@ -6,7 +6,7 @@
 import * as THREE from 'three';
 import { LITE } from './mode.js';
 import { loadRiggedCharacter, EXAGGERATE_FOR, PHYSICS_FOR } from './autorig.js';
-import { MODELS } from './race3d.js';
+import { MODELS } from './models.js';
 
 // one character instance per (animal, slot), kept between scenes so they load once
 const cache = new Map();
