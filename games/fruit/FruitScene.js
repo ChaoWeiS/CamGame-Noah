@@ -11,7 +11,8 @@ import { finishGame } from '../../js/games.js';
 import { ANIMAL_SIZE } from '../../js/models.js';
 
 const ROUND_MS = 60000;
-const HOLD_MS = 2500;          // a caught fruit slips out of the paw after this long
+const HOLD_MS = 2500;
+const FLOOR_MS = 5000;         // fruit on the floor can be picked up for this long, then fades          // a caught fruit slips out of the paw after this long
 const FRUIT_FILE = new URL('./fruits.glb', import.meta.url).href;
 const ICON = (k) => new URL(`./icons/${k}.png`, import.meta.url).href;
 // the fruits in the game: easy to tell apart (no lime-vs-lemon puzzles)
@@ -103,7 +104,7 @@ export class FruitScene extends Phaser.Scene {
     this.timer = new OverlayText(this.game, W / 2, 44, 52);
     this.banner = new OverlayText(this.game, W / 2, H / 2 - 40, 110);
     this.help = new OverlayText(this.game, W / 2, H / 2 + 70, 30);
-    this.help.setText('💭 Your animal is hungry for the fruit in its bubble\n🙌 Catch it with your hands  ·  😋 bring it to your mouth\nThe wrong fruit? Yuck! Drop it and catch another');
+    this.help.setText('💭 Your animal is hungry for the fruit in its bubble\n🙌 Catch it with your hands  ·  😋 bring it to your mouth\nThe wrong fruit? Yuck! Drop it and catch another\n⬇️ Missed one? Squat down and pick it up off the floor');
     this.events.once('shutdown', () => {
       this.stage.destroy(); this.timer.destroy(); this.banner.destroy(); this.help.destroy();
       this.p.forEach((pp) => { pp.bubble.destroy(); pp.chip.remove(); pp.msg.destroy(); pp.lost.destroy(); });
@@ -232,7 +233,7 @@ export class FruitScene extends Phaser.Scene {
     const prev = this.stage.actors.get(pl.slot)?.ch;
     if (prev && pp.chompApplied) { prev.b.head.rotation.x -= pp.chompApplied; pp.chompApplied = 0; }
     const shown = this.stage.place(pl.slot, pl.animal || 'bear', pp.x, this.floorY, this.hpx,
-      cam && inp.present ? pl.body.vpts : null, null, time / 1000, cam && inp.present ? pl.body.world : null);
+      cam && inp.present ? pl.body.vpts : null, cam && inp.present ? pl.body.base : null, time / 1000, cam && inp.present ? pl.body.world : null);
     const a = this.stage.actors.get(pl.slot), ch = a?.ch;
     pp.ch = shown ? ch : null;
     if (!pp.ch) return;
@@ -272,11 +273,20 @@ export class FruitScene extends Phaser.Scene {
     const wanted = this.p.filter((pp) => pp.thought).map((pp) => pp.thought);
     const kind = wanted.length && this.r() < 0.45 ? wanted[Math.floor(this.r() * wanted.length)] : POOL[Math.floor(this.r() * POOL.length)];
     const r = Math.max(26, this.hpx * 0.1) * (SIZE[kind] || 1);
-    this.fruits.push({
-      kind, r, x: r + this.r() * (W - 2 * r), y: -r - 10, vx: (this.r() - 0.5) * 50, vy: 30 + 40 * k,
-      maxV: 120 + 110 * k, spin: new THREE.Vector3(this.r() - 0.5, this.r() - 0.5, this.r() - 0.5).normalize(), spinV: 1 + this.r() * 2.5,
-      ang: this.r() * 6, state: 'fall', ground: 0, noCatch: 0,
-    });
+    const f = {
+      kind, r, spin: new THREE.Vector3(this.r() - 0.5, this.r() - 0.5, this.r() - 0.5).normalize(), spinV: 1 + this.r() * 2.5,
+      ang: this.r() * 6, state: 'fall', ground: 0, noCatch: 0, maxV: 120 + 110 * k, entered: false,
+    };
+    if (this.r() < 0.5) {
+      // tossed in from a side, in an arc
+      const side = this.r() < 0.5 ? -1 : 1;
+      Object.assign(f, { x: side < 0 ? -r : W + r, y: H * (0.04 + this.r() * 0.22),
+        vx: -side * (150 + this.r() * 150) * (1 + 0.3 * k), vy: -(30 + this.r() * 110) });
+    } else {
+      // from the top, drifting sideways
+      Object.assign(f, { x: r + this.r() * (W - 2 * r), y: -r - 10, vx: (this.r() - 0.5) * 240, vy: 30 + 40 * k });
+    }
+    this.fruits.push(f);
   }
 
   physics(dt, now, k) {
@@ -293,7 +303,7 @@ export class FruitScene extends Phaser.Scene {
           if (Math.hypot(f.x - pp.headC.x, f.y - pp.headC.y) < reach || Math.hypot(h.pos.x - pp.headC.x, h.pos.y - pp.headC.y) < pp.headR * 1.05) { this.eat(pp, f, now); continue; }
         }
         // slipped out of the paw (or let go of: the paw lowered below the waist)
-        const low = pp.pl.kind === 'camera' && pp.hips && h.pos.y > pp.hips.y + this.hpx * 0.05;
+        const low = pp.pl.kind === 'camera' && pp.hips && h.pos.y > pp.hips.y + this.hpx * 0.05 && !this.crouching(pp);
         if (now - f.heldAt > HOLD_MS || low || !input(pp.pl).present) this.release(f, now);
         continue;
       }
@@ -321,7 +331,7 @@ export class FruitScene extends Phaser.Scene {
         for (const pp of this.p) {
           if (!pp.ch) continue;
           const h = pp.hands.find((hh) => !hh.fruit && now > hh.freeAt && Math.hypot(f.x - hh.pos.x, f.y - hh.pos.y) < f.r + this.hpx * 0.09);
-          if (h) { f.state = 'held'; f.holder = pp; f.hand = h; f.heldAt = now; h.fruit = f; break; }
+          if (h) { f.state = 'held'; f.holder = pp; f.hand = h; f.heldAt = now; h.fruit = f; f.ground = 0; break; }
         }
       }
       if (f.state !== 'fall') continue;
@@ -331,10 +341,21 @@ export class FruitScene extends Phaser.Scene {
         if (f.vy > 60) { f.vy *= -0.35; f.vx *= 0.7; } else { f.vy = 0; f.vx *= 0.9; }
         f.ground = f.ground || now;
       }
-      if (f.ground && now - f.ground > 1400) f.state = 'gone';
-      if (f.x < -f.r * 2 || f.x > W + f.r * 2) f.state = 'gone';
+      if (f.ground && now - f.ground > FLOOR_MS) f.state = 'gone';
+      if (!f.entered && f.x > f.r && f.x < W - f.r) f.entered = true;
+      if (f.entered && (f.x < f.r || f.x > W - f.r)) { f.x = Math.max(f.r, Math.min(W - f.r, f.x)); f.vx *= -0.6; }
+      if (f.y > H + f.r * 2) f.state = 'gone';
     }
+    const lying = this.fruits.filter((f) => f.ground && f.state === 'fall').sort((a, b) => a.ground - b.ground);
+    for (const f of lying.slice(0, Math.max(0, lying.length - 10))) f.ground = Math.min(f.ground, now - FLOOR_MS + 600);   // too many: the oldest fade
     this.fruits = this.fruits.filter((f) => f.state !== 'gone' || this.removeMesh(f));
+  }
+
+  // the player is squatting (hips well below where they stand)
+  crouching(pp) {
+    const b = pp.pl.body, p = b?.pts;
+    if (!p || !b.base) return false;
+    return (p[23].y + p[24].y) / 2 - b.base.hipY > 0.25 * b.base.torso;
   }
 
   // the player's own wrist (paw L = their wrist on the left of the mirror view) near their mouth
@@ -402,7 +423,7 @@ export class FruitScene extends Phaser.Scene {
         this.stage.scene.add(m);
         this.meshes.set(f, m);
       }
-      const fade = f.ground ? Math.max(0, 1 - (performance.now() - f.ground - 900) / 500) : 1;
+      const fade = f.ground ? Math.max(0, 1 - (performance.now() - f.ground - (FLOOR_MS - 600)) / 600) : 1;
       m.scale.setScalar(f.r * 2.1 * Math.min(1, fade + 0.001));
       m.position.set(f.x, -f.y, f.state === 'held' ? 500 : 400);
       if (f.state === 'held') m.quaternion.identity();
