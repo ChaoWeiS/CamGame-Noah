@@ -20,7 +20,7 @@ function loadSource() {
     gltf.scene.updateMatrixWorld(true);
     let src = null;
     gltf.scene.traverse((o) => { if (o.isMesh && !src) src = o; });
-    const geo = src.geometry.clone().applyMatrix4(src.matrixWorld);
+    const geo = floatGeo(src.geometry).applyMatrix4(src.matrixWorld);
     if (!geo.attributes.normal) geo.computeVertexNormals();
     return { geo, mat: src.material };
   }));
@@ -135,6 +135,20 @@ async function fitWings(ch) {
 // Wings fitted and weighted in Blender for each animal (tools/blender_rig), skinned to the same
 // bone names as the body. Used when the character's model came from Blender too.
 const PREFIT = new Map();
+// quantized files keep positions/normals as small integers; moving them can push the
+// wingtips past the integer range so they wrap to the other side. Use plain floats first.
+function floatGeo(geo) {
+  const g = geo.clone();
+  for (const k of ['position', 'normal']) {
+    const a = g.attributes[k];
+    if (!a || (a.array instanceof Float32Array && !a.isInterleavedBufferAttribute)) continue;
+    const out = new Float32Array(a.count * a.itemSize);
+    for (let i = 0; i < a.count; i++) for (let j = 0; j < a.itemSize; j++) out[i * a.itemSize + j] = a.getComponent(i, j);
+    g.setAttribute(k, new THREE.Float32BufferAttribute(out, a.itemSize));
+  }
+  return g;
+}
+
 function prefitFor(ch) {
   const id = ch.rigged && ch.src && ['bear', 'chicken', 'dog', 'hamster'].find((k) => ch.src.includes(k));
   if (!id) return null;
@@ -144,7 +158,7 @@ function prefitFor(ch) {
     let src = null;
     gltf.scene.traverse((o) => { if (o.isSkinnedMesh && !src) src = o; });
     if (!src) return null;
-    return { geo: src.geometry.clone().applyMatrix4(restMatrix(src)), names: src.skeleton.bones.map((b) => b.name), mat: src.material };
+    return { geo: floatGeo(src.geometry).applyMatrix4(restMatrix(src)), names: src.skeleton.bones.map((b) => b.name), mat: src.material };
   }).catch((e) => { console.warn('Blender wings failed, fitting them instead', e); return null; }));
   return PREFIT.get(file).then((w) => {
     if (!w) return null;

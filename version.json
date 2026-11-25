@@ -1,5 +1,5 @@
 {
- "build": "1125-233248-higher-wings",
+ "build": "1125-234941-fix-2-stray-wingtip-vertices-on-raised-wings",
  "files": [
   "js/autorig.js",
   "js/awake.js",
