@@ -11,7 +11,7 @@ import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 const WING_FILE = new URL('../assets/wings.glb', import.meta.url).href;
 // the right wing's leading edge in the model (from the reference picture): shoulder, elbow, wrist, fingertip
 const EDGE = [[0.06, 0.305], [0.192, 0.398], [0.241, 0.478], [0.346, 0.51]];
-const WING_SCALE = 1.2;          // a little bigger than the arm, so the wing covers it
+const WING_EDGE = 0.6;           // the wing's leading edge is this many animal-heights long (same look on every animal; bigger animal, bigger wings)
 
 let srcPromise = null;
 function loadSource() {
@@ -53,18 +53,22 @@ async function fitWings(ch) {
       // the animal's arm at rest (mesh space)
       const sh = W(b['upper' + s]), el = W(b['fore' + s]), wr = W(b['hand' + s]);
       const tip = wr.clone().add(wr.clone().sub(el).multiplyScalar(0.6));
-      const arm = [sh, el, wr, tip];
-      const armLen = sh.distanceTo(el) + el.distanceTo(wr) + wr.distanceTo(tip);
-      const k = (armLen / total) * WING_SCALE;
-      // displaced from the arm: behind the back at the root (the shoulder blades), just behind
-      // the arm further out, and a little above it — it follows the bones without sitting on them
+      // the wing's line: from just behind the neck (the wing rises over the shoulder), out along
+      // the arm's directions, each piece as long as the wing's own (scaled to the animal's height)
+      const k = (WING_EDGE * H) / total;
+      const dirs = [[sh, el], [el, wr], [wr, tip]].map(([p, q]) => q.clone().sub(p).normalize());
+      const root = sh.clone().multiply(new THREE.Vector3(0.55, 1, 1));
+      root.y = ch.joints.neckY - H * 0.02;
       const backZ = Math.min(ch.joints.backZ ?? -H * 0.12, -H * 0.08);
-      const offsetAt = (along) => new THREE.Vector3(0, H * 0.03, THREE.MathUtils.lerp(backZ - H * 0.03, -H * 0.08, smooth(0, 1.4, along)));
+      root.z = backZ - H * 0.04;
+      const arm = [root];
+      for (let i = 0; i < 3; i++) arm.push(arm[i].clone().addScaledVector(dirs[i], segLen[i] * k));
+      // behind the back at the root, closer behind the arm further out, and lifted a little
+      const offsetAt = (along) => new THREE.Vector3(0, H * 0.04 * smooth(0, 1.5, along), THREE.MathUtils.lerp(0, H * 0.04, smooth(0, 1.5, along)));
       // one rotation per segment: the wing's segment direction → the arm's segment direction
       const segs = [0, 1, 2].map((i) => {
         const from = edge[i + 1].clone().sub(edge[i]).multiply(new THREE.Vector3(side, 1, 1)).normalize();
-        const to = arm[i + 1].clone().sub(arm[i]).normalize();
-        return { q: new THREE.Quaternion().setFromUnitVectors(from, to), a: edge[i].clone().multiply(new THREE.Vector3(side, 1, 1)), A: arm[i] };
+        return { q: new THREE.Quaternion().setFromUnitVectors(from, dirs[i]), a: edge[i].clone().multiply(new THREE.Vector3(side, 1, 1)), A: arm[i] };
       });
       const boneIdx = ['upper', 'fore', 'hand'].map((n) => bones.indexOf(b[n + s]));
       // this side's vertices (x on that side of the middle)
