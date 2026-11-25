@@ -152,7 +152,9 @@ function floatGeo(geo) {
 function prefitFor(ch) {
   const id = ch.rigged && ch.src && ['bear', 'chicken', 'dog', 'hamster'].find((k) => ch.src.includes(k));
   if (!id) return null;
-  const file = new URL(`../assets/models/wings/${id}.glb`, import.meta.url).href;
+  // ?v=build: the code refreshes itself on a new build, but a cached .glb would not
+  const v = (typeof document !== 'undefined' && document.querySelector('meta[name=build]')?.content) || '';
+  const file = new URL(`../assets/models/wings/${id}.glb${v ? '?v=' + encodeURIComponent(v) : ''}`, import.meta.url).href;
   if (!PREFIT.has(file)) PREFIT.set(file, new GLTFLoader().loadAsync(file).then((gltf) => {
     gltf.scene.updateMatrixWorld(true);
     let src = null;

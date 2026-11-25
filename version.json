@@ -1,5 +1,5 @@
 {
- "build": "1126-000232-wings-repositioned-in-blender-bones-realigned",
+ "build": "1126-001808-wing-models-reload-on-a-new-build",
  "files": [
   "js/autorig.js",
   "js/awake.js",
