@@ -158,32 +158,90 @@ function prefitFor(ch) {
     let src = null;
     gltf.scene.traverse((o) => { if (o.isSkinnedMesh && !src) src = o; });
     if (!src) return null;
-    return { geo: floatGeo(src.geometry).applyMatrix4(restMatrix(src)), names: src.skeleton.bones.map((b) => b.name), mat: src.material };
+    // the wing's own bones (wingR → wingTipR, hung off the chest): where they sit at rest
+    const extra = src.skeleton.bones.filter((bn) => bn.name.startsWith('wing'))
+      .map((bn) => ({ name: bn.name, parent: bn.parent.name, pos: bn.getWorldPosition(new THREE.Vector3()) }));
+    return { geo: floatGeo(src.geometry).applyMatrix4(restMatrix(src)), names: src.skeleton.bones.map((b) => b.name), extra, mat: src.material };
   }).catch((e) => { console.warn('Blender wings failed, fitting them instead', e); return null; }));
   return PREFIT.get(file).then((w) => {
     if (!w) return null;
     const geo = w.geo.clone();
-    if (ch.shift) geo.translate(ch.shift.x, ch.shift.y, ch.shift.z);
-    // bone numbers in the wing file → this character's skeleton
-    const bones = ch.mesh.skeleton.bones;
+    const sh = ch.shift || new THREE.Vector3();
+    geo.translate(sh.x, sh.y, sh.z);
+    // the character's skeleton plus the wing bones, added under its chest
+    const sk = ch.mesh.skeleton, bones = sk.bones.slice(), inverses = sk.boneInverses.map((m) => m.clone());
+    const meshInv = ch.mesh.bindMatrixInverse;
+    const restPos = (bn) => new THREE.Vector3().setFromMatrixPosition(
+      new THREE.Matrix4().multiplyMatrices(meshInv, new THREE.Matrix4().copy(inverses[bones.indexOf(bn)]).invert()));
+    const made = {};
+    for (const e of w.extra) {
+      const parent = made[e.parent] || bones.find((bn) => bn.name === e.parent) || bones.find((bn) => bn.name === 'chest');
+      const pos = e.pos.clone().add(sh);
+      const bn = new THREE.Bone(); bn.name = e.name;
+      bn.position.copy(pos).sub(made[e.parent] ? made[e.parent].userData.rest : restPos(parent));
+      bn.userData.rest = pos;
+      parent.add(bn);
+      bones.push(bn);
+      inverses.push(new THREE.Matrix4().multiplyMatrices(ch.mesh.bindMatrix, new THREE.Matrix4().makeTranslation(pos.x, pos.y, pos.z)).invert());
+      made[e.name] = bn;
+    }
+    // bone numbers in the wing file → this skeleton
     const map = w.names.map((nm) => Math.max(0, bones.findIndex((b) => b.name === nm)));
     const SI = geo.attributes.skinIndex, out = new Uint16Array(SI.count * 4);
     for (let i = 0; i < SI.count; i++) for (let j = 0; j < 4; j++) out[i * 4 + j] = map[SI.getComponent(i, j)];
     geo.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(out, 4));
     const m = w.mat.clone(); m.side = THREE.DoubleSide;
-    return { geo, mat: m };
+    const skeleton = made.wingR ? new THREE.Skeleton(bones, inverses) : null;
+    if (made.wingR) {
+      // how the arms point at rest (not quite level on every animal): wings are spread there
+      made.rest = {};
+      for (const s of ['L', 'R']) {
+        const u = bones.find((bn) => bn.name === 'upper' + s), f = bones.find((bn) => bn.name === 'fore' + s);
+        const d = restPos(f).sub(restPos(u));
+        made.rest[s] = Math.atan2(d.y, Math.abs(d.x) + 1e-6);
+      }
+    }
+    return { geo, mat: m, skeleton, wingBones: made.wingR ? made : null };
   });
 }
 
-// give a character its wings (skinned to its own arm bones); returns the wing mesh
+// give a character its wings; returns the wing mesh
 export async function addWings(ch) {
   if (ch.wings) return ch.wings;
-  const { geo, mat } = (await prefitFor(ch)) || (await fitWings(ch));
+  const { geo, mat, skeleton, wingBones } = (await prefitFor(ch)) || (await fitWings(ch));
   const w = new THREE.SkinnedMesh(geo, mat);
   w.frustumCulled = false;
   ch.mesh.add(w);
-  w.bind(ch.mesh.skeleton, ch.mesh.bindMatrix);
+  w.bind(skeleton || ch.mesh.skeleton, ch.mesh.bindMatrix);
   ch.wings = w;
+  ch.wingBones = wingBones || null;
   return w;
 }
+
+// Wings with their own bones follow the arms: arms out (or up) → wings spread and lift with
+// them; arms down by the sides → wings fold back along the back. Call after posing the arms
+// and updating matrices.
+const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _m = new THREE.Matrix4();
+const _qy = new THREE.Quaternion(), _qz = new THREE.Quaternion(), _Y = new THREE.Vector3(0, 1, 0), _Z = new THREE.Vector3(0, 0, 1);
+export function updateWings(ch) {
+  const wb = ch.wingBones;
+  if (!wb) return;
+  const chest = wb.wingR.parent;
+  _m.copy(chest.matrixWorld).invert();
+  for (const [s, sg] of [['R', 1], ['L', -1]]) {
+    const up = ch.b['upper' + s], fore = ch.b['fore' + s];
+    if (!up || !fore) continue;
+    up.getWorldPosition(_a).applyMatrix4(_m); fore.getWorldPosition(_b).applyMatrix4(_m);
+    _b.sub(_a);
+    const elev = Math.atan2(_b.y, Math.abs(_b.x) + 1e-6) - (wb.rest ? wb.rest[s] : 0);   // 0 = as at rest (out), −π/2 = down by the side
+    const spread = smooth(-1.3, -0.35, elev), fold = 1 - spread;
+    const lift = Math.max(-0.35, Math.min(0.9, elev)) * 0.7 * spread - fold * 0.2;
+    _qz.setFromAxisAngle(_Z, sg * lift);
+    _qy.setFromAxisAngle(_Y, sg * fold * 1.3);
+    wb['wing' + s].quaternion.multiplyQuaternions(_qz, _qy);
+    wb['wingTip' + s].quaternion.setFromAxisAngle(_Y, sg * fold * 0.95);
+    wb['wing' + s].updateMatrixWorld(true);
+  }
+}
+
 export function preloadWings() { return loadSource(); }

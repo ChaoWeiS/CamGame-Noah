@@ -29,3 +29,10 @@ rebuilds the bones with no rotation at those joint positions and uses Blender's 
    - Wings: like HD, into `assets/models/wings/<animal>.glb`
 
 The working Blender file with all four rigs is kept on the user's PC (`rigging/animals_rigged.blend`).
+
+## Wings (v2)
+Each animal's wings are the untouched original `assets/wings.glb`, only scaled and placed on the back
+(in `animals_rigged.blend`). They have their own bones: `wingR → wingTipR` and `wingL → wingTipL`, hung off
+`chest`, plus a little `chest` weight at the root. In the game, `js/wings.js` adds these bones to the
+character, and `updateWings(ch)` spreads the wings when the arms are out/up and folds them back along the
+back when the arms come down.

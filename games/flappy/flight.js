@@ -14,7 +14,7 @@ import { LITE } from '../../js/mode.js';
 import { finishGame } from '../../js/games.js';
 import { loadRiggedCharacter, PHYSICS_FOR } from '../../js/autorig.js';
 import { MODELS, ANIMAL_SIZE } from '../../js/models.js';
-import { addWings } from '../../js/wings.js';
+import { addWings, updateWings } from '../../js/wings.js';
 import { L } from '../../js/body.js';
 import { showHowTo } from '../../js/howto.js';
 
@@ -316,6 +316,7 @@ class FlightWorld {
     ch.adjustShoulders();
     ch.fixArms();
     ch.root.updateMatrixWorld(true);
+    updateWings(ch);
     ch.physics();
   }
   copyArms(e, pts) {
