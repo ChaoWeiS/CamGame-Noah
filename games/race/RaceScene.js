@@ -233,7 +233,7 @@ export class RaceScene extends Phaser.Scene {
         this.banner.setText('Made it! 🛶');
         // scores for the base: a faster time is better; only those who reached the ark go in the Hall of Fame
         finishGame(this, this.runners.map((r) => (r.time
-          ? { slot: r.pl.slot, score: -r.time, label: `${r.time.toFixed(1)} s` }
+          ? { slot: r.pl.slot, score: -r.time, label: `⏱ ${r.time.toFixed(1)} s` }
           : { slot: r.pl.slot, score: -10000 + r.dist, label: 'didn’t finish', hof: false })), 2500);
       }
     }

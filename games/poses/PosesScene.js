@@ -172,6 +172,6 @@ export class PasswordScene extends Phaser.Scene {
     this.state = 'done';
     this.timerText.setText('0');
     this.intro.setText('The door opens! 🚪');
-    finishGame(this, this.p.map((pp) => ({ slot: pp.pl.slot, score: pp.points, label: `⭐ ${pp.points}` })), 2200);
+    finishGame(this, this.p.map((pp) => ({ slot: pp.pl.slot, score: pp.points, label: `⭐ ${pp.points} ${pp.points === 1 ? 'point' : 'points'}` })), 2200);
   }
 }
