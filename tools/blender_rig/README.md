@@ -30,9 +30,13 @@ rebuilds the bones with no rotation at those joint positions and uses Blender's 
 
 The working Blender file with all four rigs is kept on the user's PC (`rigging/animals_rigged.blend`).
 
-## Wings (v2)
-Each animal's wings are the untouched original `assets/wings.glb`, only scaled and placed on the back
-(in `animals_rigged.blend`). They have their own bones: `wingR → wingTipR` and `wingL → wingTipL`, hung off
-`chest`, plus a little `chest` weight at the root. In the game, `js/wings.js` adds these bones to the
-character, and `updateWings(ch)` spreads the wings when the arms are out/up and folds them back along the
-back when the arms come down.
+## Wings (v3: a bird's arm)
+Each animal's wings are the untouched original `assets/wings.glb`, scaled and placed on the back in
+`animals_rigged.blend` (move them there; the wing bones are refitted from the mesh). Each wing has a bird's
+arm along its leading edge, hung off `chest`: `wingUp` (humerus) → `wingFore` (forearm) → `wingHand`
+(hand, the long outer feathers). Feathers are weighted to the nearest part of the leading edge; the base
+of the wing (and the feathers hanging below it) stays on `chest`.
+
+In the game `js/wings.js` adds these bones to the character, and `updateWings(ch)` copies the player's arm
+joint for joint, through a little drag: shoulder → the beat, elbow → the wing folds at its middle,
+hand → follows the elbow and trails the beat (curls up on the way down, hangs on the way up).

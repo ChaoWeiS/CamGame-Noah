@@ -193,17 +193,18 @@ function prefitFor(ch) {
     for (let i = 0; i < SI.count; i++) for (let j = 0; j < 4; j++) out[i * 4 + j] = map[SI.getComponent(i, j)];
     geo.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(out, 4));
     const m = w.mat.clone(); m.side = THREE.DoubleSide;
-    const skeleton = made.wingR ? new THREE.Skeleton(bones, inverses) : null;
-    if (made.wingR) {
+    const ok = made.wingUpR && made.wingForeR && made.wingHandR;
+    const skeleton = ok ? new THREE.Skeleton(bones, inverses) : null;
+    if (ok) {
       // how the arms point at rest (not quite level on every animal): wings are spread there
+      // how the player-character's arm points / bends at rest (wings are as modelled there)
       made.rest = {};
       for (const s of ['L', 'R']) {
-        const u = bones.find((bn) => bn.name === 'upper' + s), f = bones.find((bn) => bn.name === 'fore' + s);
-        const d = restPos(f).sub(restPos(u));
-        made.rest[s] = Math.atan2(d.y, Math.abs(d.x) + 1e-6);
+        const P = (k) => restPos(bones.find((bn) => bn.name === k + s));
+        made.rest[s] = armAngles(P('upper'), P('fore'), P('hand'), s === 'R' ? 1 : -1);
       }
     }
-    return { geo, mat: m, skeleton, wingBones: made.wingR ? made : null };
+    return { geo, mat: m, skeleton, wingBones: ok ? made : null };
   });
 }
 
@@ -220,52 +221,57 @@ export async function addWings(ch) {
   return w;
 }
 
-// Wings with their own bones flap like a bird's (reference: a bird flap cycle, poses 1–9).
-// The arms don't hold the wings; they drive the stroke and the wings follow with a little drag:
-//   hands apart (arms out / up)   → pose 1: wings raised
-//   bringing the hands down/in    → downstroke 1 → 4 → 6: wings straight, sweeping down and a bit forward
-//   raising them again            → upstroke 7 → 8 → 9: wings bent at the wrist, the feathers trailing
-//   holding still                 → the wings settle straight (pose 1 or 6)
-// Call once per frame after posing the arms and updating matrices.
-const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _m = new THREE.Matrix4();
+// The wing's skeleton is a bird's arm (humerus → forearm → hand, along its leading edge),
+// and each joint copies the same joint of the player's arm, through a little drag:
+//   shoulder: arm up / down            → the whole wing beats up / down
+//   elbow:    forearm bent             → the wing folds at its middle (the upstroke shape)
+//   hand:     bends with the elbow (as in birds) and trails the stroke: curls up on the way
+//             down, hangs on the way up, straightens out when the wing stops
+// Arms out straight = the wings as modelled. Call once per frame after posing the arms and
+// updating matrices.
+// shoulder elevation (0 = level, + up) and elbow bend (+ = forearm up) of one arm, in the chest's frame
+function armAngles(u, f, h, sg) {
+  const a1 = Math.atan2(f.y - u.y, (f.x - u.x) * sg), a2 = Math.atan2(h.y - f.y, (h.x - f.x) * sg);
+  let bend = a2 - a1; if (bend > Math.PI) bend -= 2 * Math.PI; if (bend < -Math.PI) bend += 2 * Math.PI;
+  return { elev: a1, bend };
+}
+const _u = new THREE.Vector3(), _f = new THREE.Vector3(), _h = new THREE.Vector3(), _m = new THREE.Matrix4();
 const _q1 = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _Y = new THREE.Vector3(0, 1, 0), _Z = new THREE.Vector3(0, 0, 1);
-const lerp = (a, b, t) => a + (b - a) * t;
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+// a damped spring: the wing joint follows its target with a little drag
+function follow(o, tgt, dt, k = 110, damp = 0.8) {
+  o.v += (k * (tgt - o.x) - 2 * Math.sqrt(k) * damp * o.v) * dt; o.x += o.v * dt;
+  return o.x;
+}
+function setRot(bone, sg, yaw, roll) {     // yaw: + = swept back · roll: + = up (for either side)
+  _q1.setFromAxisAngle(_Y, sg * yaw); _q2.setFromAxisAngle(_Z, sg * roll);
+  bone.quaternion.multiplyQuaternions(_q1, _q2);
+}
 export function updateWings(ch) {
   const wb = ch.wingBones;
   if (!wb) return;
   const now = performance.now() / 1000;
-  const st = (ch.wingState = ch.wingState || { t: now, R: { p: 0, v: 0, vs: 0 }, L: { p: 0, v: 0, vs: 0 } });
-  const dt = Math.min(0.05, Math.max(0.001, now - st.t)); st.t = now;
-  const chest = wb.wingR.parent;
-  _m.copy(chest.matrixWorld).invert();
+  const mk = () => ({ sh: { x: 0, v: 0 }, el: { x: 0, v: 0 }, vs: 0 });
+  const st = (ch.wingState = ch.wingState || { t: now, R: mk(), L: mk() });
+  const dt = clamp(now - st.t, 0.001, 0.05); st.t = now;
+  _m.copy(wb.wingUpR.parent.matrixWorld).invert();
   for (const [s, sg] of [['R', 1], ['L', -1]]) {
-    const up = ch.b['upper' + s], fore = ch.b['fore' + s], w = st[s];
-    if (!up || !fore) continue;
-    up.getWorldPosition(_a).applyMatrix4(_m); fore.getWorldPosition(_b).applyMatrix4(_m);
-    _b.sub(_a);
-    const elev = Math.atan2(_b.y, Math.abs(_b.x) + 1e-6) - (wb.rest ? wb.rest[s] : 0);   // 0 = out like at rest, −π/2 = down
-    // stroke position: 0 = top (pose 1), 1 = bottom (pose 6)
-    const tgt = smooth(0.15, -1.15, elev);
-    // the wing follows with drag (a damped spring)
-    const k = 90, d = 2 * Math.sqrt(k) * 0.85;
-    w.v += (k * (tgt - w.p) - d * w.v) * dt; w.p += w.v * dt;
-    const p = Math.max(-0.1, Math.min(1.1, w.p));
-    // feathers bend against the air: the outer wing trails behind the stroke, curling up on
-    // the way down and hanging down on the way up, and straightens out when the wing stops
-    w.vs = (w.vs || 0) + (w.v - (w.vs || 0)) * Math.min(1, dt * 12);
-    const vs = w.vs;
-    // whole wing: up/down (roll about the forward axis) + a little forward sweep at the bottom
-    const roll = lerp(0, -1.45, p);
-    const sweepFwd = 0.35 * Math.max(0, Math.min(1, p));
-    _q1.setFromAxisAngle(_Y, -sg * sweepFwd);
-    _q2.setFromAxisAngle(_Z, sg * roll);
-    wb['wing' + s].quaternion.multiplyQuaternions(_q1, _q2);
-    const tipRoll = Math.max(-1.0, Math.min(0.8, vs * 0.4));          // + = curl up (moving down)
-    const tipBack = Math.max(0, Math.min(0.3, -vs * 0.12));          // trailing back a little on the way up
-    _q1.setFromAxisAngle(_Y, sg * tipBack);
-    _q2.setFromAxisAngle(_Z, sg * tipRoll);
-    wb['wingTip' + s].quaternion.multiplyQuaternions(_q1, _q2);
-    wb['wing' + s].updateMatrixWorld(true);
+    const up = ch.b['upper' + s], fore = ch.b['fore' + s], hand = ch.b['hand' + s], w = st[s];
+    if (!up || !fore || !hand) continue;
+    up.getWorldPosition(_u).applyMatrix4(_m); fore.getWorldPosition(_f).applyMatrix4(_m); hand.getWorldPosition(_h).applyMatrix4(_m);
+    const A = armAngles(_u, _f, _h, sg), R0 = wb.rest[s];
+    const elev = follow(w.sh, clamp(A.elev - R0.elev, -1.35, 0.8), dt);
+    const bend = follow(w.el, clamp(A.bend - R0.bend, -1.3, 1.0), dt, 90);
+    w.vs += (w.sh.v - w.vs) * Math.min(1, dt * 12);          // how fast the wing is beating (+ = up)
+    const down = clamp(-elev / 1.2, 0, 1);
+    // shoulder: the beat, sweeping a little forward at the bottom
+    setRot(wb['wingUp' + s], sg, -0.3 * down, elev);
+    // elbow: folds the wing at its middle (down and back) as the player's elbow bends
+    setRot(wb['wingFore' + s], sg, 0.45 * Math.min(1, Math.abs(bend)), bend * 0.85);
+    // hand: follows the elbow, and trails the beat (air pushing on the long feathers)
+    const trail = clamp(-w.vs * 0.18, -0.8, 0.45);
+    setRot(wb['wingHand' + s], sg, 0.25 * Math.min(1, Math.abs(bend)) + clamp(w.vs * 0.08, 0, 0.25), bend * 0.6 + trail);
+    wb['wingUp' + s].updateMatrixWorld(true);
   }
 }
 
