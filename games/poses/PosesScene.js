@@ -7,23 +7,20 @@ import { finishGame } from '../../js/games.js';
 
 const ROUND_MS = 30000;
 const HOLD_MS = 450;
-const SEQ_LEN = 5;
+const SHOW = 5;          // keys visible in each player's queue (the one to do + 4 waiting)
 
-// The k-th password is the same for everyone, so it stays fair.
-function makeSequences(seed, count) {
+// One long stream of keys (poses), the same for everyone so it stays fair.
+// Each key done = 1 point; the Hall of Fame score is the number of keys done.
+function makeStream(seed, count) {
   const r = rng(seed ^ 0x5a5a);
-  const seqs = [];
+  const out = [];
   let last = null;
   for (let k = 0; k < count; k++) {
-    const seq = [];
-    for (let i = 0; i < SEQ_LEN; i++) {
-      let p;
-      do { p = POSES[Math.floor(r() * POSES.length)].id; } while (p === last);
-      seq.push(p); last = p;
-    }
-    seqs.push(seq);
+    let p;
+    do { p = POSES[Math.floor(r() * POSES.length)].id; } while (p === last);
+    out.push(p); last = p;
   }
-  return seqs;
+  return out;
 }
 const poseById = Object.fromEntries(POSES.map((p) => [p.id, p]));
 
@@ -32,7 +29,7 @@ export class PasswordScene extends Phaser.Scene {
   constructor() { super('Password'); }
 
   create() {
-    this.seqs = makeSequences(session.seed, 40);
+    this.stream = makeStream(session.seed, 400);
     const players = tracker.players;
     this.cols = setupPanes(this, players.length, 720).panes;
     // each player's 3D animal copies them while they make the poses
@@ -46,24 +43,20 @@ export class PasswordScene extends Phaser.Scene {
       const wide = c.w >= 900;
       // wide panes: pose on the left, the player's stick figure on the right
       // wide panes: the pose to copy on the left, the player's animal on the right
+      // the key queue is a column on the left: the key to do at the bottom, the next ones above it
       const L = wide
-        ? { poseX: c.cx - c.w * 0.22, skelX: c.cx + c.w * 0.22, skelY: 470, footY: 640, animH: 380, wrap: c.w * 0.4, scoreX: c.cx,
-            demoFoot: 500, demoH: 300, nameY: 530, hintY: 568 }
-        : { poseX: c.cx, skelX: c.cx, skelY: 575, footY: 668, animH: 150, wrap: c.w - 40, scoreX: c.x + 90,
-            demoFoot: 410, demoH: 230, nameY: 438, hintY: 472 };
+        ? { poseX: c.cx - c.w * 0.2, skelX: c.cx + c.w * 0.22, skelY: 470, footY: 640, animH: 380, wrap: c.w * 0.34, scoreX: c.cx,
+            demoFoot: 500, demoH: 300, nameY: 530, hintY: 568, qX: c.x + 84 }
+        : { poseX: c.cx + 45, skelX: c.cx, skelY: 575, footY: 668, animH: 150, wrap: c.w - 170, scoreX: c.x + 110,
+            demoFoot: 410, demoH: 230, nameY: 438, hintY: 472, qX: c.x + 72 };
+      L.qY0 = 590; L.qStep = 92;
       L.demoY = L.demoFoot - L.demoH / 2;     // middle of the demo animal (emoji fallback and hold ring)
       bg.fillGradientStyle(0x5b3a1e, 0x5b3a1e, 0x8a5a2b, 0x8a5a2b, 1).fillRect(c.x, 0, c.w, 720);
       bg.fillStyle(0x000000, 0.18).fillRoundedRect(c.x + 12, 12, c.w - 24, 696, 18);
       bg.lineStyle(6, pl.color, 1).strokeRoundedRect(c.x + 12, 12, c.w - 24, 696, 18);
 
-      const cardSize = Math.min(96, (c.w - 60) / SEQ_LEN - 12);
-      const cards = [];
-      for (let j = 0; j < SEQ_LEN; j++) {
-        const x = c.cx + (j - (SEQ_LEN - 1) / 2) * (cardSize + 12);
-        cards.push(this.add.text(x, 140, '', txt(cardSize * 0.62)).setOrigin(0.5).setDepth(3));
-      }
-      return {
-        pl, c, L, cardSize, cards, k: 0, step: 0, points: 0, hold: new Hold(HOLD_MS),
+      const pp = {
+        pl, c, L, cardSize: 80, queue: [], n: 0, points: 0, hold: new Hold(HOLD_MS),
         head: this.add.text(c.cx, 52, `P${i + 1} · ${charById(pl.animal).name}`, txt(32, pl.css)).setOrigin(0.5),
         cheerAt: -1e9,
         big: this.add.text(L.poseX, L.demoY, '', txt(Math.min(150, c.w * 0.26))).setOrigin(0.5).setDepth(3),
@@ -73,6 +66,8 @@ export class PasswordScene extends Phaser.Scene {
         flash: this.add.text(c.cx, 215, '', txt(44, '#fff8e6', { stroke: '#2e7d4f', strokeThickness: 8 })).setOrigin(0.5).setDepth(5),
         lost: this.add.text(L.skelX, L.skelY, '', txt(28, '#ffffff', { stroke: '#9b3b2f', strokeThickness: 6, wordWrap: { width: L.wrap } })).setOrigin(0.5).setDepth(3),
       };
+      for (let j = 0; j < SHOW; j++) pp.queue.push(this.makeCard(pp, this.stream[j], j));
+      return pp;
     });
 
     // shared overlay: timer (centre of the grid when 3-4 players) and intro text
@@ -81,23 +76,49 @@ export class PasswordScene extends Phaser.Scene {
     const ui = this.add.graphics().setDepth(55);
     ui.fillStyle(0x10202b, 0.9).fillCircle(UI_X + tX, tY, 34);
     this.timerText = this.add.text(UI_X + tX, tY, '', txt(30, '#fff8e6')).setOrigin(0.5).setDepth(56);
-    this.intro = this.add.text(UI_X + W / 2, H / 2, 'The ark door is locked! 🔒\nCopy the animal password —\n5 poses in a row = 1 point',
+    this.intro = this.add.text(UI_X + W / 2, H / 2, 'The ark door is locked! 🔒\nCopy each pose to earn a key 🔑\nMost keys wins!',
       txt(42, '#fff8e6', { stroke: '#1d1206', strokeThickness: 10 })).setOrigin(0.5).setDepth(60);
     this.state = 'intro';
     this.p.forEach((pp) => this.showCurrent(pp));
     this.time.delayedCall(3500, () => { this.intro.setText(''); this.state = 'play'; this.endAt = this.time.now + ROUND_MS; });
   }
 
-  seqOf(pp) { return this.seqs[pp.k % this.seqs.length]; }
+  keyAt(i) { return this.stream[i % this.stream.length]; }
+
+  // where the j-th card of the queue sits: j = 0 is the key to do now (bottom, biggest)
+  slot(pp, j) {
+    return { x: pp.L.qX, y: pp.L.qY0 - j * pp.L.qStep, scale: j === 0 ? 1.2 : 1 - j * 0.05, alpha: j === 0 ? 1 : 1 - j * 0.13 };
+  }
+  makeCard(pp, poseId, j) {
+    const s = pp.cardSize, at = this.slot(pp, j);
+    const bg = this.add.graphics().fillStyle(0xfff8e6, 0.92).fillRoundedRect(-s / 2, -s / 2, s, s, 12);
+    const t = this.add.text(0, 0, poseById[poseId].emoji, txt(s * 0.62)).setOrigin(0.5);
+    return this.add.container(at.x, at.y, [bg, t]).setDepth(3).setScale(at.scale).setAlpha(at.alpha);
+  }
+  // a key is done: it turns green and drops away, the queue slides down, a new key joins the back
+  advance(pp) {
+    const s = pp.cardSize, done = pp.queue.shift();
+    done.list[0].clear().fillStyle(0x2e7d4f, 0.95).fillRoundedRect(-s / 2, -s / 2, s, s, 12);
+    this.tweens.killTweensOf(done);
+    this.tweens.add({ targets: done, y: done.y + 150, angle: 25, alpha: 0, duration: 420, ease: 'Quad.easeIn', onComplete: () => done.destroy() });
+    pp.queue.forEach((card, j) => {
+      const at = this.slot(pp, j);
+      this.tweens.killTweensOf(card);
+      this.tweens.add({ targets: card, y: at.y, scale: at.scale, alpha: at.alpha, duration: 260, ease: 'Quad.easeOut' });
+    });
+    const back = this.makeCard(pp, this.keyAt(pp.n + SHOW - 1), SHOW - 1);
+    const at = this.slot(pp, SHOW - 1);
+    back.setY(at.y - pp.L.qStep).setAlpha(0);
+    this.tweens.add({ targets: back, y: at.y, alpha: at.alpha, duration: 300, ease: 'Quad.easeOut' });
+    pp.queue.push(back);
+  }
 
   showCurrent(pp) {
-    const seq = this.seqOf(pp);
-    const pose = poseById[seq[pp.step]];
+    const pose = poseById[this.keyAt(pp.n)];
     pp.big.setText(pose.emoji);
     pp.name.setText(pose.name);
     pp.hint.setText(pose.hint);
-    pp.cards.forEach((t, j) => t.setText(poseById[seq[j]].emoji).setAlpha(j < pp.step ? 0.35 : 1));
-    pp.score.setText(`⭐ ${pp.points}`);
+    pp.score.setText(`🔑 ${pp.points}`);
   }
 
   update(time) {
@@ -110,13 +131,9 @@ export class PasswordScene extends Phaser.Scene {
 
     for (const pp of this.p) {
       const { c } = pp;
-      // cards
-      pp.cards.forEach((t, j) => {
-        const s = pp.cardSize;
-        const done = j < pp.step, cur = j === pp.step;
-        g.fillStyle(done ? 0x2e7d4f : 0xfff8e6, done ? 0.9 : 0.85).fillRoundedRect(t.x - s / 2, t.y - s / 2, s, s, 10);
-        if (cur) g.lineStyle(5, pp.pl.color, 1).strokeRoundedRect(t.x - s / 2 - 3, t.y - s / 2 - 3, s + 6, s + 6, 12);
-      });
+      // a frame in the player's colour marks where the key to do now sits
+      { const s = pp.cardSize * 1.2 + 14;
+        g.lineStyle(6, pp.pl.color, 1).strokeRoundedRect(pp.L.qX - s / 2, pp.L.qY0 - s / 2, s, s, 16); }
 
       const inp = input(pp.pl);
       pp.lost.setText(inp.present ? '' : 'Come back into view!');
@@ -125,7 +142,7 @@ export class PasswordScene extends Phaser.Scene {
       const zoom = c.rect.h / c.h, cam = pp.pl.kind === 'camera';
       // the pose to copy, shown by the player's own animal doing it (the emoji stays as a fallback)
       if (this.state !== 'intro') {
-        const target = this.seqOf(pp)[pp.step], demo = demoPose(target, time / 1000);
+        const target = this.keyAt(pp.n), demo = demoPose(target, time / 1000);
         const shown = this.stage.place(100 + pp.pl.slot, pp.pl.animal || 'bear',
           c.rect.x + (pp.L.poseX - c.x) * zoom, c.rect.y + (pp.L.demoFoot + 0.45 * pp.L.demoH * Math.min(0, demo.drop) * 0.75) * zoom, pp.L.demoH * zoom,
           demo.pts, demo.base, time / 1000, demo.world);
@@ -144,7 +161,7 @@ export class PasswordScene extends Phaser.Scene {
       }
 
       if (this.state !== 'play') continue;
-      const target = this.seqOf(pp)[pp.step];
+      const target = this.keyAt(pp.n);
       const k = pp.hold.update(inp.present && inp.pose === target, time);
       if (k > 0) {
         g.lineStyle(10, pp.pl.color, 1);
@@ -154,13 +171,12 @@ export class PasswordScene extends Phaser.Scene {
       }
       if (k >= 1) {
         pp.hold.reset();
-        pp.step++;
-        if (pp.step >= SEQ_LEN) {
-          pp.points++; pp.k++; pp.step = 0;
-          pp.flash.setText('Door code! +1').setAlpha(1);
-          this.tweens.add({ targets: pp.flash, alpha: 0, delay: 700, duration: 400 });
-          pp.cheerAt = time;
-        }
+        pp.n++; pp.points++;
+        this.advance(pp);
+        pp.flash.setText('+1 🔑').setAlpha(1);
+        this.tweens.killTweensOf(pp.flash);
+        this.tweens.add({ targets: pp.flash, alpha: 0, delay: 500, duration: 300 });
+        pp.cheerAt = time;
         this.showCurrent(pp);
         this.tweens.add({ targets: pp.big, scale: { from: 1.3, to: 1 }, duration: 180 });
       }
@@ -172,6 +188,6 @@ export class PasswordScene extends Phaser.Scene {
     this.state = 'done';
     this.timerText.setText('0');
     this.intro.setText('The door opens! 🚪');
-    finishGame(this, this.p.map((pp) => ({ slot: pp.pl.slot, score: pp.points, label: `⭐ ${pp.points} ${pp.points === 1 ? 'point' : 'points'}` })), 2200);
+    finishGame(this, this.p.map((pp) => ({ slot: pp.pl.slot, score: pp.points, label: `🔑 ${pp.points} ${pp.points === 1 ? 'key' : 'keys'}` })), 2200);
   }
 }
