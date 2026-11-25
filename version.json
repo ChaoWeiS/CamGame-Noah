@@ -1,5 +1,5 @@
 {
- "build": "1125-102312-key-queue",
+ "build": "1125-110023-ski-game",
  "files": [
   "js/autorig.js",
   "js/awake.js",
@@ -34,8 +34,12 @@
   "games/race/RaceScene.js",
   "games/race/index.js",
   "games/race/race3d.js",
+  "games/ski/SkiScene.js",
+  "games/ski/index.js",
+  "games/ski/ski3d.js",
   "games/poses/manifest.json",
   "games/race/manifest.json",
+  "games/ski/manifest.json",
   "assets/puppets/rig.json"
  ]
 }

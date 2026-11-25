@@ -183,12 +183,15 @@ export function input(pl) {
       jumping: performance.now() - pl.kb.jumpAt < 450,
       pose: pl.kb.pose, handsUp: pl.kb.handsUp,
       run: Math.max(0, 1 - (performance.now() - pl.kb.runAt) / 600), // tap R (P1) / F (P2) to run
+      // skiing: R/F = pump, ← → (A D) = steer, Shift (S) = twist for a sharp turn
+      pump: Math.max(0, 1 - (performance.now() - pl.kb.runAt) / 600), steer: pl.kb.lane, twist: pl.kb.duck ? pl.kb.lane || 0 : 0,
     };
   }
   const b = pl.body;
   return {
     present: pl.present, lane: b.lane, side: b.side, ducking: b.ducking, jumping: b.jumping,
     pose: b.pose, handsUp: b.handsUp, run: b.run,
+    pump: b.pump || 0, steer: b.steer || 0, twist: b.twist || 0,
   };
 }
 

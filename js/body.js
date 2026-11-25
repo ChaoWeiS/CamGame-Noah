@@ -131,7 +131,8 @@ export class Body {
   calibrateFromCurrent() {
     if (!this.pts) return;
     const { sh, hip, torso } = keyPoints(this.pts);
-    this.base = { shX: sh.x, shY: sh.y, hipY: hip.y, torso };
+    const shW = Math.abs(this.pts[L.lShoulder].x - this.pts[L.rShoulder].x);
+    this.base = { shX: sh.x, shY: sh.y, hipY: hip.y, torso, shW: Math.max(shW, 0.3 * torso) };
   }
 
   analyze() {
@@ -168,6 +169,7 @@ export class Body {
 
     this.detectRunning(p, T);
     this.detectSwipe(p, T);
+    this.detectSki(p, sh, hip, T);
 
     const nose = p[L.nose], wl = p[L.lWrist], wr = p[L.rWrist];
     const armsSeen = wl.v > 0.4 && wr.v > 0.4;
@@ -203,6 +205,66 @@ Body.prototype.detectSwipe = function (p, T) {
       }
     }
   }
+};
+// Skiing:
+//   pump  — both hands moving up and down together (like pushing on ski poles): 0 … ~1.2
+//   steer — arms stretched out wide, tilted like an aeroplane's wings: the side with the
+//           LOWER hand is the way you turn. −1 (screen-left) … 1 (screen-right), 0 = arms level
+//   twist — the body turned sideways: −1 … 1 (facing screen-left … screen-right), 0 = facing the screen
+Body.prototype.detectSki = function (p, sh, hip, T) {
+  const now = performance.now();
+  const wl = p[L.lWrist], wr = p[L.rWrist], b = this.base;
+  const arms = wl.v > 0.4 && wr.v > 0.4;
+  // pump: the hands' average height turning around (top / bottom of each stroke)
+  this.pumps = this.pumps || [];
+  if (arms) {
+    const m = (wl.y + wr.y) / 2 - sh.y, thr = 0.15 * T;
+    const pm = this.pm || (this.pm = { ext: m, dir: 0 });
+    if (pm.dir >= 0) {
+      if (m > pm.ext) pm.ext = m;
+      else if (pm.ext - m > thr) { this.pumps.push({ t: now, amp: (pm.ext - m) / T }); pm.dir = -1; pm.ext = m; }
+    }
+    if (pm.dir < 0) {
+      if (m < pm.ext) pm.ext = m;
+      else if (m - pm.ext > thr) { this.pumps.push({ t: now, amp: (m - pm.ext) / T }); pm.dir = 1; pm.ext = m; }
+    }
+  }
+  while (this.pumps.length && now - this.pumps[0].t > 1500) this.pumps.shift();
+  const rate = this.pumps.length / 1.5;                     // half-strokes per second
+  const amp = this.pumps.length ? this.pumps.reduce((s, w) => s + w.amp, 0) / this.pumps.length : 0;
+  const pumpTarget = Math.min(1.2, (rate / 2.5) * Math.max(0.5, Math.min(1.3, amp / 0.45)));
+  this.pump = (this.pump || 0) + (pumpTarget - (this.pump || 0)) * 0.15;
+
+  // steer: arms out wide (hands far apart, above the hips), tilted
+  const gap = Math.abs(wl.x - wr.x);
+  let steer = 0;
+  if (arms && gap > 1.4 * T && wl.y < hip.y && wr.y < hip.y) {
+    const tilt = (wl.y - wr.y) / gap;                        // > 0: the screen-left hand is lower
+    const k = Math.sign(tilt) * Math.max(0, Math.abs(tilt) - 0.08);
+    steer = -Math.max(-1, Math.min(1, k * 2.6));
+  }
+  this.steer = (this.steer || 0) + (steer - (this.steer || 0)) * 0.35;
+
+  // twist: shoulders look narrower when the body turns; which way comes from the 3D
+  // skeleton (if the phone sends it) or else from where the nose is
+  let twist = 0;
+  const ls = p[L.lShoulder], rs = p[L.rShoulder];
+  if (ls.v > 0.4 && rs.v > 0.4 && b?.shW) {
+    const narrow = Math.abs(rs.x - ls.x) / b.shW;
+    let amount = Math.max(0, Math.min(1, (0.92 - narrow) / 0.3));
+    let sign = 0;
+    const w = this.world;
+    if (w && w[L.lShoulder] && w[L.rShoulder]) {
+      const yaw = Math.atan2(w[L.lShoulder].z - w[L.rShoulder].z, w[L.rShoulder].x - w[L.lShoulder].x);
+      sign = Math.sign(yaw);
+      amount = Math.max(amount, Math.max(0, Math.min(1, (Math.abs(yaw) - 0.25) / 0.6)));
+    } else if (p[L.nose].v > 0.4) {
+      const off = (p[L.nose].x - sh.x) / Math.max(0.05, Math.abs(rs.x - ls.x) + 0.2 * T);
+      sign = Math.abs(off) > 0.08 ? Math.sign(off) : 0;
+    }
+    twist = sign * amount;
+  }
+  this.twist = (this.twist || 0) + (twist - (this.twist || 0)) * 0.3;
 };
 Body.prototype.takeSwipe = function () { const s = this.swipe || 0; this.swipe = 0; return s; };
 

@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="build" content="1125-102312-key-queue">
+<meta name="build" content="1125-110023-ski-game">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Race to the Ark</title>
@@ -43,6 +43,16 @@
   .hof .armed { background: #ef8f86; color: #fff; }
   .hof .empty { opacity: 0.7; }
   /* after a game: the winner's card */
+  .skihud { position: absolute; pointer-events: none; z-index: 15; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-weight: 800; color: #fff;
+    text-shadow: 0 0 5px #10202b, 0 2px 0 #10202b; box-sizing: border-box; }
+  .skihud .tag { position: absolute; left: 3%; top: 3%; font-size: 1.25em; }
+  .skihud .pts { position: absolute; right: 3%; top: 3%; font-size: 1.2em; }
+  .skihud .bar { position: absolute; left: 3%; right: 3%; top: 13%; height: 0.45em; border-radius: 1em; background: rgba(255,255,255,0.55); overflow: hidden; }
+  .skihud .bar i { display: block; height: 100%; width: 0; border-radius: 1em; }
+  .skihud .msg { position: absolute; left: 0; right: 0; top: 26%; text-align: center; font-size: 1.8em; }
+  .skihud .msg.pop { animation: skipop 0.35s ease-out; }
+  .skihud .lost { position: absolute; left: 0; right: 0; top: 45%; text-align: center; font-size: 1.4em; color: #ffd2c8; }
+  @keyframes skipop { from { transform: scale(1.35); } to { transform: scale(1); } }
   .wincards { position: absolute; left: 50%; top: 19%; transform: translateX(-50%); display: flex; gap: 2vw; z-index: 20; }
   .wincard { background: rgba(255, 248, 230, 0.95); border-radius: 18px; padding: 1.5vh 1.5vw; display: grid; justify-items: center; gap: 0.4vh;
     border: 5px solid var(--c); box-shadow: 0 6px 20px rgba(0,0,0,0.2); color: #1d3b52; font: 700 clamp(14px, 2.2vh, 22px) system-ui, sans-serif; }

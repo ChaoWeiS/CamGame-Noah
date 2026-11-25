@@ -1,0 +1,16 @@
+{
+ "id": "ski",
+ "title": "Ski to the Ark",
+ "blurb": "Pump your arms to speed down the slope, steer like a plane through the flags and grab the coins.",
+ "players": [
+  1,
+  4
+ ],
+ "minutes": 2,
+ "card": "card.png",
+ "entry": "index.js",
+ "files": [
+  "gear.glb",
+  "../race/props.glb"
+ ]
+}
