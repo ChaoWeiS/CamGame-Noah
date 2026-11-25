@@ -57,7 +57,35 @@ export const SHOULDER_IN = 0.62;
 // rounder animals need their arms a bit further out, or the arms sink into the belly
 const SHOULDER_FOR = { bear: 0.7, dog: 0.38, chicken: 0.66, hamster: 0.82 };
 
-export async function loadRiggedCharacter(url, opts = {}) {
+// Building a rig (measuring the body, weighting ~200k vertices) is heavy, so each model is
+// rigged ONCE; every character made from it shares the geometry, skin weights and textures
+// and only gets its own bones. (Character select used to rig 4 animals × 4 players afresh.)
+const rigCache = new Map();
+export function loadRiggedCharacter(url, opts = {}) {
+  const key = url + JSON.stringify(opts);
+  if (!rigCache.has(key)) {
+    const p = buildRig(url, opts);
+    p.catch(() => rigCache.delete(key));          // a failed download can be tried again
+    rigCache.set(key, p);
+  }
+  return rigCache.get(key).then(instantiate);
+}
+function instantiate(t) {
+  const hips = t.hips.clone(true);
+  const B = {};
+  hips.traverse((o) => { if (o.isBone) B[o.name] = o; });
+  const mesh = new THREE.SkinnedMesh(t.geo, t.mat);
+  mesh.castShadow = true; mesh.receiveShadow = true;
+  mesh.frustumCulled = false;
+  mesh.add(hips);
+  mesh.updateMatrixWorld(true);
+  mesh.bind(new THREE.Skeleton(t.order.map((k) => B[k])));
+  const root = new THREE.Group();
+  root.add(mesh);
+  return new RiggedCharacter(root, mesh, B, t.H, t.joints);
+}
+
+async function buildRig(url, opts = {}) {
   const id = Object.keys(SHOULDER_FOR).find((k) => url.includes(k));
   const shoulderIn = opts.shoulderIn ?? SHOULDER_FOR[id] ?? SHOULDER_IN;
   const gltf = await new GLTFLoader().loadAsync(url);
@@ -248,17 +276,8 @@ export async function loadRiggedCharacter(url, opts = {}) {
   geo.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(si, 4));
   geo.setAttribute('skinWeight', new THREE.Float32BufferAttribute(sw, 4));
 
-  const mat = src.material;
-  const mesh = new THREE.SkinnedMesh(geo, mat);
-  mesh.castShadow = true; mesh.receiveShadow = true;
-  mesh.frustumCulled = false;
-  mesh.add(hips);
-  mesh.updateMatrixWorld(true);
-  const skeleton = new THREE.Skeleton(order.map((k) => B[k]));
-  mesh.bind(skeleton);
-  const root = new THREE.Group();
-  root.add(mesh);
-  return new RiggedCharacter(root, mesh, B, H, { shoulderInner: sx * shoulderIn, shoulderOuter: sx * 0.98, shoulderY: armRootY - H * 0.01, hasTail, frontZ, backZ, sx, elbowX, wristX, chestY, neckY, crotchY, kneeY, armRootY, armTipY, legX, waistY });
+  // the template: shared by every character made from this model (its bones are only copied)
+  return { geo, mat: src.material, hips, order, H, joints: { shoulderInner: sx * shoulderIn, shoulderOuter: sx * 0.98, shoulderY: armRootY - H * 0.01, hasTail, frontZ, backZ, sx, elbowX, wristX, chestY, neckY, crotchY, kneeY, armRootY, armTipY, legX, waistY } };
 }
 
 export class RiggedCharacter {
