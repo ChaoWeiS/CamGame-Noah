@@ -19,22 +19,52 @@ function setConn(text, cls) { const el = $('conn'); el.textContent = text; el.cl
 function msg(t) { $('msg').textContent = t; }
 
 // ---------- networking ----------
+// tap the status pill to try connecting again right now
+document.getElementById('conn').addEventListener('click', () => {
+  if (conn && conn.open) return;
+  clearTimeout(openTimer);
+  try { conn?.close(); } catch (_) {}
+  conn = null;
+  try { peer?.destroy(); } catch (_) {}
+  peer = null;
+  connect();
+});
 function connect() {
   const room = $('room').value.trim();
   if (!room) { setConn('No room code', 'bad'); return; }
   if (!peer || peer.destroyed) {
     peer = new Peer();
     peer.on('open', () => openConn(room));
-    peer.on('error', (e) => { console.warn(e); setConn('Error: ' + e.type, 'bad'); retry(); });
+    peer.on('error', (e) => {
+      console.warn(e);
+      if (e.type === 'peer-unavailable') { setConn('Can’t find the big screen — retrying', 'bad'); msg('The big screen may have reloaded (it then shows a new QR code): scan the new code, or keep this open and it keeps trying.'); }
+      else setConn('Error: ' + e.type, 'bad');
+      retry();
+    });
     peer.on('disconnected', () => { try { peer.reconnect(); } catch (_) {} });
   } else if (peer.open) {
     openConn(room);
   }
 }
+let tries = 0, openTimer = null;
 function openConn(room) {
-  setConn('Connecting…', 'wait');
+  tries++;
+  setConn(tries > 1 ? `Connecting… (try ${tries})` : 'Connecting…', 'wait');
+  if (tries > 2) msg('Still connecting — check the big screen is on this game with its QR code showing, and that both are on the same Wi-Fi. Tap the yellow pill to try again.');
   conn = peer.connect(room, { reliable: false, serialization: 'json' });
+  const c = conn;
+  // a link that never opens (the screen reloaded, slept, or the network blocks it): start again
+  clearTimeout(openTimer);
+  openTimer = setTimeout(() => {
+    if (c.open || conn !== c) return;
+    try { c.close(); } catch (_) {}
+    conn = null;
+    try { peer.destroy(); } catch (_) {}
+    peer = null;
+    connect();
+  }, 10000);
   conn.on('open', () => {
+    clearTimeout(openTimer); tries = 0;
     setConn('Connected', 'ok');
     conn.send({ type: 'hello', ua: navigator.userAgent, camera: currentCameraLabel(), build: document.querySelector('meta[name=build]')?.content });
   });
@@ -51,7 +81,7 @@ function openConn(room) {
       $('take').hidden = d.active;
     }
   });
-  conn.on('close', () => { setConn('Disconnected — retrying', 'bad'); conn = null; retry(); });
+  conn.on('close', () => { if (conn !== c) return; setConn('Disconnected — retrying', 'bad'); conn = null; retry(); });
   conn.on('error', () => { setConn('Connection error', 'bad'); });
 }
 let retryTimer = null;

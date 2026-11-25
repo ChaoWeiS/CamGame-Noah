@@ -264,13 +264,37 @@ export const net = {
     return (v && this.conns.find((c) => c.peer === v && c.open)) || this.conn;
   },
   start() {
-    const id = 'ark-' + Math.random().toString(36).slice(2, 8);
+    // the same room code after a reload (e.g. the automatic update), so camera phones that
+    // were connected find this screen again by themselves
+    let id = null;
+    try { id = sessionStorage.getItem('ark-room'); } catch (_) {}
+    if (!id) id = 'ark-' + Math.random().toString(36).slice(2, 8);
+    try { sessionStorage.setItem('ark-room', id); } catch (_) {}
     this.roomId = id;
     const base = location.href.replace(/[#?].*$/, '').replace(/[^/]*$/, '');
     this.phoneUrl = `${base}phone.html?room=${id}`;
+    this.idTries = 0;
+    this.makePeer();
+  },
+  makePeer() {
+    const id = this.roomId;
     this.peer = new window.Peer(id);
+    this.peer.on('error', (e) => {
+      console.warn(e);
+      // just reloaded: the server still holds our old connection for a few seconds — try again
+      if (e.type === 'unavailable-id' && this.idTries++ < 6) {
+        this.onStatus('Reconnecting…');
+        setTimeout(() => { try { this.peer.destroy(); } catch (_) {} this.makePeer(); }, 2500);
+        return;
+      }
+      this.onStatus('Connection error: ' + e.type);
+    });
+    this.listen();
+  },
+  listen() {
+    if (this.listening === this.peer) return;
+    this.listening = this.peer;
     this.peer.on('open', () => this.onStatus('Waiting for phone…'));
-    this.peer.on('error', (e) => { console.warn(e); this.onStatus('Connection error: ' + e.type); });
     this.peer.on('disconnected', () => { try { this.peer.reconnect(); } catch (_) {} });
     this.peer.on('connection', (c) => {
       // the same phone reconnecting replaces its old connection (and keeps its role)
@@ -327,7 +351,7 @@ export const net = {
         if (!this.conn) { stats.connected = false; this.onStatus('Phone disconnected — waiting…'); }
       });
     });
-    setInterval(() => {
+    if (!this.pinging) this.pinging = setInterval(() => {
       if (this.conn && this.conn.open) { try { this.conn.send({ type: 'ping', t: performance.now() }); } catch (_) {} }
     }, 1000);
   },

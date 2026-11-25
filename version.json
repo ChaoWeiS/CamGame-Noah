@@ -1,5 +1,5 @@
 {
- "build": "1125-203749-phone-display-fix",
+ "build": "1125-204753-connect-retry",
  "files": [
   "js/autorig.js",
   "js/awake.js",
