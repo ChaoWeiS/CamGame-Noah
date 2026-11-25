@@ -40,7 +40,7 @@ export const PHYSICS_FOR = {
   bear: { belly: 1.3, bob: 0.4, tail: 0.5, wag: 0 },
   hamster: { belly: 0.9, bob: 1.0, tail: 0.4, wag: 0 },
   chicken: { belly: 0.3, bob: 1.2, tail: 0.8, wag: 0 },
-  dog: { belly: 0.3, bob: 0.4, tail: 1.2, wag: 0.35 },
+  dog: { belly: 0.3, bob: 0.4, tail: 0.35, wag: 0 },   // one-bone tail: a big swing/wag looked like a shaking sausage
 };
 
 // which way each bone points in the T-pose (the rig is built with no rotations)

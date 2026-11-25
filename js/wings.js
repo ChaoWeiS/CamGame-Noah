@@ -220,29 +220,52 @@ export async function addWings(ch) {
   return w;
 }
 
-// Wings with their own bones flap with the arms, like a bird: arms up → wings up,
-// arms down → wings swing down (the tips trail a little behind the stroke). Only with the
-// arms right down by the sides do they also tuck back a little. Call after posing the arms
-// and updating matrices.
+// Wings with their own bones flap like a bird's (reference: a bird flap cycle, poses 1–9).
+// The arms don't hold the wings; they drive the stroke and the wings follow with a little drag:
+//   hands apart (arms out / up)   → pose 1: wings raised
+//   bringing the hands down/in    → downstroke 1 → 4 → 6: wings straight, sweeping down and a bit forward
+//   raising them again            → upstroke 7 → 8 → 9: wings bent at the wrist, the feathers trailing
+//   holding still                 → the wings settle straight (pose 1 or 6)
+// Call once per frame after posing the arms and updating matrices.
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _m = new THREE.Matrix4();
-const _qy = new THREE.Quaternion(), _qz = new THREE.Quaternion(), _Y = new THREE.Vector3(0, 1, 0), _Z = new THREE.Vector3(0, 0, 1);
+const _q1 = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _Y = new THREE.Vector3(0, 1, 0), _Z = new THREE.Vector3(0, 0, 1);
+const lerp = (a, b, t) => a + (b - a) * t;
 export function updateWings(ch) {
   const wb = ch.wingBones;
   if (!wb) return;
+  const now = performance.now() / 1000;
+  const st = (ch.wingState = ch.wingState || { t: now, R: { p: 0, v: 0, bend: 0, tgt: 0 }, L: { p: 0, v: 0, bend: 0, tgt: 0 } });
+  const dt = Math.min(0.05, Math.max(0.001, now - st.t)); st.t = now;
   const chest = wb.wingR.parent;
   _m.copy(chest.matrixWorld).invert();
   for (const [s, sg] of [['R', 1], ['L', -1]]) {
-    const up = ch.b['upper' + s], fore = ch.b['fore' + s];
+    const up = ch.b['upper' + s], fore = ch.b['fore' + s], w = st[s];
     if (!up || !fore) continue;
     up.getWorldPosition(_a).applyMatrix4(_m); fore.getWorldPosition(_b).applyMatrix4(_m);
     _b.sub(_a);
-    const elev = Math.atan2(_b.y, Math.abs(_b.x) + 1e-6) - (wb.rest ? wb.rest[s] : 0);   // 0 = as at rest (out), −π/2 = down by the side
-    const e = Math.max(-1.15, Math.min(1.0, elev));
-    const tuck = smooth(0.9, 1.4, -elev);                         // arms right down: tuck back a little
-    _qz.setFromAxisAngle(_Z, sg * e * 0.85);                      // flap: the whole wing up / down with the arm
-    _qy.setFromAxisAngle(_Y, sg * tuck * 0.45);
-    wb['wing' + s].quaternion.multiplyQuaternions(_qy, _qz);
-    wb['wingTip' + s].quaternion.setFromAxisAngle(_Z, sg * e * 0.25);   // the outer feathers bend a bit further
+    const elev = Math.atan2(_b.y, Math.abs(_b.x) + 1e-6) - (wb.rest ? wb.rest[s] : 0);   // 0 = out like at rest, −π/2 = down
+    // stroke position: 0 = top (pose 1), 1 = bottom (pose 6)
+    const tgt = smooth(0.15, -1.15, elev);
+    const armSpeed = (tgt - w.tgt) / dt; w.tgt = tgt;
+    // the wing follows with drag (a damped spring)
+    const k = 90, d = 2 * Math.sqrt(k) * 0.85;
+    w.v += (k * (tgt - w.p) - d * w.v) * dt; w.p += w.v * dt;
+    const p = Math.max(-0.1, Math.min(1.1, w.p));
+    // bent wing on the way up, straight on the way down / when held still
+    const bendTo = armSpeed < -0.6 ? 1 : armSpeed > 0.6 ? 0 : w.bend * 0.97;
+    w.bend += (bendTo - w.bend) * Math.min(1, dt * 10);
+    const bend = w.bend, mid = Math.sin(Math.max(0, Math.min(1, p)) * Math.PI);
+    // whole wing: up/down (roll about the forward axis) + forward/back sweep (about the vertical axis)
+    const roll = lerp(0.15, -1.5, p) + bend * 0.25;
+    const sweepFwd = 0.45 * Math.max(0, p) * (1 - bend) - 0.35 * bend;     // +: tips forward
+    _q1.setFromAxisAngle(_Y, -sg * sweepFwd);
+    _q2.setFromAxisAngle(_Z, sg * roll);
+    wb['wing' + s].quaternion.multiplyQuaternions(_q1, _q2);
+    // outer feathers: hang down and trail back on the upstroke, lag a touch on the downstroke
+    const tipRoll = -bend * (0.45 + 0.75 * mid) + (1 - bend) * 0.2 * mid * Math.sign(w.v);
+    _q1.setFromAxisAngle(_Y, sg * bend * 0.45);
+    _q2.setFromAxisAngle(_Z, sg * tipRoll);
+    wb['wingTip' + s].quaternion.multiplyQuaternions(_q1, _q2);
     wb['wing' + s].updateMatrixWorld(true);
   }
 }

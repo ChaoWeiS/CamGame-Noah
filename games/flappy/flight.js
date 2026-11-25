@@ -299,11 +299,11 @@ class FlightWorld {
   pose(f, t) {
     const ch = f.ch, b = ch.b;
     ch.root.position.set(f.x, f.y, -f.d);
-    const pitch = 0.45 - clamp(f.vy * 0.05, -0.3, 0.3) + (f.stun ? Math.sin(t * 20) * 0.3 : 0);
+    const pitch = 0.7 - clamp(f.vy * 0.05, -0.3, 0.3) + (f.stun ? Math.sin(t * 20) * 0.3 : 0);
     ch.root.rotation.set(pitch, Math.PI - f.heading, -f.turnRate * 0.35);
     for (const s of ['L', 'R']) { b['thigh' + s].rotation.set(0.55, 0, 0); b['shin' + s].rotation.set(0.35, 0, 0); }
     b.spine.rotation.set(0, 0, 0); b.chest.rotation.set(0, 0, 0);
-    b.head.rotation.set(-0.45, 0, 0);                  // look ahead, not at the floor
+    b.head.rotation.set(-0.65, 0, 0);                  // look ahead, not at the floor
     ch.unfixArms();
     if (f.pts) this.copyArms(f, f.pts);
     else {
