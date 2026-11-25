@@ -202,6 +202,10 @@ function prefitFor(ch) {
       for (const s of ['L', 'R']) {
         const P = (k) => restPos(bones.find((bn) => bn.name === k + s));
         made.rest[s] = armAngles(P('upper'), P('fore'), P('hand'), s === 'R' ? 1 : -1);
+        // the wing as modelled is raised (an angel's V); its leading edge (shoulder → wrist) at this
+        // angle above level. Arms spread level = wings spread level, so take that much off.
+        const a = made['wingUp' + s].userData.rest, b = made['wingHand' + s].userData.rest;
+        made.rest[s].lift = Math.atan2(b.y - a.y, Math.abs(b.x - a.x) + 1e-6);
       }
     }
     return { geo, mat: m, skeleton, wingBones: ok ? made : null };
@@ -228,7 +232,7 @@ export async function addWings(ch) {
 //   hand:     the wing tip = a bird's fingers: follows the player's fingertips (wrist bend),
 //             bends with the elbow (as in birds) and trails the stroke: curls up on the way
 //             down, hangs on the way up, straightens out when the wing stops
-// Arms out straight = the wings as modelled. Call once per frame after posing the arms and
+// Arms spread level = wings spread level (the modelled wing is tilted down to level); arms up = wings up. Call once per frame after posing the arms and
 // updating matrices.
 // shoulder elevation (0 = level, + up) and elbow bend (+ = forearm up) of one arm, in the chest's frame
 function armAngles(u, f, h, sg) {
@@ -261,13 +265,14 @@ export function updateWings(ch) {
     if (!up || !fore || !hand) continue;
     up.getWorldPosition(_u).applyMatrix4(_m); fore.getWorldPosition(_f).applyMatrix4(_m); hand.getWorldPosition(_h).applyMatrix4(_m);
     const A = armAngles(_u, _f, _h, sg), R0 = wb.rest[s];
-    const elev = follow(w.sh, clamp(A.elev - R0.elev, -1.35, 0.8), dt);
+    const elev = follow(w.sh, clamp(A.elev - R0.elev, -1.25, 1.35), dt);
     const bend = follow(w.el, clamp(A.bend - R0.bend, -1.3, 1.0), dt, 90);
     const wrist = follow(w.wr, clamp(sg * hand.rotation.z, -1.0, 1.0), dt, 90);   // the player's wrist (fingertips) bend
     w.vs += (w.sh.v - w.vs) * Math.min(1, dt * 12);          // how fast the wing is beating (+ = up)
     const down = clamp(-elev / 1.2, 0, 1);
+    const lift = (R0.lift || 0) * 0.85;
     // shoulder: the beat, sweeping a little forward at the bottom
-    setRot(wb['wingUp' + s], sg, -0.3 * down, elev);
+    setRot(wb['wingUp' + s], sg, -0.3 * down, Math.max(-1.3, elev - lift));   // arms level → wings level; not so far down they cross
     // elbow: folds the wing at its middle (down and back) as the player's elbow bends
     setRot(wb['wingFore' + s], sg, 0.45 * Math.min(1, Math.abs(bend)), bend * 0.85);
     // hand: follows the elbow, and trails the beat (air pushing on the long feathers)
