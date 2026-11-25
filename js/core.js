@@ -179,7 +179,7 @@ export const tracker = new Tracker();
 export function input(pl) {
   if (pl.kind === 'keyboard') {
     return {
-      present: true, lane: pl.kb.lane, ducking: pl.kb.duck,
+      present: true, lane: pl.kb.lane, side: pl.kb.lane, ducking: pl.kb.duck,
       jumping: performance.now() - pl.kb.jumpAt < 450,
       pose: pl.kb.pose, handsUp: pl.kb.handsUp,
       run: Math.max(0, 1 - (performance.now() - pl.kb.runAt) / 600), // tap R (P1) / F (P2) to run
@@ -187,7 +187,7 @@ export function input(pl) {
   }
   const b = pl.body;
   return {
-    present: pl.present, lane: b.lane, ducking: b.ducking, jumping: b.jumping,
+    present: pl.present, lane: b.lane, side: b.side, ducking: b.ducking, jumping: b.jumping,
     pose: b.pose, handsUp: b.handsUp, run: b.run,
   };
 }

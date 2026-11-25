@@ -144,8 +144,9 @@ export class RaceScene extends Phaser.Scene {
       r.lost.setText(inp.present ? '' : 'Come back into view!');
 
       // Movement
-      const targetX = r.c.cx + inp.lane * r.c.tw / 3;
-      r.laneX += (targetX - r.laneX) * Math.min(1, dt * 14);
+      // the animal glides to where the player's (multiplied) sideways position puts it
+      const targetX = r.c.cx + (inp.side ?? inp.lane) * r.c.tw / 3;
+      r.laneX += (targetX - r.laneX) * Math.min(1, dt * 10);
 
       if (this.state === 'run' && !r.place) {
         // Running on the spot or swinging the arms (alternately) makes you faster: 60% … ~170% speed.
@@ -235,7 +236,9 @@ export class RaceScene extends Phaser.Scene {
 
   resolve(r, o, inp, now) {
     let ok;
-    if (o.type === 'rock') ok = !o.blocked.includes(inp.lane);
+    // boulders: judged by the lane the animal is actually in on screen (what you see is what counts)
+    const lane = Math.max(-1, Math.min(1, Math.round((r.laneX - r.c.cx) / (r.c.tw / 3))));
+    if (o.type === 'rock') ok = !o.blocked.includes(lane);
     else if (o.type === 'log' || o.type === 'lowBranch') ok = now - r.lastJump < WINDOW_MS || inp.jumping;
     else ok = now - r.lastDuck < WINDOW_MS || inp.ducking;
     if (ok) {

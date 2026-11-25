@@ -87,6 +87,10 @@ export function keyPoints(pts) {
   return { sh, hip, torso };
 }
 
+// How far (in torso lengths, ~50 cm) the shoulders move to shift the animal one lane.
+// 0.4 ≈ a 20 cm step. Smaller = less room needed. Override with ?step=0.3 in the address.
+export const LANE_STEP = +(new URLSearchParams(globalThis.location?.search || '').get('step')) || 0.4;
+
 export class Body {
   constructor() {
     this.pts = null;        // lightly smoothed points (game detection: fast)
@@ -96,6 +100,7 @@ export class Body {
     this.sm3D = new SkeletonSmoother(0.8, 1.5);
     this.base = null;       // calibrated standing posture
     this.lane = 0;
+    this.side = 0;          // continuous sideways position, −1.2 … 1.2 (lanes at −1, 0, 1)
     this.jumping = false;
     this.ducking = false;
     this.pose = null;
@@ -136,12 +141,17 @@ export class Body {
     const b = this.base;
     const T = (torso + b.torso) / 2;
 
-    // Lanes: sideways shift of the shoulders (lean or step), with hysteresis.
+    // Sideways: the shoulders' shift (a step or a lean), MULTIPLIED so a small step moves
+    // the animal a whole lane — players standing close together don't have room to walk
+    // far. side: 0 = middle, ±1 = the middle of a side lane (continuous, so the animal
+    // glides instead of jumping). lane = whichever lane the animal is mostly in.
     const dx = sh.x - b.shX;
-    const on = 0.35 * T, off = 0.2 * T;
-    if (this.lane === 0) this.lane = dx > on ? 1 : dx < -on ? -1 : 0;
-    else if (this.lane === 1 && dx < off) this.lane = dx < -on ? -1 : 0;
-    else if (this.lane === -1 && dx > -off) this.lane = dx > on ? 1 : 0;
+    const target = Math.max(-1.2, Math.min(1.2, dx / (LANE_STEP * T)));
+    this.side += (target - this.side) * 0.5;
+    const s = this.side;
+    if (this.lane === 0) this.lane = s > 0.6 ? 1 : s < -0.6 ? -1 : 0;
+    else if (this.lane === 1 && s < 0.4) this.lane = s < -0.6 ? -1 : 0;
+    else if (this.lane === -1 && s > -0.4) this.lane = s > 0.6 ? 1 : 0;
 
     // Jump: shoulders and hips both rise. Duck: shoulders drop a lot.
     const riseSh = b.shY - sh.y, riseHip = b.hipY - hip.y;
@@ -153,7 +163,7 @@ export class Body {
       const k = 0.01;
       b.shY += (sh.y - b.shY) * k; b.hipY += (hip.y - b.hipY) * k;
       b.torso += (torso - b.torso) * k;
-      if (this.lane === 0) b.shX += (sh.x - b.shX) * k;
+      if (Math.abs(this.side) < 0.3) b.shX += (sh.x - b.shX) * k;
     }
 
     this.detectRunning(p, T);
