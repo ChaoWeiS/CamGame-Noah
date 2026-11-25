@@ -14,7 +14,10 @@ const WING_FILE = new URL('../assets/wings.glb', import.meta.url).href;
 const EDGE = [[0.06, 0.305], [0.192, 0.398], [0.241, 0.478], [0.346, 0.51]];
 const WING_EDGE = 0.6;           // the wing's leading edge is this many animal-heights long (same look on every animal; bigger animal, bigger wings)
 
-const WING_SCALE = 1.35;          // the Blender wings × this, grown from their roots
+// How wide each animal is with its arms down by its sides (half-width ÷ height): the wings must
+// wrap round that without going into the body, so wider animals get bigger wings, hinged wider.
+const GIRTH_FOR = { bear: 0.30, chicken: 0.33, dog: 0.26, hamster: 0.31 };
+const wingScale = (girth) => 1.35 * (0.75 + girth * 1.4);      // the Blender wings × this, grown from their roots
 let srcPromise = null;
 function loadSource() {
   return (srcPromise = srcPromise || new GLTFLoader().loadAsync(WING_FILE).then((gltf) => {
@@ -207,6 +210,7 @@ function prefitFor(ch) {
         // angle above level. Arms spread level = wings spread level, so take that much off.
         const a = made['wingUp' + s].userData.rest, b = made['wingHand' + s].userData.rest;
         made.rest[s].lift = Math.atan2(b.y - a.y, Math.abs(b.x - a.x) + 1e-6);
+        made.rest[s].span = Math.hypot(b.x - a.x, b.y - a.y);
       }
     }
     return { geo, mat: m, skeleton, wingBones: ok ? made : null };
@@ -224,7 +228,11 @@ export async function addWings(ch) {
   ch.wings = w;
   ch.wingBones = wingBones || null;
   // big wings, each about as long as the animal is tall
-  if (wingBones) for (const s of ['R', 'L']) wingBones['wingUp' + s].scale.setScalar(WING_SCALE);
+  if (wingBones) {
+    const id = Object.keys(GIRTH_FOR).find((k) => (ch.src || '').includes(k));
+    wingBones.girth = GIRTH_FOR[id] ?? 0.3;
+    for (const s of ['R', 'L']) { const r = wingBones['wingUp' + s]; r.scale.setScalar(wingScale(wingBones.girth)); r.userData.base = r.position.clone(); }
+  }
   return w;
 }
 
@@ -287,7 +295,13 @@ export function updateWings(ch) {
     // shoulder: arms level → wings level, up → up, down → hanging straight down below the body
     // (turned forward by the body's lean so they point down in the world); folding swings the
     // whole wing back along the body
-    const beat = Math.max(-1.55, elev - lift);
+    const beat = Math.max(-1.2, elev - lift);
+    // a bird's wing hinges at its shoulder, on the side of the body: as the wings come down the
+    // hinge moves out to the shoulders, so the downstroke ends wide, round the body, not behind it
+    const root = wb['wingUp' + s];
+    // the hinge goes out past the animal's sides (its arms included) and a little back
+    const H = ch.height || 1, out = Math.max(0, (wb.girth + 0.06) * H - Math.abs(root.userData.base?.x || 0));
+    if (root.userData.base) root.position.copy(root.userData.base).add(_h.set(sg * out * down * open, -0.06 * H * down * open, -0.05 * H * down * open));
     // a bird's stroke also goes forward and back: the downstroke sweeps the wings forward and
     // down in front of the body (they end up forward of the shoulders at the bottom), the
     // upstroke takes them back and up
