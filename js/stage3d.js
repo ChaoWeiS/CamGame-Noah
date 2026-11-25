@@ -84,8 +84,10 @@ export class Stage3D {
     if (a.helper) a.helper.visible = view.bones;
     ch.root.position.set(x, -footY, 0);
     ch.root.scale.setScalar(heightPx / ch.height);
+    ch.unfixArms();
     if (pts && world) ch.pose3D(world, pts, base);
     else if (pts) ch.pose(pts, base); else ch.idle(t);
+    ch.fixArms();                      // arms rest on the body instead of going through it
     ch.root.updateMatrixWorld(true);
     ch.physics();                      // belly wobble, tail swing, body bob
     return true;

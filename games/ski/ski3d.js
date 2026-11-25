@@ -413,6 +413,7 @@ export class Ski3D {
     b.hips.position.z = 0;
     b.spine.rotation.set(0.25 + tuck * 0.3, -sk.twist * 0.5, 0);
     b.chest.rotation.set(0, -sk.twist * 0.35, 0);
+    ch.unfixArms();
     if (sk.pts) this.copyArms(sk, sk.pts);
     else {
       // keyboard players: arms forward and down, pushing on the poles when they pump
@@ -422,6 +423,7 @@ export class Ski3D {
       b.handL.rotation.set(0, 0, 0); b.handR.rotation.set(0, 0, 0);
     }
     ch.adjustShoulders();
+    ch.fixArms();
     ch.root.updateMatrixWorld(true);
     // poles: point down and a bit behind, whatever the arms are doing
     const back = new THREE.Vector3(-Math.sin(sk.heading), 0, Math.cos(sk.heading));   // uphill-ish, behind the skier

@@ -296,6 +296,7 @@ export class Race3D {
     const sw = Math.sin(e.phase) * 0.9 * run;
     b.thighL.rotation.set(sw, 0, 0); b.thighR.rotation.set(-sw, 0, 0);
     b.shinL.rotation.set(-Math.max(0, -sw) * 1.2, 0, 0); b.shinR.rotation.set(-Math.max(0, sw) * 1.2, 0, 0);
+    ch.unfixArms();
     if (st.pts) {
       this.copyArms(e, st.pts);
     } else {
@@ -303,6 +304,7 @@ export class Race3D {
       b.foreL.rotation.set(-0.6 * run, 0, 0.1); b.foreR.rotation.set(-0.6 * run, 0, -0.1);
     }
     ch.adjustShoulders();
+    ch.fixArms();
     const bob = Math.abs(Math.cos(e.phase)) * 0.03 * ch.height * run;
     b.hips.position.y = ch.hipY0 + bob + (st.jump || 0) * 0.35 * ch.height - (st.duck ? 0.12 * ch.height : 0);
     b.spine.rotation.set(st.duck ? 0.6 : 0.08 * run, 0, st.wobble || 0);

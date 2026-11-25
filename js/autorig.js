@@ -61,6 +61,7 @@ const SHOULDER_FOR = { bear: 0.7, dog: 0.38, chicken: 0.66, hamster: 0.82 };
 // rigged ONCE; every character made from it shares the geometry, skin weights and textures
 // and only gets its own bones. (Character select used to rig 4 animals × 4 players afresh.)
 const rigCache = new Map();
+const _fv = new THREE.Vector3(), _fz = new THREE.Vector3(0, 0, 1), _fq = new THREE.Quaternion();
 export function loadRiggedCharacter(url, opts = {}) {
   const key = url + JSON.stringify(opts);
   if (!rigCache.has(key)) {
@@ -293,6 +294,67 @@ export class RiggedCharacter {
 
   // Shoulders roll out and up as an arm lifts: arms hang close to the body when down,
   // and go up beside the head (not behind it) when raised. Call after posing the arms.
+  // ---- arms don't go through the body or the head
+  // The chest/belly is an upright rounded column and the head a ball. After the arms are
+  // posed, an arm whose elbow, wrist or paw would sink in is swung FORWARD at the shoulder
+  // until it's clear — so a hand on the tummy or at the mouth rests in front of the body
+  // (from the front it looks the same as the player's pose). Arms may still cross each other.
+  // Call unfixArms() before posing and fixArms() after.
+  unfixArms() {
+    if (!this._fix) return;
+    for (const [name, q] of Object.entries(this._fix)) this.b[name].quaternion.copy(q);
+    this._fix = null;
+  }
+  fixArms() {
+    const j = this.joints, H = this.height, b = this.b, root = this.root;
+    root.updateMatrixWorld(true);
+    const P = (bone, x = 0, y = 0, z = 0) => root.worldToLocal(bone.localToWorld(_fv.set(x, y, z))).clone();
+    const headLen = H - j.neckY;
+    const hipsP = P(b.hips), chestP = P(b.chest);
+    const top = chestP.clone().add(chestP.clone().sub(hipsP).setLength((j.armRootY - j.chestY) * 0.6 + H * 0.02));
+    const zc = ((j.frontZ || 0) + (j.backZ || 0)) / 2, rz = Math.max(H * 0.06, ((j.frontZ || 0) - (j.backZ || 0)) / 2);
+    const rx = j.sx * 0.82, m = H * 0.035;
+    const head = P(b.head, 0, headLen * 0.5, 0), rh = headLen * 0.42;
+    // how deep a point is inside the body or head (≤ 0 = outside)
+    const depth = (p) => {
+      const ax = top.clone().sub(hipsP), t = Math.max(0, Math.min(1, p.clone().sub(hipsP).dot(ax) / ax.lengthSq()));
+      const c = hipsP.clone().addScaledVector(ax, t);
+      const ex = (p.x - c.x) / (rx + m), ez = (p.z - zc) / (rz + m);
+      const torso = 1 - Math.sqrt(ex * ex + ez * ez);
+      const hd = 1 - p.distanceTo(head) / (rh + m);
+      return Math.max(torso, hd);
+    };
+    this._fix = this._fix || {};
+    this._armTheta = this._armTheta || { L: 0, R: 0 };
+    for (const s of ['L', 'R']) {
+      const up = b['upper' + s], fore = b['fore' + s], hand = b['hand' + s];
+      const pen = () => {
+        up.updateMatrixWorld(true);
+        const e = P(fore), w = P(hand), tip = w.clone().add(w.clone().sub(e).multiplyScalar(0.35));
+        return Math.max(depth(e), depth(e.clone().lerp(w, 0.5)), depth(w), depth(tip));
+      };
+      const q0 = up.quaternion.clone();
+      // forward axis for this arm: (arm direction) × (the body's front), in the chest's space
+      const dir = fore.position.clone().applyQuaternion(q0).normalize();
+      const axis = dir.clone().cross(_fz).normalize();
+      let theta = 0;
+      if (axis.lengthSq() > 0.5 && pen() > 0) {
+        for (theta = 0.1; theta <= 1.4; theta += 0.1) {
+          up.quaternion.copy(_fq.setFromAxisAngle(axis, theta)).multiply(q0);
+          if (pen() <= 0) break;
+        }
+      }
+      // ease, so the arm doesn't pop
+      const shown = this._armTheta[s] + (theta - this._armTheta[s]) * (theta > this._armTheta[s] ? 0.6 : 0.25);
+      this._armTheta[s] = shown;
+      if (shown > 0.005 && axis.lengthSq() > 0.5) {
+        this._fix['upper' + s] = q0;
+        up.quaternion.copy(_fq.setFromAxisAngle(axis, shown)).multiply(q0);
+      } else up.quaternion.copy(q0);
+      up.updateMatrixWorld(true);
+    }
+  }
+
   adjustShoulders() {
     const j = this.joints;
     for (const [s, side] of [['L', -1], ['R', 1]]) {
