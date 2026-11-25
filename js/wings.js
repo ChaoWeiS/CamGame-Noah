@@ -14,6 +14,7 @@ const WING_FILE = new URL('../assets/wings.glb', import.meta.url).href;
 const EDGE = [[0.06, 0.305], [0.192, 0.398], [0.241, 0.478], [0.346, 0.51]];
 const WING_EDGE = 0.6;           // the wing's leading edge is this many animal-heights long (same look on every animal; bigger animal, bigger wings)
 
+const WING_SCALE = 1.35;          // the Blender wings × this, grown from their roots
 let srcPromise = null;
 function loadSource() {
   return (srcPromise = srcPromise || new GLTFLoader().loadAsync(WING_FILE).then((gltf) => {
@@ -222,6 +223,8 @@ export async function addWings(ch) {
   w.bind(skeleton || ch.mesh.skeleton, ch.mesh.bindMatrix);
   ch.wings = w;
   ch.wingBones = wingBones || null;
+  // big wings, each about as long as the animal is tall
+  if (wingBones) for (const s of ['R', 'L']) wingBones['wingUp' + s].scale.setScalar(WING_SCALE);
   return w;
 }
 
@@ -258,7 +261,7 @@ export function updateWings(ch) {
   const wb = ch.wingBones;
   if (!wb) return;
   const now = performance.now() / 1000;
-  const mk = () => ({ sh: { x: 0, v: 0 }, el: { x: 0, v: 0 }, wr: { x: 0, v: 0 }, vs: 0 });
+  const mk = () => ({ sh: { x: 0, v: 0 }, el: { x: 0, v: 0 }, wr: { x: 0, v: 0 }, fa: { x: 0, v: 0 }, ha: { x: 0, v: 0 }, vs: 0 });
   const st = (ch.wingState = ch.wingState || { t: now, R: mk(), L: mk() });
   const dt = clamp(now - st.t, 0.001, 0.05); st.t = now;
   _m.copy(wb.wingUpR.parent.matrixWorld).invert();
@@ -290,10 +293,18 @@ export function updateWings(ch) {
     // upstroke takes them back and up
     const fwd = clamp(-w.vs * 0.14, -0.35, 0.5) + 0.3 * down;
     setRot(wb['wingUp' + s], sg, 0.85 * fold - fwd * open, beat * open + (-0.35) * fold, (lean + 0.35 + fwd) * down * open);
-    // forearm and hand fold back on it, into a small profile along the back
-    setRot(wb['wingFore' + s], sg, 0.4 * fold, 0);
-    const trail = clamp(-w.vs * 0.18, -0.8, 0.45);       // open wing: the long feathers trail the beat
-    setRot(wb['wingHand' + s], sg, 0.15 * fold + clamp(w.vs * 0.08, 0, 0.25) * open, (trail + wrist * 0.4) * open);
+    // forearm and hand: an open wing arches over (the tips droop, a dome), less so when raised.
+    // Each part follows the one before it on its own looser spring, so the wing bends like a
+    // whip through the stroke: the middle lags the shoulder, the tips lag the middle and
+    // overshoot a little at each turn. Folding tucks them back into a small profile.
+    const upRoll = beat * open + (-0.35) * fold;
+    const arch = open * (1 - smooth(0.2, 1.1, elev));
+    const foreAbs = follow(w.fa, upRoll - 0.3 * arch, dt, 70, 0.55);
+    const foreRel = clamp(foreAbs - upRoll, -1.1, 1.1) * open;
+    setRot(wb['wingFore' + s], sg, 0.4 * fold, foreRel);
+    const handAbs = follow(w.ha, upRoll + foreRel - 0.4 * arch + wrist * 0.4 * open, dt, 45, 0.5);
+    const handRel = clamp(handAbs - upRoll - foreRel, -1.2, 1.2) * open;
+    setRot(wb['wingHand' + s], sg, 0.15 * fold + clamp(w.vs * 0.08, 0, 0.25) * open, handRel);
     wb['wingUp' + s].updateMatrixWorld(true);
   }
 }
