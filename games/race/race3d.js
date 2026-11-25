@@ -338,6 +338,6 @@ export class Race3D {
     for (const p of this.pools.values()) p.list.forEach((m) => this.scene.remove(m));
     this.pools.clear();
     this.renderer.domElement.remove();
-    this.renderer.dispose();
+    this.renderer.dispose(); this.renderer.forceContextLoss?.();   // give the WebGL context back now (browsers allow only a few)
   }
 }

@@ -85,3 +85,22 @@ window.game = new Phaser.Game({
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
   scene: [BootScene, LobbyScene, PickScene, GameOverScene, ThanksScene],          // the mini games are added when they're loaded (js/games.js)
 });
+
+// If something goes wrong, say so on screen (with the error), instead of just freezing —
+// so it can be reported. Tap the note to reload.
+function oops(what) {
+  let el = document.getElementById('oops');
+  if (!el) {
+    el = document.createElement('div');
+    el.id = 'oops';
+    Object.assign(el.style, { position: 'fixed', left: '50%', bottom: '12px', transform: 'translateX(-50%)', zIndex: 9999, maxWidth: '90vw',
+      background: '#9b3b2f', color: '#fff', font: '600 14px system-ui, sans-serif', padding: '8px 14px', borderRadius: '10px', cursor: 'pointer',
+      boxShadow: '0 4px 14px rgba(0,0,0,0.35)', whiteSpace: 'pre-wrap' });
+    el.onclick = () => location.reload();
+    document.body.appendChild(el);
+  }
+  el.textContent = `⚠️ Something went wrong (build ${document.querySelector('meta[name="build"]')?.content || '?'}) — tap to reload\n${String(what).slice(0, 300)}`;
+}
+window.addEventListener('error', (e) => oops(`${e.message} @ ${(e.filename || '').split('/').slice(-2).join('/')}:${e.lineno}`));
+window.addEventListener('unhandledrejection', (e) => oops(e.reason?.stack?.split('\n').slice(0, 2).join(' ') || e.reason));
+game.events.once('ready', () => game.canvas?.addEventListener('webglcontextlost', () => oops('The screen\'s graphics were lost (WebGL context lost) — too many 3D views or out of memory')));

@@ -112,7 +112,7 @@ export class Stage3D {
     for (const a of this.actors.values()) { if (a.ch) this.scene.remove(a.ch.root); if (a.helper) this.scene.remove(a.helper); }
     this.actors.clear();
     this.renderer.domElement.remove();
-    this.renderer.dispose();
+    this.renderer.dispose(); this.renderer.forceContextLoss?.();   // give the WebGL context back now (browsers allow only a few)
   }
 }
 

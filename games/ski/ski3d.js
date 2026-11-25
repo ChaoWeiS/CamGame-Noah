@@ -458,6 +458,6 @@ export class Ski3D {
 
   destroy() {
     this.renderer.domElement.remove();
-    this.renderer.dispose();
+    this.renderer.dispose(); this.renderer.forceContextLoss?.();   // give the WebGL context back now (browsers allow only a few)
   }
 }
