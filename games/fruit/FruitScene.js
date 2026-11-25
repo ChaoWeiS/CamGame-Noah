@@ -76,7 +76,6 @@ export class FruitScene extends Phaser.Scene {
   create() {
     session.seed = (Math.random() * 1e9) | 0;
     this.r = rng(session.seed ^ 0xf7);
-    this.drawBackground();
     this.stage = new Stage3D(this.game);
     this.ready = false;
     loadFruits().then((T) => { this.T = T; this.ready = true; }).catch((e) => console.warn('fruits', e));
@@ -84,24 +83,33 @@ export class FruitScene extends Phaser.Scene {
     this.fruits = [];
     this.popups = [];
 
-    // players stand in columns, left to right in the order they stand in the room
+    // one window per player (like the other games): their own corner of the ark, their own
+    // rain of fruit — nobody's arms cross into anyone else's game. Left to right as they stand.
     const players = [...tracker.players];
     const xOf = (pl) => (pl.kind === 'camera' && pl.body?.pts ? (pl.body.pts[11].x + pl.body.pts[12].x) / 2 : pl.slot);
     players.sort((a, b) => xOf(a) - xOf(b));
-    // the side columns keep away from the screen edges so raised arms stay in view;
-    // with a full house the animals are a little smaller and slide less, so arms don't cross much
-    const n = players.length, margin = n >= 3 ? W * 0.05 : 0, colW = (W - 2 * margin) / n;
-    this.hpx = Math.min(H * 0.46, colW * (n >= 4 ? 0.85 : 1.0));    // animal height in pixels: lots of sky above them, to see fruit coming
-    this.slide = n >= 4 ? 0.18 : 0.3;
-    this.p = players.map((pl, i) => ({
-      pl, colX: margin + colW * (i + 0.5), colW, x: margin + colW * (i + 0.5), score: 0, thought: null,
-      hands: [{ bone: 'handL', fruit: null, freeAt: 0, pos: { x: 0, y: 0 } }, { bone: 'handR', fruit: null, freeAt: 0, pos: { x: 0, y: 0 } }],
-      bubble: new Bubble(this.game, PLAYER_CSS[pl.slot]),
-      chip: this.makeChip(pl), msg: new OverlayText(this.game, margin + colW * (i + 0.5), H * 0.2, 40),
-      lost: new OverlayText(this.game, margin + colW * (i + 0.5), H * 0.5, 30, '#ffd2c8'),
-    }));
+    const n = players.length, G = 4;
+    const rects = n <= 1 ? [{ x: 0, y: 0, w: W, h: H }]
+      : n === 2 ? [0, 1].map((i) => ({ x: i * (W / 2 + G / 2), y: 0, w: W / 2 - G / 2, h: H }))
+      : [0, 1, 2, 3].map((i) => ({ x: (i % 2) * (W / 2 + G / 2), y: Math.floor(i / 2) * (H / 2 + G / 2), w: W / 2 - G / 2, h: H / 2 - G / 2 }));
+    this.add.rectangle(W / 2, H / 2, W, H, 0x10202b);               // the gaps between windows
+    rects.forEach((r, i) => this.drawBackground(r, i >= n));
+    const r0 = rects[0];
+    this.hpx = Math.min(r0.h * (n <= 2 ? 0.46 : 0.5), r0.w * 0.7);   // animal height: lots of room above to see fruit coming
+    this.slide = 0.25;
+    this.p = players.map((pl, i) => {
+      const rect = rects[i], cx = rect.x + rect.w / 2;
+      return {
+        pl, rect, colX: cx, colW: rect.w, x: cx, floorY: rect.y + rect.h - Math.max(12, rect.h * 0.03), score: 0, thought: null,
+        wantedAt: 0, nextDrop: 0,
+        hands: [{ bone: 'handL', fruit: null, freeAt: 0, pos: { x: 0, y: 0 } }, { bone: 'handR', fruit: null, freeAt: 0, pos: { x: 0, y: 0 } }],
+        bubble: new Bubble(this.game, PLAYER_CSS[pl.slot]),
+        chip: this.makeChip(pl), msg: new OverlayText(this.game, cx, rect.y + rect.h * 0.2, n >= 3 ? 30 : 40),
+        lost: new OverlayText(this.game, cx, rect.y + rect.h * 0.5, n >= 3 ? 24 : 30, '#ffd2c8'),
+      };
+    });
     this.p.forEach((pp) => this.newThought(pp));
-    this.timer = new OverlayText(this.game, W / 2, 44, 52);
+    this.timer = new OverlayText(this.game, W / 2, n >= 3 ? H / 2 : 44, n >= 3 ? 40 : 52);
     this.banner = new OverlayText(this.game, W / 2, H / 2 - 40, 110);
     this.help = new OverlayText(this.game, W / 2, H / 2 + 70, 30);
     this.help.setText('💭 Your animal is hungry for the fruit in its bubble\n🙌 Catch it with your hands  ·  😋 bring it to your mouth\nThe wrong fruit? Yuck! Drop it and catch another\n⬇️ Missed one? Squat down and pick it up off the floor');
@@ -135,41 +143,39 @@ export class FruitScene extends Phaser.Scene {
   }
 
   // inside the ark: plank walls, beams, round windows with the rain outside, a wooden floor
-  drawBackground() {
-    const g = this.add.graphics(), floorTop = H * 0.8;
-    g.fillGradientStyle(0x7a4a24, 0x7a4a24, 0x5e3618, 0x5e3618, 1).fillRect(0, 0, W, floorTop);
-    // wall planks with a few knots
-    const r = rng(7);
-    for (let y = 0, i = 0; y < floorTop; y += 46, i++) {
-      g.fillStyle(i % 2 ? 0x84522a : 0x7b4a25, 1).fillRect(0, y, W, 44);
-      g.fillStyle(0x4a2a12, 0.55).fillRect(0, y + 44, W, 2);
-      for (let x = (i % 2) * 130; x < W; x += 260) g.fillStyle(0x4a2a12, 0.45).fillRect(x, y, 3, 44);
-      for (let k = 0; k < 3; k++) g.fillStyle(0x5a3416, 0.5).fillEllipse(r() * W, y + 10 + r() * 24, 14, 7);
+  // inside the ark, in one window: plank walls, beams, a round window with the rain outside,
+  // hay and a lantern, a wooden floor (an empty window is dimmed)
+  drawBackground(R, empty = false) {
+    const g = this.add.graphics(), floorTop = R.y + R.h * 0.8;
+    const X = (f) => R.x + f * R.w, Y = (f) => R.y + f * R.h;
+    g.fillStyle(0x6b4020, 1).fillRect(R.x, R.y, R.w, R.h);
+    const r = rng(7 + R.x + R.y), ph = Math.max(18, R.h * 0.058);
+    for (let y = R.y, i = 0; y < floorTop; y += ph, i++) {
+      g.fillStyle(i % 2 ? 0x84522a : 0x7b4a25, 1).fillRect(R.x, y, R.w, Math.min(ph - 2, floorTop - y));
+      g.fillStyle(0x4a2a12, 0.55).fillRect(R.x, y + ph - 2, R.w, 2);
+      for (let x = R.x + (i % 2) * R.w * 0.2; x < R.x + R.w; x += R.w * 0.4) g.fillStyle(0x4a2a12, 0.45).fillRect(x, y, 3, ph - 2);
+      for (let k = 0; k < 2; k++) g.fillStyle(0x5a3416, 0.5).fillEllipse(R.x + r() * R.w, y + ph * (0.25 + r() * 0.5), 12, 6);
     }
-    // round windows: grey sky and rain outside
-    for (const wx of [W * 0.2, W * 0.5, W * 0.8]) {
-      const wy = H * 0.2, rr = H * 0.07;
-      g.fillStyle(0x3b2410, 1).fillCircle(wx, wy, rr + 12);
-      g.fillStyle(0x8a95a3, 1).fillCircle(wx, wy, rr);
-      g.lineStyle(2, 0xcfe3f5, 0.7);
-      for (let k = -3; k <= 3; k++) { const x0 = wx + k * rr * 0.28; g.lineBetween(x0, wy - rr * 0.7, x0 - 6, wy + rr * 0.7); }
-      g.lineStyle(6, 0x3b2410, 1).lineBetween(wx - rr, wy, wx + rr, wy).lineBetween(wx, wy - rr, wx, wy + rr);
-    }
-    // big beams
+    const wx = X(0.5), wy = Y(0.2), rr = R.h * 0.08;
+    g.fillStyle(0x3b2410, 1).fillCircle(wx, wy, rr + 10);
+    g.fillStyle(0x8a95a3, 1).fillCircle(wx, wy, rr);
+    g.lineStyle(2, 0xcfe3f5, 0.7);
+    for (let k = -3; k <= 3; k++) { const x0 = wx + k * rr * 0.28; g.lineBetween(x0, wy - rr * 0.7, x0 - 5, wy + rr * 0.7); }
+    g.lineStyle(5, 0x3b2410, 1).lineBetween(wx - rr, wy, wx + rr, wy).lineBetween(wx, wy - rr, wx, wy + rr);
     g.fillStyle(0x4f2e14, 1);
-    for (const bx of [W * 0.05, W * 0.35, W * 0.65, W * 0.95]) g.fillRect(bx - 16, 0, 32, floorTop);
-    g.fillRect(0, H * 0.36, W, 26);
-    g.fillStyle(0x6b4020, 1).fillRect(0, H * 0.36, W, 6);
-    // hay in the corners and a lantern
-    g.fillStyle(0xd9b44a, 1).fillEllipse(W * 0.03, floorTop, W * 0.16, H * 0.16).fillEllipse(W * 0.97, floorTop, W * 0.16, H * 0.14);
-    g.lineStyle(2, 0x3b2410, 1).lineBetween(W * 0.35, H * 0.38, W * 0.35, H * 0.46);
-    g.fillStyle(0xffd77a, 1).fillCircle(W * 0.35, H * 0.49, 14);
-    g.fillStyle(0xffe9a8, 0.18).fillCircle(W * 0.35, H * 0.49, 60);
-    // the floor
-    g.fillStyle(0x6b4020, 1).fillRect(0, floorTop, W, H - floorTop);
-    for (let y = floorTop + 10; y < H; y += 22) g.fillStyle(0x4a2a12, 0.5).fillRect(0, y, W, 2);
-    g.fillStyle(0x3b2410, 1).fillRect(0, floorTop - 4, W, 8);
-    this.floorY = H - 24;
+    for (const bx of [0.06, 0.94]) g.fillRect(X(bx) - 12, R.y, 24, floorTop - R.y);
+    g.fillRect(R.x, Y(0.38), R.w, Math.max(12, R.h * 0.03));
+    g.fillStyle(0xd9b44a, 1).fillEllipse(X(0.04), floorTop, R.w * 0.16, R.h * 0.16).fillEllipse(X(0.96), floorTop, R.w * 0.16, R.h * 0.14);
+    g.lineStyle(2, 0x3b2410, 1).lineBetween(X(0.2), Y(0.41), X(0.2), Y(0.47));
+    g.fillStyle(0xffd77a, 1).fillCircle(X(0.2), Y(0.5), Math.max(7, R.h * 0.018));
+    g.fillStyle(0xffe9a8, 0.18).fillCircle(X(0.2), Y(0.5), R.h * 0.08);
+    g.fillStyle(0x6b4020, 1).fillRect(R.x, floorTop, R.w, R.y + R.h - floorTop);
+    for (let y = floorTop + 10; y < R.y + R.h; y += Math.max(12, R.h * 0.028)) g.fillStyle(0x4a2a12, 0.5).fillRect(R.x, y, R.w, 2);
+    g.fillStyle(0x3b2410, 1).fillRect(R.x, floorTop - 3, R.w, 6);
+    if (empty) {
+      g.fillStyle(0x10202b, 0.6).fillRect(R.x, R.y, R.w, R.h);
+      this.add.text(X(0.5), Y(0.5), '🍉', { fontSize: `${Math.round(R.h * 0.3)}px` }).setOrigin(0.5).setAlpha(0.5);
+    }
   }
 
   newThought(pp) {
@@ -196,10 +202,11 @@ export class FruitScene extends Phaser.Scene {
     // the animals
     for (const pp of this.p) this.placeAnimal(pp, time, now);
 
-    // the rain of fruit: more and faster as time goes
-    if (playing && this.ready && now > (this.nextDrop || 0)) {
-      this.drop(k);
-      this.nextDrop = now + (1900 - 1000 * k) * (0.7 + this.r() * 0.6) / Math.max(1, this.p.length * 0.55);
+    // each window's own rain of fruit: more and faster as time goes
+    if (playing && this.ready) for (const pp of this.p) {
+      if (now <= pp.nextDrop) continue;
+      this.drop(k, pp, now);
+      pp.nextDrop = now + (1700 - 900 * k) * (0.7 + this.r() * 0.6);
     }
     this.physics(dt, now, k);
     this.drawFruits(time);
@@ -218,7 +225,7 @@ export class FruitScene extends Phaser.Scene {
     const c = this.game.canvas, cr = c.getBoundingClientRect(), wr = document.getElementById('wrap').getBoundingClientRect();
     const kk = cr.height / H;
     this.p.forEach((pp) => Object.assign(pp.chip.style, {
-      left: `${cr.left - wr.left + pp.colX * kk}px`, top: `${cr.top - wr.top + (H - 6) * kk}px`, fontSize: `${22 * kk}px`,
+      left: `${cr.left - wr.left + pp.colX * kk}px`, top: `${cr.top - wr.top + (pp.rect.y + pp.rect.h - 6) * kk}px`, fontSize: `${(this.p.length >= 3 ? 18 : 22) * kk}px`,
     }));
   }
 
@@ -232,7 +239,7 @@ export class FruitScene extends Phaser.Scene {
     // take last frame's chomp nod off the head before it is posed again
     const prev = this.stage.actors.get(pl.slot)?.ch;
     if (prev && pp.chompApplied) { prev.b.head.rotation.x -= pp.chompApplied; pp.chompApplied = 0; }
-    const shown = this.stage.place(pl.slot, pl.animal || 'bear', pp.x, this.floorY, this.hpx,
+    const shown = this.stage.place(pl.slot, pl.animal || 'bear', pp.x, pp.floorY, this.hpx,
       cam && inp.present ? pl.body.vpts : null, cam && inp.present ? pl.body.base : null, time / 1000, cam && inp.present ? pl.body.world : null);
     const a = this.stage.actors.get(pl.slot), ch = a?.ch;
     pp.ch = shown ? ch : null;
@@ -261,30 +268,32 @@ export class FruitScene extends Phaser.Scene {
     }
     // the bubble: above and beside the head, on the side with more room
     const bs = this.hpx * 0.36;
-    const dir = pp.x < W / 2 ? 1 : -1;
+    const dir = pp.x < pp.rect.x + pp.rect.w * 0.6 ? 1 : -1;      // towards the roomier side of their window
     pp.bubble.place(pp.top.x + dir * bs * 0.55, pp.top.y - bs * 0.62, bs);
     pp.bubble.el.classList.toggle('flip', dir < 0);
     // keyboard players: Space eats what's in their paws
     if (!cam && this.enterKey.isDown) for (const h of pp.hands) if (h.fruit) { h.fruit.x = pp.mouth.x; h.fruit.y = pp.mouth.y; }
   }
 
-  drop(k) {
-    // often one of the fruits someone is thinking of, so there's always something to catch
-    const wanted = this.p.filter((pp) => pp.thought).map((pp) => pp.thought);
-    const kind = wanted.length && this.r() < 0.45 ? wanted[Math.floor(this.r() * wanted.length)] : POOL[Math.floor(this.r() * POOL.length)];
-    const r = Math.max(26, this.hpx * 0.1) * (SIZE[kind] || 1);
+  drop(k, pp, now) {
+    // their own fruit comes often: always if it hasn't come for a little while, else sometimes
+    const due = now - pp.wantedAt > 2600 - 900 * k;
+    const kind = pp.thought && (due || this.r() < 0.35) ? pp.thought : POOL[Math.floor(this.r() * POOL.length)];
+    if (kind === pp.thought) pp.wantedAt = now;
+    const R = pp.rect, r = Math.max(22, this.hpx * 0.1) * (SIZE[kind] || 1);
     const f = {
-      kind, r, spin: new THREE.Vector3(this.r() - 0.5, this.r() - 0.5, this.r() - 0.5).normalize(), spinV: 1 + this.r() * 2.5,
-      ang: this.r() * 6, state: 'fall', ground: 0, noCatch: 0, maxV: 120 + 110 * k, entered: false,
+      kind, r, pp, born: now, spin: new THREE.Vector3(this.r() - 0.5, this.r() - 0.5, this.r() - 0.5).normalize(), spinV: 1 + this.r() * 2.5,
+      ang: this.r() * 6, state: 'fall', ground: 0, noCatch: 0, maxV: (120 + 110 * k) * (R.h / H) * 1.3,
     };
+    const sp = Math.max(0.5, R.w / W);
     if (this.r() < 0.5) {
-      // tossed in from a side, in an arc
+      // tossed in from a side of the window, in an arc
       const side = this.r() < 0.5 ? -1 : 1;
-      Object.assign(f, { x: side < 0 ? -r : W + r, y: H * (0.04 + this.r() * 0.22),
-        vx: -side * (150 + this.r() * 150) * (1 + 0.3 * k), vy: -(30 + this.r() * 110) });
+      Object.assign(f, { x: side < 0 ? R.x + r : R.x + R.w - r, y: R.y + r + R.h * (0.02 + this.r() * 0.2),
+        vx: -side * (150 + this.r() * 150) * (1 + 0.3 * k) * sp, vy: -(30 + this.r() * 110) * (R.h / H) });
     } else {
       // from the top, drifting sideways
-      Object.assign(f, { x: r + this.r() * (W - 2 * r), y: -r - 10, vx: (this.r() - 0.5) * 240, vy: 30 + 40 * k });
+      Object.assign(f, { x: R.x + r + this.r() * (R.w - 2 * r), y: R.y + r, vx: (this.r() - 0.5) * 240 * sp, vy: 30 + 40 * k });
     }
     this.fruits.push(f);
   }
@@ -308,11 +317,12 @@ export class FruitScene extends Phaser.Scene {
         continue;
       }
       if (f.state !== 'fall') continue;
-      f.vy = Math.min(f.maxV, f.vy + G * dt);
+      const R = f.pp.rect;
+      f.vy = Math.min(f.maxV, f.vy + G * (R.h / H) * dt);
       f.x += f.vx * dt; f.y += f.vy * dt;
       f.ang += f.spinV * dt;
-      // bounce off the animals' heads and bodies
-      for (const pp of this.p) {
+      // bounce off the animal's head and body (each window's fruit is for its own animal)
+      for (const pp of [f.pp]) {
         if (!pp.ch) continue;
         const sz = this.hpx * (ANIMAL_SIZE[pp.pl.animal] ?? 1);
         for (const [c, rr] of [[pp.headC, sz * 0.15], [pp.chest, sz * 0.19], [pp.hips, sz * 0.17]]) {
@@ -328,7 +338,7 @@ export class FruitScene extends Phaser.Scene {
       }
       // caught by a paw (one fruit per paw)
       if (now > f.noCatch) {
-        for (const pp of this.p) {
+        for (const pp of [f.pp]) {
           if (!pp.ch) continue;
           const h = pp.hands.find((hh) => !hh.fruit && now > hh.freeAt && Math.hypot(f.x - hh.pos.x, f.y - hh.pos.y) < f.r + this.hpx * 0.09);
           if (h) { f.state = 'held'; f.holder = pp; f.hand = h; f.heldAt = now; h.fruit = f; f.ground = 0; break; }
@@ -336,18 +346,18 @@ export class FruitScene extends Phaser.Scene {
       }
       if (f.state !== 'fall') continue;
       // the ground: a small bounce, then it rolls a little and fades away
-      if (f.y > this.floorY - f.r) {
-        f.y = this.floorY - f.r;
+      if (f.y > f.pp.floorY - f.r) {
+        f.y = f.pp.floorY - f.r;
         if (f.vy > 60) { f.vy *= -0.35; f.vx *= 0.7; } else { f.vy = 0; f.vx *= 0.9; }
         f.ground = f.ground || now;
       }
       if (f.ground && now - f.ground > FLOOR_MS) f.state = 'gone';
-      if (!f.entered && f.x > f.r && f.x < W - f.r) f.entered = true;
-      if (f.entered && (f.x < f.r || f.x > W - f.r)) { f.x = Math.max(f.r, Math.min(W - f.r, f.x)); f.vx *= -0.6; }
-      if (f.y > H + f.r * 2) f.state = 'gone';
+      // the window's walls and top
+      if (f.x < R.x + f.r || f.x > R.x + R.w - f.r) { f.x = Math.max(R.x + f.r, Math.min(R.x + R.w - f.r, f.x)); f.vx *= -0.6; }
+      if (f.y < R.y + f.r && f.vy < 0) { f.y = R.y + f.r; f.vy *= -0.3; }
     }
     const lying = this.fruits.filter((f) => f.ground && f.state === 'fall').sort((a, b) => a.ground - b.ground);
-    for (const f of lying.slice(0, Math.max(0, lying.length - 10))) f.ground = Math.min(f.ground, now - FLOOR_MS + 600);   // too many: the oldest fade
+    for (const f of lying.slice(0, Math.max(0, lying.length - 8 * this.p.length))) f.ground = Math.min(f.ground, now - FLOOR_MS + 600);   // too many: the oldest fade
     this.fruits = this.fruits.filter((f) => f.state !== 'gone' || this.removeMesh(f));
   }
 
@@ -423,7 +433,7 @@ export class FruitScene extends Phaser.Scene {
         this.stage.scene.add(m);
         this.meshes.set(f, m);
       }
-      const fade = f.ground ? Math.max(0, 1 - (performance.now() - f.ground - (FLOOR_MS - 600)) / 600) : 1;
+      const fade = (f.ground ? Math.max(0, 1 - (performance.now() - f.ground - (FLOOR_MS - 600)) / 600) : 1) * Math.min(1, (performance.now() - (f.born || 0)) / 250);
       m.scale.setScalar(f.r * 2.1 * Math.min(1, fade + 0.001));
       m.position.set(f.x, -f.y, f.state === 'held' ? 500 : 400);
       if (f.state === 'held') m.quaternion.identity();

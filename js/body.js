@@ -352,7 +352,15 @@ function classify(p, sh, hip, T, b) {
 
   if (arms) {
     const bothAboveShoulders = wl.y < sh.y && wr.y < sh.y;
-    if (bothAboveShoulders && feet && handGap > 1.5 * T && Math.abs(al.x - ar.x) > 0.8 * T) return 'star';
+    // star: arms up and wide, feet apart — ankles if they can be seen, else knees; and if the
+    // legs are out of view altogether (a narrow camera cuts feet off), a wide "V" of arms is enough
+    if (bothAboveShoulders && handGap > 1.5 * T) {
+      const kl = p[L.lKnee], kr = p[L.rKnee];
+      const knees = kl.v > 0.4 && kr.v > 0.4;
+      const legsApart = (feet && Math.abs(al.x - ar.x) > 0.55 * T) || (!feet && knees && Math.abs(kl.x - kr.x) > 0.45 * T);
+      const legsUnseen = !feet && !knees;
+      if (legsApart || (legsUnseen && handGap > 1.9 * T)) return 'star';
+    }
     if (wl.y < nose.y - 0.25 * T && wr.y < nose.y - 0.25 * T && handGap < 1.3 * T) return 'giraffe';
     if (bothAboveShoulders && wl.y > nose.y - 0.6 * T && wr.y > nose.y - 0.6 * T &&
         Math.abs(wl.x - nose.x) < 0.8 * T && Math.abs(wr.x - nose.x) < 0.8 * T) return 'bear';

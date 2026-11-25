@@ -380,9 +380,10 @@ export class FlightScene extends Phaser.Scene {
     const glide = inp.present ? inp.glide : 0.5, fold = inp.present ? inp.fold : 0;
     f.fold = fold;
     if (flaps > 0) { f.vy = Math.min(6.5, Math.max(f.vy, -1) + 4.4 * flaps); f.flapAt = now; }
-    // falling: gentle when gliding, fast when the wings are folded
+    // falling: gentle when gliding, fast when the wings are folded (hovering while dazed)
     const g = 8 - 5.8 * glide + 9 * fold, tv = -5.5 + 3.8 * glide - 5 * fold;
-    f.vy = Math.max(tv, f.vy - g * dt);
+    if (f.stun && this.mode === 'ark') f.vy = 0;
+    else f.vy = Math.max(tv, f.vy - g * dt);
     f.y += f.vy * dt;
     // turning (sky): like the skis — tilt the outstretched arms; drift back when level
     if (this.mode === 'sky') {
@@ -408,8 +409,9 @@ export class FlightScene extends Phaser.Scene {
       if (f.y >= lo - 0.1 && f.y + hgt <= hi + 0.15) {
         f.next++; f.points++; f.hud.msg(['Whoosh! +1', 'Nice flying! +1', 'Through! +1'][f.points % 3]);
       } else {
-        // bonk: bounced back off the wall, a moment to recover, then try again
-        f.d = wl.d - 2.2; f.vy = 0; f.stunUntil = now + 900;
+        // bonk: back to the middle of the air, well before the wall, hovering for a moment —
+        // room to climb or dive to the gap (never stuck on the floor under it)
+        f.d = wl.d - 7; f.y = (C - hgt) / 2; f.vy = 0; f.stunUntil = now + 1100;
         f.hud.msg('Bonk! 💥', 1000);
         break;
       }
