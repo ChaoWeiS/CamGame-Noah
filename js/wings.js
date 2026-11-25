@@ -228,7 +228,8 @@ export async function addWings(ch) {
 // The wing's skeleton is a bird's arm (humerus → forearm → hand, along its leading edge),
 // and each joint copies the same joint of the player's arm, through a little drag:
 //   shoulder: arm up / down            → the whole wing beats up / down
-//   elbow:    forearm bent             → the wing folds at its middle (the upstroke shape)
+//   elbow:    bent (and wrists curled) → the wing folds back along the body: a small, gliding profile.
+//             Straight arms keep the wing open, up, level or hanging down
 //   hand:     the wing tip = a bird's fingers: follows the player's fingertips (wrist bend),
 //             bends with the elbow (as in birds) and trails the stroke: curls up on the way
 //             down, hangs on the way up, straightens out when the wing stops
@@ -276,15 +277,19 @@ export function updateWings(ch) {
     const down = clamp(-elev / 1.2, 0, 1);
     const lift = (R0.lift || 0) * 0.85;
     // shoulder: the beat, sweeping a little forward at the bottom
-    const raised = 1 - down;
-    // arms level → wings level; arms down → wings hang straight down below the body (turned
-    // forward by the body's lean so they point down in the world, not back like a glide)
-    setRot(wb['wingUp' + s], sg, 0, Math.max(-1.55, elev - lift), (lean + 0.35) * down);
-    // elbow: folds the wing at its middle (down and back) as the player's elbow bends
-    setRot(wb['wingFore' + s], sg, 0.4 * Math.min(1, Math.abs(bend)) * raised, bend * 0.7 * (0.3 + 0.7 * raised));
-    // hand: follows the elbow, and trails the beat (air pushing on the long feathers)
-    const trail = clamp(-w.vs * 0.18, -0.8, 0.45);
-    setRot(wb['wingHand' + s], sg, (0.25 * Math.min(1, Math.abs(bend)) + clamp(w.vs * 0.08, 0, 0.25)) * raised, (bend * 0.5 + wrist * 0.6) * (0.3 + 0.7 * raised) + trail);
+    // FOLD (a bird gliding or tucking its wings): the player bends the elbows (and curls the
+    // wrists). Straight arms keep the wings open, wherever the arms point.
+    const fold = clamp(smooth(0.35, 1.3, Math.abs(bend)) * (1 + 0.35 * smooth(0.25, 0.7, Math.abs(wrist))), 0, 1);
+    const open = 1 - fold;
+    // shoulder: arms level → wings level, up → up, down → hanging straight down below the body
+    // (turned forward by the body's lean so they point down in the world); folding swings the
+    // whole wing back along the body
+    const beat = Math.max(-1.55, elev - lift);
+    setRot(wb['wingUp' + s], sg, 0.85 * fold, beat * open + (-0.35) * fold, (lean + 0.35) * down * open);
+    // forearm and hand fold back on it, into a small profile along the back
+    setRot(wb['wingFore' + s], sg, 0.4 * fold, 0);
+    const trail = clamp(-w.vs * 0.18, -0.8, 0.45);       // open wing: the long feathers trail the beat
+    setRot(wb['wingHand' + s], sg, 0.15 * fold + clamp(w.vs * 0.08, 0, 0.25) * open, (trail + wrist * 0.4) * open);
     wb['wingUp' + s].updateMatrixWorld(true);
   }
 }

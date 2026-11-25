@@ -311,7 +311,8 @@ class FlightWorld {
       const since = (performance.now() - (f.flapAt || -1e9)) / 1000;
       const a = since < 0.35 ? Math.sin(since / 0.35 * Math.PI * 2) * 0.8 : f.fold > 0.5 ? -1.2 : 0.05;
       b.upperR.rotation.set(0, 0, a); b.upperL.rotation.set(0, 0, -a);
-      b.foreR.rotation.set(0, 0, 0); b.foreL.rotation.set(0, 0, 0);
+      const tuck = since >= 0.35 && f.fold > 0.5 ? -1.4 : 0;      // folded: elbows bent, so the wings tuck back
+      b.foreR.rotation.set(0, 0, tuck); b.foreL.rotation.set(0, 0, -tuck);
     }
     ch.adjustShoulders();
     ch.fixArms();
