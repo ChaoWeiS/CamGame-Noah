@@ -33,8 +33,15 @@ net.onStatus = (s) => {
   // in phone mode the camera-phone connection is only shown when its QR code is shown
   const b = document.body.classList;
   if (!b.contains('phone') || b.contains('show-qr')) $('status').textContent = s;
+  // …and always on its own line by the QR code, so problems are visible
+  const n = $('netStatus');
+  if (n) { n.textContent = '📶 ' + s; n.className = /error|can.t/i.test(s) ? 'bad' : /connected/i.test(s) ? 'ok' : ''; }
 };
 net.start();
+if (!window.RTCPeerConnection) {
+  // this browser can't make the phone-to-screen link at all (some smart-TV browsers)
+  setTimeout(() => net.onStatus('This browser can’t link phones (no WebRTC) — open the game in Chrome, or use a computer as the screen'), 500);
+}
 $('room').textContent = net.roomId;
 $('link').textContent = net.phoneUrl;
 $('link').href = net.phoneUrl;

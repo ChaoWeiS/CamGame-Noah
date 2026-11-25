@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="build" content="1125-204753-connect-retry">
+<meta name="build" content="1125-205249-tv-screen">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Race to the Ark</title>
@@ -157,6 +157,8 @@
     position: absolute; right: 0.6%; top: 1%; padding: 4px 8px; border-radius: 8px;
     background: rgba(0, 0, 0, 0.5); color: #e8f4fa; font: 11px/1.35 ui-monospace, Menlo, monospace; pointer-events: none;
   }
+  #netStatus { font: 600 13px system-ui, sans-serif; opacity: 0.85; margin: 2px 0; }
+  #netStatus.bad { color: #ffb4a8; opacity: 1; } #netStatus.ok { color: #9be3a6; }
 </style>
 </head>
 <body>
@@ -183,6 +185,7 @@
     <img id="qr" class="pc-only" alt="QR code for the phone camera page">
     <div id="room" class="pc-only">…</div>
     <a id="link" class="pc-only" target="_blank"></a>
+      <div id="netStatus"></div>
     <div id="status">Starting…</div>
     <div class="row">
       <button id="camBtn">Use this computer’s webcam</button>
