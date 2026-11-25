@@ -1,0 +1,31 @@
+{
+ "id": "fruit",
+ "title": "Fruit Feast",
+ "blurb": "Catch the fruit your animal is dreaming of and pop it in its mouth \u2014 before the rain of fruit gets too heavy!",
+ "players": [
+  1,
+  4
+ ],
+ "minutes": 1,
+ "card": "card.png",
+ "entry": "index.js",
+ "files": [
+  "fruits.glb",
+  "icons/apple.png",
+  "icons/banana.png",
+  "icons/orange.png",
+  "icons/grapes.png",
+  "icons/watermelon.png",
+  "icons/strawberry.png",
+  "icons/blueberry.png",
+  "icons/pineapple.png",
+  "icons/coconut.png",
+  "icons/kiwi.png",
+  "icons/pear.png",
+  "icons/cherry.png",
+  "icons/dragonfruit.png",
+  "icons/durian.png",
+  "icons/starfruit.png",
+  "icons/avocado.png"
+ ]
+}

@@ -1,5 +1,5 @@
 {
- "build": "1125-110023-ski-game",
+ "build": "1125-112804-fruit-feast",
  "files": [
   "js/autorig.js",
   "js/awake.js",
@@ -28,6 +28,8 @@
   "js/scenes/ThanksScene.js",
   "js/scenes/common.js",
   "js/stage3d.js",
+  "games/fruit/FruitScene.js",
+  "games/fruit/index.js",
   "games/poses/PosesScene.js",
   "games/poses/index.js",
   "games/poses/posedemo.js",
@@ -37,6 +39,7 @@
   "games/ski/SkiScene.js",
   "games/ski/index.js",
   "games/ski/ski3d.js",
+  "games/fruit/manifest.json",
   "games/poses/manifest.json",
   "games/race/manifest.json",
   "games/ski/manifest.json",
