@@ -20,6 +20,13 @@ import { showHowTo } from '../../js/howto.js';
 
 const ANIMAL_M = 1.2;
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
+// a 3D skeleton seen in a mirror: left and right landmarks swapped and x flipped
+const LR_PAIRS = [[1, 4], [2, 5], [3, 6], [7, 8], [9, 10], [11, 12], [13, 14], [15, 16], [17, 18], [19, 20], [21, 22], [23, 24], [25, 26], [27, 28], [29, 30], [31, 32]];
+function mirrored(world, pts) {
+  const w = world.map((p) => ({ ...p, x: -p.x })), q = pts.slice();
+  for (const [a, b] of LR_PAIRS) { [w[a], w[b]] = [w[b], w[a]]; [q[a], q[b]] = [q[b], q[a]]; }
+  return { world: w, pts: q };
+}
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const MODES = {
   ark: { roundMs: 60000, speed: 6, ceiling: 8.6, title: 'Flappy Ark' },
@@ -304,7 +311,9 @@ class FlightWorld {
     ch.unfixArms();
     // the arms copy the player's: in 3D when the camera sends a 3D skeleton (arms forward/back
     // too, like on the character screen), else flat
-    if (f.pts && f.world) { ch.pose3D(f.world, f.pts); b.hips.quaternion.identity(); }
+    // (seen from behind: the 3D copy is made for an animal facing you, so mirror it — your left
+    // hand moves the wing on the left of the screen, as the flat copy does)
+    if (f.pts && f.world) { const m = mirrored(f.world, f.pts); ch.pose3D(m.world, m.pts); b.hips.quaternion.identity(); }
     else if (f.pts) { ch.reset3D(); this.copyArms(f, f.pts); }
     else {
       ch.reset3D();

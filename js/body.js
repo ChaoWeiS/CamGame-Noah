@@ -297,14 +297,16 @@ Body.prototype.detectFlight = function (p, sh, hip, T) {
   const fl = this.fl || (this.fl = { dir: 1, ext: m, top: m, counted: false });
   if (fl.dir > 0) {                                   // going down (m growing)
     if (m > fl.ext) fl.ext = m;
-    if (!fl.counted && m - fl.top > 0.3 * T) { this.flapCount++; this.flapAt = now; fl.counted = true; }
+    if (!fl.counted && m - fl.top > 0.22 * T) { this.flapCount++; this.flapAt = now; fl.counted = true; }
     if (fl.ext - m > 0.1 * T) { fl.dir = -1; fl.ext = m; }
   } else {                                            // going up
     if (m < fl.ext) fl.ext = m;
     if (m - fl.ext > 0.1 * T) { fl.dir = 1; fl.top = fl.ext; fl.ext = m; fl.counted = false; }
   }
   const spread = gap > 1.4 * T && Math.abs(m) < 0.5 * T ? 1 : 0;
-  const folded = m > 0.6 * T || (gap < 0.9 * T && m > 0.2 * T) ? 1 : 0;
+  // folded = hands held low — but not the bottom of a flap: low hands right after a flap are flapping
+  const flapping = now - (this.flapAt || -1e9) < 700;
+  const folded = !flapping && (m > 0.6 * T || (gap < 0.9 * T && m > 0.2 * T)) ? 1 : 0;
   this.glide = (this.glide || 0) + (spread - (this.glide || 0)) * 0.3;
   this.fold = (this.fold || 0) + (folded - (this.fold || 0)) * 0.3;
 };

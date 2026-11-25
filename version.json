@@ -1,5 +1,5 @@
 {
- "build": "1126-031058-swipes-must-cross-the-body",
+ "build": "1126-033452-flight-mirroring-fixed-flaps-count-better",
  "files": [
   "js/autorig.js",
   "js/awake.js",
