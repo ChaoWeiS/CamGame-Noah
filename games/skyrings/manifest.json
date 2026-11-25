@@ -1,0 +1,16 @@
+{
+ "id": "skyrings",
+ "title": "Sky Rings",
+ "blurb": "Fly over the flood through the golden rings. Flap to climb, tilt your arms to turn \u2014 follow the arrow!",
+ "players": [
+  1,
+  4
+ ],
+ "minutes": 2,
+ "card": "card.png",
+ "entry": "index.js",
+ "files": [
+  "../flappy/flight.js",
+  "../../assets/wings.glb"
+ ]
+}

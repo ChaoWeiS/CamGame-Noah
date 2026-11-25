@@ -170,6 +170,7 @@ export class Body {
     this.detectRunning(p, T);
     this.detectSwipe(p, T);
     this.detectSki(p, sh, hip, T);
+    this.detectFlight(p, sh, hip, T);
 
     const nose = p[L.nose], wl = p[L.lWrist], wr = p[L.rWrist];
     const armsSeen = wl.v > 0.4 && wr.v > 0.4;
@@ -265,6 +266,34 @@ Body.prototype.detectSki = function (p, sh, hip, T) {
     twist = sign * amount;
   }
   this.twist = (this.twist || 0) + (twist - (this.twist || 0)) * 0.3;
+};
+// Flying:
+//   flapCount — goes up by one for every flap: both hands sweeping DOWN together, quickly
+//   glide     — 0 … 1: arms stretched out wide at about shoulder height (wings spread)
+//   fold      — 0 … 1: hands down by the sides (wings folded: drop fast)
+// (steer, from detectSki, works for flying too: tilt the outstretched arms like a plane)
+Body.prototype.detectFlight = function (p, sh, hip, T) {
+  const now = performance.now();
+  const wl = p[L.lWrist], wr = p[L.rWrist];
+  this.flapCount = this.flapCount || 0;
+  if (!(wl.v > 0.4 && wr.v > 0.4)) { this.glide = (this.glide || 0) * 0.9; this.fold = (this.fold || 0) * 0.9; return; }
+  const m = (wl.y + wr.y) / 2 - sh.y;                 // hands below the shoulders (> 0) or above (< 0)
+  const gap = Math.abs(wl.x - wr.x);
+  // a flap: one per downstroke — counted as soon as the hands have swept down far enough
+  // from the top of the stroke; the next one counts after the hands have gone back up
+  const fl = this.fl || (this.fl = { dir: 1, ext: m, top: m, counted: false });
+  if (fl.dir > 0) {                                   // going down (m growing)
+    if (m > fl.ext) fl.ext = m;
+    if (!fl.counted && m - fl.top > 0.3 * T) { this.flapCount++; this.flapAt = now; fl.counted = true; }
+    if (fl.ext - m > 0.1 * T) { fl.dir = -1; fl.ext = m; }
+  } else {                                            // going up
+    if (m < fl.ext) fl.ext = m;
+    if (m - fl.ext > 0.1 * T) { fl.dir = 1; fl.top = fl.ext; fl.ext = m; fl.counted = false; }
+  }
+  const spread = gap > 1.4 * T && Math.abs(m) < 0.5 * T ? 1 : 0;
+  const folded = m > 0.6 * T || (gap < 0.9 * T && m > 0.2 * T) ? 1 : 0;
+  this.glide = (this.glide || 0) + (spread - (this.glide || 0)) * 0.3;
+  this.fold = (this.fold || 0) + (folded - (this.fold || 0)) * 0.3;
 };
 Body.prototype.takeSwipe = function () { const s = this.swipe || 0; this.swipe = 0; return s; };
 

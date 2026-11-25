@@ -1,0 +1,16 @@
+{
+ "id": "flappy",
+ "title": "Flappy Ark",
+ "blurb": "Flap your arms to fly through the ventilation gaps inside the ark. Spread them to glide, drop them to dive.",
+ "players": [
+  1,
+  4
+ ],
+ "minutes": 1,
+ "card": "card.png",
+ "entry": "index.js",
+ "files": [
+  "flight.js",
+  "../../assets/wings.glb"
+ ]
+}

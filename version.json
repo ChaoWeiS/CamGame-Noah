@@ -1,5 +1,5 @@
 {
- "build": "1125-141612-squat-fold",
+ "build": "1125-150336-flying-games",
  "files": [
   "js/autorig.js",
   "js/awake.js",
@@ -28,6 +28,9 @@
   "js/scenes/ThanksScene.js",
   "js/scenes/common.js",
   "js/stage3d.js",
+  "js/wings.js",
+  "games/flappy/flight.js",
+  "games/flappy/index.js",
   "games/fruit/FruitScene.js",
   "games/fruit/index.js",
   "games/poses/PosesScene.js",
@@ -39,10 +42,13 @@
   "games/ski/SkiScene.js",
   "games/ski/index.js",
   "games/ski/ski3d.js",
+  "games/skyrings/index.js",
+  "games/flappy/manifest.json",
   "games/fruit/manifest.json",
   "games/poses/manifest.json",
   "games/race/manifest.json",
   "games/ski/manifest.json",
+  "games/skyrings/manifest.json",
   "assets/puppets/rig.json"
  ]
 }

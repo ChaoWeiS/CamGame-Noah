@@ -185,6 +185,8 @@ export function input(pl) {
       run: Math.max(0, 1 - (performance.now() - pl.kb.runAt) / 600), // tap R (P1) / F (P2) to run
       // skiing: R/F = pump, ← → (A D) = steer, Shift (S) = twist for a sharp turn
       pump: Math.max(0, 1 - (performance.now() - pl.kb.runAt) / 600), steer: pl.kb.lane, twist: pl.kb.duck ? pl.kb.lane || 0 : 0,
+      // flying: Space/W = flap, Shift/S held = fold the wings, otherwise gliding
+      flapCount: pl.kb.flaps || 0, glide: pl.kb.duck ? 0 : 1, fold: pl.kb.duck ? 1 : 0,
     };
   }
   const b = pl.body;
@@ -192,6 +194,7 @@ export function input(pl) {
     present: pl.present, lane: b.lane, side: b.side, ducking: b.ducking, jumping: b.jumping,
     pose: b.pose, handsUp: b.handsUp, run: b.run,
     pump: b.pump || 0, steer: b.steer || 0, twist: b.twist || 0,
+    flapCount: b.flapCount || 0, glide: b.glide || 0, fold: b.fold || 0,
   };
 }
 
@@ -210,7 +213,7 @@ window.addEventListener('keydown', (e) => {
     const k = KB[pl.keyboardIndex]; if (!k) continue; const key = e.key.length === 1 ? e.key.toLowerCase() : e.key;
     if (k.left.includes(key)) pl.kb.lane = Math.max(-1, pl.kb.lane - 1);
     if (k.right.includes(key)) pl.kb.lane = Math.min(1, pl.kb.lane + 1);
-    if (k.up.includes(key) && !e.repeat) pl.kb.jumpAt = performance.now();
+    if (k.up.includes(key) && !e.repeat) { pl.kb.jumpAt = performance.now(); pl.kb.flaps = (pl.kb.flaps || 0) + 1; }
     if (k.down.includes(key)) pl.kb.duck = true;
     if (k.ok.includes(key)) pl.kb.handsUp = true;
     if (k.run.includes(key)) pl.kb.runAt = performance.now();
