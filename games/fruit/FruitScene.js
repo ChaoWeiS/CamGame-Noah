@@ -83,14 +83,17 @@ export class FruitScene extends Phaser.Scene {
     const players = [...tracker.players];
     const xOf = (pl) => (pl.kind === 'camera' && pl.body?.pts ? (pl.body.pts[11].x + pl.body.pts[12].x) / 2 : pl.slot);
     players.sort((a, b) => xOf(a) - xOf(b));
-    const n = players.length, colW = W / n;
-    this.hpx = Math.min(H * 0.6, colW * 1.05);           // animal height in pixels
+    // the side columns keep away from the screen edges so raised arms stay in view;
+    // with a full house the animals are a little smaller and slide less, so arms don't cross much
+    const n = players.length, margin = n >= 3 ? W * 0.05 : 0, colW = (W - 2 * margin) / n;
+    this.hpx = Math.min(H * 0.6, colW * (n >= 4 ? 0.95 : 1.05));    // animal height in pixels
+    this.slide = n >= 4 ? 0.18 : 0.3;
     this.p = players.map((pl, i) => ({
-      pl, colX: colW * (i + 0.5), colW, x: colW * (i + 0.5), score: 0, thought: null,
+      pl, colX: margin + colW * (i + 0.5), colW, x: margin + colW * (i + 0.5), score: 0, thought: null,
       hands: [{ bone: 'handL', fruit: null, freeAt: 0, pos: { x: 0, y: 0 } }, { bone: 'handR', fruit: null, freeAt: 0, pos: { x: 0, y: 0 } }],
       bubble: new Bubble(this.game, PLAYER_CSS[pl.slot]),
-      chip: this.makeChip(pl), msg: new OverlayText(this.game, colW * (i + 0.5), H * 0.2, 40),
-      lost: new OverlayText(this.game, colW * (i + 0.5), H * 0.5, 30, '#ffd2c8'),
+      chip: this.makeChip(pl), msg: new OverlayText(this.game, margin + colW * (i + 0.5), H * 0.2, 40),
+      lost: new OverlayText(this.game, margin + colW * (i + 0.5), H * 0.5, 30, '#ffd2c8'),
     }));
     this.p.forEach((pp) => this.newThought(pp));
     this.timer = new OverlayText(this.game, W / 2, 44, 52);
@@ -217,7 +220,7 @@ export class FruitScene extends Phaser.Scene {
   placeAnimal(pp, time, now) {
     const pl = pp.pl, inp = input(pl), cam = pl.kind === 'camera';
     const side = Math.max(-1.2, Math.min(1.2, inp.side ?? 0));
-    const target = pp.colX + side * pp.colW * 0.3;
+    const target = pp.colX + side * pp.colW * this.slide;
     pp.x += (target - pp.x) * 0.25;
     pp.lost.setText(inp.present ? '' : 'Come back into view!');
     const shown = this.stage.place(pl.slot, pl.animal || 'bear', pp.x, this.floorY, this.hpx,
