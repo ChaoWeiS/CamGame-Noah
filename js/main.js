@@ -22,7 +22,8 @@ import { W, H, ASPECT } from './scenes/common.js';
 import { LobbyScene } from './scenes/LobbyScene.js';
 import { PickScene } from './scenes/PickScene.js';
 import { showMenu, initMenu } from './menu.js';
-import { ResultsScene } from './scenes/ResultsScene.js';
+import { GameOverScene } from './scenes/GameOverScene.js';
+import { ThanksScene } from './scenes/ThanksScene.js';
 
 const $ = (id) => document.getElementById(id);
 $('wrap').style.setProperty('--ar', String(ASPECT));
@@ -82,5 +83,5 @@ window.game = new Phaser.Game({
   height: H,
   backgroundColor: '#10202b',
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-  scene: [BootScene, LobbyScene, PickScene, ResultsScene],          // the mini games are added when they're loaded (js/games.js)
+  scene: [BootScene, LobbyScene, PickScene, GameOverScene, ThanksScene],          // the mini games are added when they're loaded (js/games.js)
 });

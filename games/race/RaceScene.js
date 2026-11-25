@@ -124,7 +124,7 @@ export class RaceScene extends Phaser.Scene {
       }],
       [2800, () => this.banner.setText('2!')],
       [3800, () => this.banner.setText('1!')],
-      [4800, () => { this.banner.setText('GO!!!'); this.help.setText(''); this.state = 'run'; }],
+      [4800, () => { this.banner.setText('GO!!!'); this.help.setText(''); this.state = 'run'; this.runStart = this.time.now; }],
       [5800, () => { if (this.banner.text === 'GO!!!') this.banner.setText(''); }],
     ];
     for (const [ms, fn] of steps) this.time.delayedCall(ms, fn);
@@ -163,6 +163,7 @@ export class RaceScene extends Phaser.Scene {
         }
         if (r.dist >= COURSE) {
           r.dist = COURSE; r.place = ++this.finishCount;
+          r.time = (this.time.now - this.runStart) / 1000;          // seconds to the ark (the Hall of Fame score)
           r.msg.setText(r.place === 1 ? '1st! 🎉' : ordinal(r.place) + '!');
           if (r.place === 1) this.firstFinishAt = time;
         }
@@ -230,8 +231,10 @@ export class RaceScene extends Phaser.Scene {
         [...this.runners].filter((r) => !r.place).sort((a, b) => b.dist - a.dist)
           .forEach((r) => { r.place = ++this.finishCount; });
         this.banner.setText('Made it! 🛶');
-        // scores for the base: an earlier place is better
-        finishGame(this, this.runners.map((r) => ({ slot: r.pl.slot, score: -r.place, label: ordinal(r.place) })), 2500);
+        // scores for the base: a faster time is better; only those who reached the ark go in the Hall of Fame
+        finishGame(this, this.runners.map((r) => (r.time
+          ? { slot: r.pl.slot, score: -r.time, label: `${r.time.toFixed(1)} s` }
+          : { slot: r.pl.slot, score: -10000 + r.dist, label: 'didn’t finish', hof: false })), 2500);
       }
     }
   }

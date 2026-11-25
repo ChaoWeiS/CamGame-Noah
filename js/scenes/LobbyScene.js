@@ -4,6 +4,7 @@ import { Puppet } from '../puppet.js';
 import { Stage3D, preloadCast, OverlayText } from '../stage3d.js';
 import { SkeletonSmoother } from '../body.js';
 import { multicam } from '../multicam.js';
+import { snapFaces } from '../faces.js';
 import { PHONE, PHONE_PLAYERS, goFullLandscape } from '../mode.js';
 
 const $ = (id) => document.getElementById(id);
@@ -91,6 +92,8 @@ export class LobbyScene extends Phaser.Scene {
   startGame() {
     tracker.lock(session.kbCount);
     if (tracker.players.length === 0) { this.msg.setText('Couldn’t see anyone'); this.countFrom = null; return; }
+    // 📸 everyone's face for the Hall of Fame (taken now, while they're facing the screen)
+    snapFaces(tracker.players, tracker.aspect).catch((e) => console.warn('face snapshot', e));
     this.scene.start('Pick');
   }
 

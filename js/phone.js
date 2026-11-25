@@ -1,3 +1,4 @@
+import { cropFaces } from './facecrop.js';
 import { keepAwake } from './awake.js';
 import { createPoseDetector, BONES } from './pose.js';
 import { SPINE } from './bones.js';
@@ -42,6 +43,8 @@ function openConn(room) {
     // another phone is already the camera: wait on standby (until it goes, or "Use this camera")
     // the big screen's lobby shows a small, faint copy of this camera's picture
     if (d && d.type === 'pics') wantPics = !!d.on;
+    // face snapshots for the Hall of Fame, cut from this camera's own (sharp) picture
+    if (d && d.type === 'faces') send({ type: 'faces', id: d.id, images: frameCv.width ? cropFaces(frameCv, d.boxes || []) : [] });
     if (d && d.type === 'role') {
       standby = !d.active && !d.linked;
       setConn(d.active ? 'Connected — main camera' : d.linked ? 'Connected — linked camera' : 'Standby — another phone is the camera (calibrate on the big screen to use both)', standby ? 'wait' : 'ok');

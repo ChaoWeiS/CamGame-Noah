@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="build" content="1125-095813-host-menu">
+<meta name="build" content="1125-101653-hall-of-fame">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Race to the Ark</title>
@@ -27,17 +27,54 @@
   #lobby button { font: inherit; padding: 0.45em 0.8em; border-radius: 8px; border: 0; background: #2b3b47; color: #fff8e6; cursor: pointer; }
   #lobby button:hover { background: #3a4f5e; }
   #kbhelp { font-size: 0.65em; opacity: 0.6; max-width: 22em; }
+  /* Hall of Fame lists (menu panel, end-of-session show) */
+  .hof h3 { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; font-size: 1.25em; }
+  .hof h3 img { width: 2.2em; height: 2.2em; border-radius: 8px; object-fit: cover; }
+  .hof h3 small { font-weight: 400; opacity: 0.6; }
+  .hof ol { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+  .hof li { display: grid; grid-template-columns: 2.2em 3.2em 2.2em 1fr auto auto; align-items: center; gap: 10px;
+    background: rgba(255, 255, 255, 0.75); border-radius: 12px; padding: 6px 10px; border-left: 6px solid var(--c); }
+  .hof .rank { font-weight: 800; text-align: center; font-size: 1.1em; }
+  .hof .face { width: 3.2em; height: 3.2em; border-radius: 50%; object-fit: cover; border: 3px solid var(--c); background: #fff8e6; }
+  .hof .animal { width: 2.2em; height: 2.2em; border-radius: 6px; object-fit: cover; background: #fff8e6; }
+  .hof li b { font-size: 1.15em; } .hof li small { opacity: 0.6; font-size: 0.8em; }
+  .hof .del, .hof .clear { border: 0; background: rgba(29,59,82,0.1); color: #1d3b52; border-radius: 8px; padding: 4px 8px; cursor: pointer; font: inherit; }
+  .hof .clear { margin-top: 12px; font-size: 0.85em; }
+  .hof .armed { background: #ef8f86; color: #fff; }
+  .hof .empty { opacity: 0.7; }
+  /* after a game: the winner's card */
+  .wincards { position: absolute; left: 50%; top: 19%; transform: translateX(-50%); display: flex; gap: 2vw; z-index: 20; }
+  .wincard { background: rgba(255, 248, 230, 0.95); border-radius: 18px; padding: 1.5vh 1.5vw; display: grid; justify-items: center; gap: 0.4vh;
+    border: 5px solid var(--c); box-shadow: 0 6px 20px rgba(0,0,0,0.2); color: #1d3b52; font: 700 clamp(14px, 2.2vh, 22px) system-ui, sans-serif; }
+  .wincards .wincard { padding: 1.2vh 1.3vw; }
+  .wincard .face { width: 14vh; height: 14vh; border-radius: 50%; object-fit: cover; border: 5px solid var(--c); }
+  .wincard .animal { width: 6vh; height: 6vh; border-radius: 10px; margin-top: -4vh; margin-left: 10vh; background: #fff8e6; border: 3px solid #fff; }
+  .wincard span { font-size: 1.5em; }
+  /* the end-of-session Hall of Fame show */
+  #hofShow { position: absolute; right: 3%; top: 8%; width: 52%; z-index: 20; color: #1d3b52; font: 18px system-ui, sans-serif;
+    background: rgba(255, 248, 230, 0.88); border-radius: 20px; padding: 2.5vh 2vw; box-shadow: 0 8px 30px rgba(0,0,0,0.2); animation: hofIn 0.4s ease-out; }
+  #hofShow[hidden] { display: none; }
+  #hofShow .hof h3 { font-size: 1.6em; }
+  #hofShow .dots { display: flex; gap: 6px; justify-content: center; margin-top: 12px; }
+  #hofShow .dots i { width: 10px; height: 10px; border-radius: 50%; background: rgba(29,59,82,0.25); }
+  #hofShow .dots i.on { background: #1d3b52; }
+  @keyframes hofIn { from { opacity: 0; transform: translateY(10px); } }
   /* the host's menu */
-  #menu { position: absolute; inset: 0; z-index: 45; overflow-y: auto; box-sizing: border-box; padding: 3vh 4vw 5vh;
-    background: linear-gradient(#8fcbe8, #e3f2d0); color: #1d3b52; font: 16px system-ui, -apple-system, 'Segoe UI', sans-serif;
-    display: flex; flex-direction: column; align-items: center; gap: 1.4vh; }
+  #menu { position: absolute; inset: 0; z-index: 45; box-sizing: border-box; display: grid; grid-template-rows: auto 1fr;
+    background: linear-gradient(#8fcbe8, #e3f2d0); color: #1d3b52; font: 16px system-ui, -apple-system, 'Segoe UI', sans-serif; }
   #menu[hidden] { display: none; }
-  #menu h1 { margin: 0 0 1vh; font-size: clamp(26px, 5vh, 52px); }
-  #menu .mlabel { align-self: stretch; font-weight: 700; font-size: clamp(15px, 2.2vh, 22px); }
+  #mTop { padding: 2.5vh 3vw 1.5vh; display: flex; flex-direction: column; gap: 1vh; box-shadow: 0 6px 16px rgba(29,59,82,0.12); z-index: 2; }
+  #menu h1 { margin: 0; font-size: clamp(24px, 4.5vh, 48px); text-align: center; }
+  #menu .mlabel { font-weight: 700; font-size: clamp(14px, 2vh, 20px); }
   #menu .mlabel small { font-weight: 400; opacity: 0.7; }
-  #mQueue { align-self: stretch; display: flex; gap: 12px; padding: 12px; min-height: 18vh; overflow-x: auto;
-    background: rgba(255, 255, 255, 0.55); border-radius: 16px; touch-action: pan-x; }
-  .mq { position: relative; flex: 0 0 auto; width: 16vh; height: 16vh; border-radius: 12px; overflow: hidden;
+  #mQueue { display: flex; gap: 12px; padding: 12px; min-height: 15vh; overflow-x: auto; position: relative;
+    background: rgba(255, 255, 255, 0.55); border-radius: 16px; touch-action: pan-x; transition: background 0.15s; }
+  #mQueue.hot { background: rgba(255, 255, 255, 0.85); outline: 3px dashed #f2b544; }
+  .mstart { display: flex; align-items: center; justify-content: center; gap: 2vw; }
+  #mBody { display: grid; grid-template-columns: 1fr minmax(300px, 40%); min-height: 0; }
+  #mList { overflow-y: auto; padding: 2vh 1.5vw 4vh 3vw; display: flex; flex-direction: column; gap: 1.2vh; }
+  #mHof { overflow-y: auto; padding: 2vh 3vw 4vh 1.5vw; }
+  .mq { position: relative; flex: 0 0 auto; width: 14vh; height: 14vh; border-radius: 12px; overflow: hidden;
     background: #fff8e6; box-shadow: 0 3px 10px rgba(0,0,0,0.15); cursor: grab; touch-action: none; user-select: none;
     transition: transform 0.15s; }
   .mq img { width: 100%; height: 100%; object-fit: cover; pointer-events: none; }
@@ -49,17 +86,21 @@
   .mq.out { opacity: 0.45; outline: 4px solid #ef8f86; }
   .mq.pop { animation: pop 0.3s ease-out; }
   @keyframes pop { from { transform: scale(0.6); } }
-  .mq.plus { background: transparent; border: 3px dashed rgba(29,59,82,0.35); box-shadow: none; cursor: pointer; display: grid; place-items: center; }
-  .mq.plus span { position: static; background: none; color: rgba(29,59,82,0.5); font-size: 7vh; width: auto; height: auto; }
+  .mq.plus { background: transparent; border: 3px dashed rgba(29,59,82,0.35); box-shadow: none; cursor: default; display: grid; place-items: center; }
+  .mq.plus span { position: static; background: none; color: rgba(29,59,82,0.5); font-size: 6vh; width: auto; height: auto; }
+  .mq.marker { width: 6px; padding: 0; background: #f2b544; box-shadow: none; border-radius: 3px; }
+  .mghost { position: fixed; z-index: 100; width: 14vh; height: 14vh; border-radius: 12px; overflow: hidden; pointer-events: none;
+    box-shadow: 0 12px 28px rgba(0,0,0,0.35); transform: translate(-50%, -50%) rotate(-3deg); opacity: 0.95; }
+  .mghost img { width: 100%; height: 100%; object-fit: cover; }
   #mInfo { opacity: 0.75; }
-  #mStart { font: 700 clamp(18px, 3vh, 28px) system-ui, sans-serif; padding: 0.6em 2.4em; border: 0; border-radius: 14px;
+  #mStart { font: 700 clamp(18px, 2.8vh, 26px) system-ui, sans-serif; padding: 0.5em 2.2em; border: 0; border-radius: 14px;
     background: #f2b544; color: #1d1d1d; cursor: pointer; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
   #mStart:disabled { opacity: 0.4; cursor: default; }
-  #mGrid { align-self: stretch; display: grid; grid-template-columns: repeat(auto-fill, minmax(20vh, 1fr)); gap: 16px; }
-  .mcard { border: 0; padding: 0; border-radius: 14px; overflow: hidden; background: #fff8e6; cursor: pointer; text-align: left;
-    box-shadow: 0 3px 10px rgba(0,0,0,0.15); display: flex; flex-direction: column; font: inherit; color: inherit; }
-  .mcard:hover { transform: translateY(-2px); }
-  .mcard img { width: 100%; aspect-ratio: 1; object-fit: cover; }
+  #mGrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(18vh, 1fr)); gap: 16px; }
+  .mcard { border: 0; padding: 0; border-radius: 14px; overflow: hidden; background: #fff8e6; cursor: grab; text-align: left;
+    box-shadow: 0 3px 10px rgba(0,0,0,0.15); display: flex; flex-direction: column; font: inherit; color: inherit; touch-action: none; user-select: none; }
+  .mcard.sel { outline: 4px solid #1d3b52; }
+  .mcard img { width: 100%; aspect-ratio: 1; object-fit: cover; pointer-events: none; }
   .mcard b { padding: 8px 10px 0; } .mcard small { padding: 2px 10px 10px; opacity: 0.7; }
   /* linking cameras */
   #calib { position: absolute; inset: 0; z-index: 40; display: flex; align-items: center; justify-content: center;
@@ -99,13 +140,19 @@
   <div id="game"></div>
   <!-- the host's menu: today's games (js/menu.js) -->
   <div id="menu" hidden>
-    <h1>Race to the Ark &amp; friends</h1>
-    <div class="mlabel">Today’s games <small>— drag to change the order · drag off the row to remove</small></div>
-    <div id="mQueue"></div>
-    <div id="mInfo"></div>
-    <button id="mStart" disabled>▶ Start</button>
-    <div class="mlabel">Tap a game to add it</div>
-    <div id="mGrid"></div>
+    <header id="mTop">
+      <h1>Have Fun Cam Games !!</h1>
+      <div class="mlabel">Today’s games <small>— drag a game up here · drag along to reorder · drag off to remove</small></div>
+      <div id="mQueue"></div>
+      <div class="mstart"><span id="mInfo"></span><button id="mStart" disabled>▶ Start</button></div>
+    </header>
+    <div id="mBody">
+      <section id="mList">
+        <div class="mlabel">Games <small>— tap one to see its Hall of Fame</small></div>
+        <div id="mGrid"></div>
+      </section>
+      <aside id="mHof"><p class="empty">Tap a game to see its Hall of Fame 🏆</p></aside>
+    </div>
   </div>
   <div id="lobby">
     <h2 id="lobbyTitle">📱 Scan to add a camera</h2>

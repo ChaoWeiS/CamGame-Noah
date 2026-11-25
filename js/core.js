@@ -241,6 +241,18 @@ export const net = {
     this.wantPics = on;
     for (const c of this.conns) if (c.open) { try { c.send({ type: 'pics', on: on && c === this.viewConn() }); } catch (_) {} }
   },
+  // face snapshots: ask the main camera to cut these squares out of its picture
+  requestFaces(boxes) {
+    const c = this.viewConn();
+    if (!c || !c.open) return Promise.reject(new Error('no camera'));
+    const id = Math.random().toString(36).slice(2);
+    return new Promise((resolve, reject) => {
+      this.faceWait = this.faceWait || new Map();
+      this.faceWait.set(id, resolve);
+      setTimeout(() => { if (this.faceWait.delete(id)) reject(new Error('no answer')); }, 4000);
+      c.send({ type: 'faces', id, boxes });
+    });
+  },
   viewConn() {
     const v = multicam.active() ? multicam.view : null;
     return (v && this.conns.find((c) => c.peer === v && c.open)) || this.conn;
@@ -266,6 +278,7 @@ export const net = {
       c.on('data', (d) => {
         if (!d) return;
         if (d.type === 'take') { this.conn = c; this.roles(); return; }
+        if (d.type === 'faces' && this.faceWait?.has(d.id)) { this.faceWait.get(d.id)(d.images || []); this.faceWait.delete(d.id); return; }
         if (d.type === 'pic') { if (c === this.viewConn()) this.pic = { data: d.data, at: performance.now() }; return; }
         if (d.type === 'moved') {
           // only matters if this phone is in use: linked, or the main camera

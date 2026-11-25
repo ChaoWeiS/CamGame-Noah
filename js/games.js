@@ -10,6 +10,8 @@
 // when it's over, calls finishGame(scene, results) — the base keeps the scores and
 // moves on to the next game in the queue, or the final podium.
 import { session } from './scenes/common.js';
+import { tracker, PLAYER_CSS } from './core.js';
+import { addEntry, best } from './halloffame.js';
 
 export const GAME_IDS = ['race', 'poses'];        // the menu's games, in menu order
 
@@ -69,7 +71,7 @@ export function startQueue(scene) {
 // Go to the next game in the queue (waits for it to finish downloading), or the podium.
 export async function playNext(scene) {
   const id = session.queue[session.games.length];
-  if (!id) { scene.scene.start('Results'); return; }
+  if (!id) { scene.scene.start('Thanks'); return; }
   const rec = loadGame(id);
   if (!rec.ready) {
     // still downloading: a simple "loading" note on whatever screen we're on
@@ -87,18 +89,26 @@ export async function playNext(scene) {
   scene.scene.start(mod.start);
 }
 
-// A game is over. results: [{ slot, score, label }] — higher score is better; label is
-// what the scoreboard shows ("1st", "⭐ 5"). Players get points by placing: with n players,
-// 1st gets n points, 2nd n−1, …; ties share the better placing.
-export function finishGame(scene, results, delay = 2200) {
+// A game is over. results: [{ slot, score, label, hof }] — higher score is better; label is
+// what's shown ("42.1 s", "⭐ 5"); hof: false keeps it out of the Hall of Fame.
+// Each game stands alone: its winner is shown, results go into that game's Hall of Fame
+// (with the player's face photo), and a new high score is celebrated.
+export async function finishGame(scene, results, delay = 2200) {
   const sorted = [...results].sort((a, b) => b.score - a.score);
-  const n = results.length;
-  for (const r of results) {
-    const better = sorted.filter((o) => o.score > r.score).length;
-    r.rank = better + 1;
-    r.points = n - better;
-  }
-  const m = manifests.get(session.current) || { title: session.current };
-  session.games.push({ id: session.current, title: m.title, results });
-  setTimeout(() => playNext(scene), delay);
+  for (const r of results) r.rank = sorted.filter((o) => o.score > r.score).length + 1;
+  const id = session.current, m = manifests.get(id) || { title: id };
+  session.games.push({ id, title: m.title, results });
+  // Hall of Fame: was the old best beaten?
+  let newBest = false;
+  try {
+    const before = await best(id);
+    const hofResults = results.filter((r) => r.hof !== false);
+    const top1 = hofResults.length ? Math.max(...hofResults.map((r) => r.score)) : null;
+    newBest = top1 !== null && (!before || top1 > before.score);
+    for (const r of hofResults) {
+      const pl = tracker.players.find((p) => p.slot === r.slot);
+      await addEntry({ game: id, score: r.score, label: r.label, animal: pl?.animal || 'bear', color: PLAYER_CSS[r.slot], photo: pl?.photo || null });
+    }
+  } catch (e) { console.warn('Hall of Fame not saved', e); }
+  setTimeout(() => scene.scene.start('GameOver', { id, title: m.title, results, newBest }), delay);
 }
