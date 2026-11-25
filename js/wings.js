@@ -279,13 +279,17 @@ export function updateWings(ch) {
     // shoulder: the beat, sweeping a little forward at the bottom
     // FOLD (a bird gliding or tucking its wings): the player bends the elbows (and curls the
     // wrists). Straight arms keep the wings open, wherever the arms point.
-    const fold = clamp(smooth(0.35, 1.3, Math.abs(bend)) * (1 + 0.35 * smooth(0.25, 0.7, Math.abs(wrist))), 0, 1);
+    const fold = clamp(smooth(0.75, 1.6, Math.abs(bend)) * (1 + 0.35 * smooth(0.25, 0.7, Math.abs(wrist))), 0, 1);   // a clear bend: elbows bend a little in any flap
     const open = 1 - fold;
     // shoulder: arms level → wings level, up → up, down → hanging straight down below the body
     // (turned forward by the body's lean so they point down in the world); folding swings the
     // whole wing back along the body
     const beat = Math.max(-1.55, elev - lift);
-    setRot(wb['wingUp' + s], sg, 0.85 * fold, beat * open + (-0.35) * fold, (lean + 0.35) * down * open);
+    // a bird's stroke also goes forward and back: the downstroke sweeps the wings forward and
+    // down in front of the body (they end up forward of the shoulders at the bottom), the
+    // upstroke takes them back and up
+    const fwd = clamp(-w.vs * 0.14, -0.35, 0.5) + 0.3 * down;
+    setRot(wb['wingUp' + s], sg, 0.85 * fold - fwd * open, beat * open + (-0.35) * fold, (lean + 0.35 + fwd) * down * open);
     // forearm and hand fold back on it, into a small profile along the back
     setRot(wb['wingFore' + s], sg, 0.4 * fold, 0);
     const trail = clamp(-w.vs * 0.18, -0.8, 0.45);       // open wing: the long feathers trail the beat
