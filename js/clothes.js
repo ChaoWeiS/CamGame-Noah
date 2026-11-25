@@ -58,7 +58,16 @@ export function clothesOf(src, poses) {
       if (hp.v > 0.5 && kn.v > 0.5) for (const v of [0.3, 0.5, 0.7]) thigh.push({ x: hp.x + (kn.x - hp.x) * v, y: hp.y + (kn.y - hp.y) * v });
     }
     legs = sample(thigh);
-    return shirt || legs ? { shirt, legs } : null;
+    // hair: above the eyes, between the ears (top of the head)
+    let hair = null;
+    const nose = P(0), le = P(7), re = P(8);
+    if (nose.v > 0.5 && le.v > 0.4 && re.v > 0.4) {
+      const ew = Math.hypot(le.x - re.x, le.y - re.y), hx = (le.x + re.x) / 2, hy = (le.y + re.y) / 2;
+      const pts = [];
+      for (const u of [-0.25, 0, 0.25]) for (const v of [0.55, 0.75]) pts.push({ x: hx + u * ew, y: hy - v * ew });
+      hair = sample(pts);
+    }
+    return shirt || legs ? { shirt, legs, hair } : null;
   });
 }
 
@@ -69,12 +78,23 @@ export function clothesDiff(a, b) {
   let sum = 0, w = 0;
   if (a.shirt && b.shirt) { sum += d(a.shirt, b.shirt); w += 1; }
   if (a.legs && b.legs) { sum += 0.6 * d(a.legs, b.legs); w += 0.6; }
+  if (a.hair && b.hair) { sum += 0.35 * d(a.hair, b.hair); w += 0.35; }
   return w ? sum / w : null;
 }
 // blend a new reading into a running average
 export function clothesBlend(look, c, k) {
   if (!c) return look;
-  if (!look) return { shirt: c.shirt && [...c.shirt], legs: c.legs && [...c.legs] };
+  if (!look) return { shirt: c.shirt && [...c.shirt], legs: c.legs && [...c.legs], hair: c.hair && [...c.hair] };
   const mix = (p, q) => (q ? (p ? p.map((v, i) => v + (q[i] - v) * k) : [...q]) : p);
-  return { shirt: mix(look.shirt, c.shirt), legs: mix(look.legs, c.legs) };
+  return { shirt: mix(look.shirt, c.shirt), legs: mix(look.legs, c.legs), hair: mix(look.hair, c.hair) };
+}
+// the middle reading of many (each colour channel separately): one learned "marker"
+export function clothesMedian(list) {
+  const med = (key) => {
+    const vals = list.map((c) => c?.[key]).filter(Boolean);
+    if (vals.length < 3) return null;
+    return [0, 1, 2].map((i) => { const s = vals.map((v) => v[i]).sort((a, b) => a - b); return s[s.length >> 1]; });
+  };
+  const m = { shirt: med('shirt'), legs: med('legs'), hair: med('hair') };
+  return m.shirt || m.legs ? m : null;
 }

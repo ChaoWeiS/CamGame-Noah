@@ -17,6 +17,7 @@ export class PickScene extends Phaser.Scene {
   constructor() { super('Pick'); }
 
   create() {
+    tracker.startLearning();          // learn each player's marker (clothes, hair) while they choose
     const players = tracker.players;
     sky(this, 0x8fcbe8, 0xe3f2d0);
     this.add.text(W / 2, 40, 'Choose your animal!', txt(44, '#1d3b52')).setOrigin(0.5);
@@ -65,7 +66,7 @@ export class PickScene extends Phaser.Scene {
   }
 
   update(time) {
-    if (this.leaving && performance.now() > this.leaveAt) { this.leaving = false; startQueue(this); return; }
+    if (this.leaving && performance.now() > this.leaveAt) { this.leaving = false; tracker.finishLearning(); startQueue(this); return; }
     const g = this.g; g.clear();
     const S = this.row.S;
     // who is looking at each portrait (nested frames in their colours)
@@ -97,7 +98,9 @@ export class PickScene extends Phaser.Scene {
         this.stage.place(pl.slot, ch.id, card.cx, this.foot, card.h * 0.9,
           cam ? pl.body.vpts : null, cam ? pl.body.base : null, time / 1000 + pl.slot, cam ? pl.body.world : null);
       } else this.stage.hide(pl.slot);
-      card.label.setText(`P${pl.slot + 1} · ${card.done ? ch.name + ' ✓' : !show ? 'step into view' : ch.name}`);
+      // 👕 ✓ once enough of their clothes/hair has been seen to tell them apart later
+      const learnt = cam && pl.readings && pl.readings.length >= 6 ? ' 👕✓' : '';
+      card.label.setText(`P${pl.slot + 1} · ${card.done ? ch.name + ' ✓' : !show ? 'step into view' : ch.name}${learnt}`);
 
       // choose: both hands up for 3 s — a ring in their colour fills up around the animal
       const cy = this.foot - card.h * 0.47, r = card.h * 0.47;

@@ -2,7 +2,7 @@
 // player tracking/identity and keyboard test players.
 import { Body, toPoints, toWorld, keyPoints } from './body.js';
 import { multicam } from './multicam.js';
-import { clothesOf, clothesDiff, clothesBlend } from './clothes.js';
+import { clothesOf, clothesDiff, clothesBlend, clothesMedian } from './clothes.js';
 
 // soft pastel player colours: P1 red, P2 blue, P3 green, P4 yellow
 export const PLAYER_COLORS = [0xef8f86, 0x86b6e8, 0x93d18e, 0xf1d074];
@@ -163,6 +163,18 @@ class Tracker {
 
   unlock() { this.locked = false; this.players = []; }
 
+  // Learning each player's marker (character select): collect their clothes and hair
+  // readings while they stand in their own space, then fix the middle reading as their marker.
+  startLearning() { this.learning = true; for (const p of this.players) p.readings = []; }
+  finishLearning() {
+    this.learning = false;
+    for (const p of this.players) {
+      const m = p.readings?.length >= 6 ? clothesMedian(p.readings) : null;
+      if (m) { p.look = m; p.marker = true; }
+      p.readings = null;
+    }
+  }
+
   // Each player sticks to their own track — through someone walking in front of them too.
   // Only if their track is really gone (they left the view for a while) do they take over a
   // newcomer, and only one who turned up close to where they were and is about their size —
@@ -197,9 +209,12 @@ class Tracker {
         // while nobody else is right next to them (so another child's colours don't creep in)
         if (t.col) {
           const cd = clothesDiff(pl.look, t.col);
-          const alone = this.tracks.every((o) => o === t || !o.seen || Math.hypot(o.torso.x - t.torso.x, o.torso.y - t.torso.y) > 1.3 * t.torso.s);
+          // colours are read from each child's own body, so only skip readings while two children overlap
+          const alone = this.tracks.every((o) => o === t || !o.seen || Math.hypot(o.torso.x - t.torso.x, o.torso.y - t.torso.y) > 0.8 * Math.max(t.torso.s, o.torso.s));
+          if (this.learning && alone && pl.readings && pl.readings.length < 120) pl.readings.push(t.col);
           if (!pl.look) pl.look = clothesBlend(null, t.col, 1);
-          else if (alone && cd !== null && cd < 18) pl.look = clothesBlend(pl.look, t.col, 0.03);
+          // a learned marker only follows slow changes (lighting, a jacket coming off)
+          else if (alone && cd !== null && cd < 18) pl.look = clothesBlend(pl.look, t.col, pl.marker ? 0.004 : 0.03);
         }
         pl.present = true;
         pl.lastSeen = now;
