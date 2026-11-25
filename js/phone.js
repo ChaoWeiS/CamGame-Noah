@@ -124,17 +124,30 @@ async function startCamera(deviceId = null, firstTime = false) {
   showCamInfo();
   send({ type: 'hello', ua: navigator.userAgent, camera: currentCameraLabel(), build: document.querySelector('meta[name=build]')?.content });
 }
+// zoom: all the way out at every start (the widest shot); the slider lets the player choose
+// any zoom the phone offers, and that choice holds until the camera is started again
+let wantZoom = null;
 async function zoomOut() {
   const track = stream.getVideoTracks()[0];
   const caps = track.getCapabilities ? track.getCapabilities() : {};
-  if (caps.zoom && caps.zoom.min !== undefined) {
-    try { await track.applyConstraints({ advanced: [{ zoom: caps.zoom.min }] }); } catch (_) {}
-    // some phones drift back to 1× a moment later: check again
-    setTimeout(() => {
-      try { if (track.readyState === 'live' && track.getSettings().zoom > caps.zoom.min + 0.01) track.applyConstraints({ advanced: [{ zoom: caps.zoom.min }] }); } catch (_) {}
-    }, 1500);
-  }
+  const row = $('zoomRow'), slider = $('zoom');
+  if (!(caps.zoom && caps.zoom.min !== undefined && caps.zoom.max > caps.zoom.min)) { row.hidden = true; return; }
+  wantZoom = caps.zoom.min;
+  slider.min = caps.zoom.min; slider.max = caps.zoom.max; slider.step = caps.zoom.step || 0.1; slider.value = wantZoom;
+  row.hidden = false;
+  await applyZoom(track);
+  // some phones drift back to 1× a moment later: check again
+  setTimeout(() => {
+    try { if (track.readyState === 'live' && Math.abs((track.getSettings().zoom ?? wantZoom) - wantZoom) > 0.01) applyZoom(track); } catch (_) {}
+  }, 1500);
 }
+async function applyZoom(track = stream?.getVideoTracks()[0]) {
+  if (!track || wantZoom === null) return;
+  try { await track.applyConstraints({ advanced: [{ zoom: wantZoom }] }); } catch (_) {}
+  $('zoomVal').textContent = `${(+wantZoom).toFixed(1)}×`;
+  showCamInfo();
+}
+$('zoom').addEventListener('input', (e) => { wantZoom = +e.target.value; applyZoom(); });
 function showCamInfo() {
   const track = stream.getVideoTracks()[0], st = track.getSettings();
   const caps = track.getCapabilities ? track.getCapabilities() : {};

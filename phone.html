@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="build" content="1125-212024-ultrawide-always">
+<meta name="build" content="1125-214506-zoom-slider">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Race to the Ark — Camera</title>
@@ -35,6 +35,9 @@
   .tip { font-size: 13px; opacity: 0.8; line-height: 1.4; }
   #msg { font-size: 14px; min-height: 1.2em; }
   #conn { -webkit-user-select: none; user-select: none; cursor: pointer; -webkit-touch-callout: none; }
+  #zoomRow { display: flex; align-items: center; gap: 8px; margin: 6px 0; font-size: 14px; }
+  #zoomRow[hidden] { display: none; }
+  #zoom { flex: 1; min-width: 120px; accent-color: #f2b544; }
 </style>
 </head>
 <body>
@@ -62,6 +65,7 @@
   <input id="room" placeholder="Room code (shown on the big screen)" autocomplete="off" autocapitalize="off">
   <button id="start">Start camera</button>
   <select id="camera" hidden></select>
+  <label id="zoomRow" hidden>🔍 Zoom <input id="zoom" type="range"> <b id="zoomVal"></b></label>
   <select id="rotate" hidden>
     <option value="auto">Picture: turn automatically (tilt sensor)</option>
     <option value="0">Picture: as the camera sees it</option>
