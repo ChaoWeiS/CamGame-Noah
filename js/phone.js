@@ -100,16 +100,24 @@ function currentCameraLabel() {
 // way out if the phone allows it, and a camera called "ultra wide" is preferred.
 // The camera picked in the list is remembered for next time.
 const SAVED = 'ark-camera';
+// Always the widest shot: an ultra-wide back camera whenever the phone has one we can recognise
+// (every start, not just the first); otherwise the camera picked last time; and always zoomed
+// all the way out (on many phones the ultra-wide lens is reached by zooming below 1×).
 async function startCamera(deviceId = null, firstTime = false) {
-  if (!deviceId && firstTime) { try { deviceId = localStorage.getItem(SAVED); } catch (_) {} }
-  try { await openCamera(deviceId); } catch (e) { if (!deviceId) throw e; await openCamera(null); }
-  if (firstTime && !deviceId) {
-    // labels are only readable once the camera is allowed: look for an ultra-wide back camera
-    const devices = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput');
-    const wide = devices.find((d) => /ultra|wide|0[.,]5/i.test(d.label) && !/front|user|face/i.test(d.label));
-    if (wide && wide.deviceId !== stream.getVideoTracks()[0].getSettings().deviceId) {
-      try { await openCamera(wide.deviceId); } catch (_) { await openCamera(null); }
+  if (!deviceId) {
+    // labels are only readable once the camera is allowed: open any camera first if needed
+    let devices = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput');
+    if (!devices.some((d) => d.label)) {
+      await openCamera(null);
+      devices = (await navigator.mediaDevices.enumerateDevices()).filter((d) => d.kind === 'videoinput');
     }
+    const wide = devices.find((d) => /ultra|wide|0[.,]5|uw\b/i.test(d.label) && !/front|user|face/i.test(d.label));
+    if (wide) deviceId = wide.deviceId;
+    else { try { deviceId = localStorage.getItem(SAVED); } catch (_) {} }
+  }
+  const current = stream?.getVideoTracks()[0]?.getSettings().deviceId;
+  if (!stream || !deviceId || deviceId !== current) {
+    try { await openCamera(deviceId); } catch (e) { if (!deviceId) throw e; await openCamera(null); }
   }
   await zoomOut();
   await fillCameraList();
@@ -121,6 +129,10 @@ async function zoomOut() {
   const caps = track.getCapabilities ? track.getCapabilities() : {};
   if (caps.zoom && caps.zoom.min !== undefined) {
     try { await track.applyConstraints({ advanced: [{ zoom: caps.zoom.min }] }); } catch (_) {}
+    // some phones drift back to 1× a moment later: check again
+    setTimeout(() => {
+      try { if (track.readyState === 'live' && track.getSettings().zoom > caps.zoom.min + 0.01) track.applyConstraints({ advanced: [{ zoom: caps.zoom.min }] }); } catch (_) {}
+    }, 1500);
   }
 }
 function showCamInfo() {

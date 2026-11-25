@@ -387,6 +387,11 @@ export const localCam = {
     onStatus('Starting webcam…');
     const stream = await navigator.mediaDevices.getUserMedia({ video: { width: { ideal: 640 }, height: { ideal: 480 }, ...(opts.facing ? { facingMode: opts.facing } : {}) }, audio: false });
     video.srcObject = stream; await video.play();
+    // the widest shot this camera can give: zoomed all the way out
+    try {
+      const track = stream.getVideoTracks()[0], caps = track.getCapabilities ? track.getCapabilities() : {};
+      if (caps.zoom && caps.zoom.min !== undefined) await track.applyConstraints({ advanced: [{ zoom: caps.zoom.min }] });
+    } catch (_) {}
     this.video = video;               // the lobby shows this picture
     const det = await createPoseDetector({ numPoses: opts.numPoses || 4, onStatus });
     // a phone that joined by QR code while this camera was starting stays the camera
