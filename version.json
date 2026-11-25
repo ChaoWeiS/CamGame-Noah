@@ -1,5 +1,5 @@
 {
- "build": "1125-223128-playtest-fixes-1",
+ "build": "1125-224308-playtest-fixes-2",
  "files": [
   "js/autorig.js",
   "js/awake.js",
@@ -14,6 +14,7 @@
   "js/games.js",
   "js/halloffame.js",
   "js/hofview.js",
+  "js/howto.js",
   "js/main.js",
   "js/menu.js",
   "js/mode.js",

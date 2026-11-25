@@ -9,6 +9,7 @@ import { W, H, rng, session, charById, setupPanes } from '../../js/scenes/common
 import { OverlayText } from '../../js/stage3d.js';
 import { LITE } from '../../js/mode.js';
 import { finishGame } from '../../js/games.js';
+import { showHowTo } from '../../js/howto.js';
 import { Ski3D } from './ski3d.js';
 
 const LENGTH = 420;          // metres from the start to the finish
@@ -107,10 +108,11 @@ export class SkiScene extends Phaser.Scene {
       return sk;
     });
     this.banner = new OverlayText(this.game, W / 2, H / 2 - 40, 110);
-    this.help = new OverlayText(this.game, W / 2, H / 2 + 80, 30);
-    this.help.setText('🙌 Pump both hands up and down to go faster\n✈️ Arms out wide — dip one hand to turn that way\n↩️ Turn your body for a sharp turn (slower)\n🚩 Ski through the flags · 🪙 grab the coins · 🪨 miss the rocks');
+    this.help = new OverlayText(this.game, W / 2, H / 2 + 20, 30);
+    this.help.setText('🚩 flags · 🪙 coins · 🪨 rocks!');
+    this.howto = showHowTo(this.game, ['pump', 'tilt', 'twist']);
     this.events.once('shutdown', () => {
-      this.ski.destroy(); this.banner.destroy(); this.help.destroy();
+      this.ski.destroy(); this.banner.destroy(); this.help.destroy(); this.howto?.remove();
       this.skiers.forEach((sk) => sk.hud.destroy());
     });
     this.state = 'countdown';
@@ -124,7 +126,7 @@ export class SkiScene extends Phaser.Scene {
       }],
       [3400, () => this.banner.setText('2!')],
       [4400, () => this.banner.setText('1!')],
-      [5400, () => { this.banner.setText('GO!!!'); this.help.setText(''); this.state = 'run'; this.runStart = performance.now(); }],
+      [5400, () => { this.banner.setText('GO!!!'); this.help.setText(''); this.howto?.remove(); this.howto = null; this.state = 'run'; this.runStart = performance.now(); }],
       [6400, () => { if (this.banner.text === 'GO!!!') this.banner.setText(''); }],
     ];
     this.finishCount = 0;

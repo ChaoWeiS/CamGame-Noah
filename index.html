@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="build" content="1125-223128-playtest-fixes-1">
+<meta name="build" content="1125-224308-playtest-fixes-2">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Race to the Ark</title>
@@ -56,6 +56,25 @@
     background: rgba(255,255,255,0.88); border: 3px solid var(--c); border-radius: 999px; padding: 0.15em 0.8em; color: #1d3b52;
     font: 700 22px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
   .fruitchip b { margin-left: 0.4em; }
+  .howto { position: absolute; transform: translateX(-50%); z-index: 21; display: flex; gap: 0.8em; pointer-events: none; }
+  .howto .hcard { background: rgba(255,248,230,0.94); border: 0.18em solid #1d3b52; border-radius: 0.8em; padding: 0.4em 0.6em 0.5em; text-align: center;
+    box-shadow: 0 0.3em 0.8em rgba(0,0,0,0.3); font: 800 1em system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #1d3b52; white-space: nowrap; }
+  .howto svg { display: block; width: 6.2em; height: 7.75em; margin: 0 auto 0.2em; overflow: visible; }
+  .howto .armL, .howto .armR, .howto .tilting, .howto .twisting, .howto .gliding { transform-box: view-box; transform-origin: 60px 52px; }
+  .howto .pumping .armL { animation: hPumpL 0.7s ease-in-out infinite alternate; }
+  .howto .pumping .armR { animation: hPumpR 0.7s ease-in-out infinite alternate; }
+  @keyframes hPumpL { from { transform: rotate(32deg); } to { transform: rotate(-22deg); } }
+  @keyframes hPumpR { from { transform: rotate(-32deg); } to { transform: rotate(22deg); } }
+  .howto .tilting { animation: hTilt 1.6s ease-in-out infinite alternate; }
+  @keyframes hTilt { from { transform: rotate(-4deg); } to { transform: rotate(18deg); } }
+  .howto .twisting { animation: hTwist 1.2s ease-in-out infinite alternate; }
+  @keyframes hTwist { from { transform: scaleX(1); } to { transform: scaleX(0.4); } }
+  .howto .flapping .armL { animation: hFlapL 0.6s ease-in infinite alternate; }
+  .howto .flapping .armR { animation: hFlapR 0.6s ease-in infinite alternate; }
+  @keyframes hFlapL { from { transform: rotate(0deg); } to { transform: rotate(-55deg); } }
+  @keyframes hFlapR { from { transform: rotate(0deg); } to { transform: rotate(55deg); } }
+  .howto .gliding { animation: hGlide 2s ease-in-out infinite alternate; }
+  @keyframes hGlide { from { transform: translateY(-4px); } to { transform: translateY(6px); } }
   .skihud { position: absolute; pointer-events: none; z-index: 15; font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; font-weight: 800; color: #fff;
     text-shadow: 0 0 5px #10202b, 0 2px 0 #10202b; box-sizing: border-box; }
   .skihud .tag { position: absolute; left: 3%; top: 3%; font-size: 1.25em; }

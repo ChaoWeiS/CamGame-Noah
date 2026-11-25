@@ -4,7 +4,7 @@
 //   hands down / wings folded     → drop fast
 //   (Sky Rings) tilt the spread arms like a plane → turn towards the lower hand
 // mode 'ark': Flappy Ark — fly down the inside of the ark through the ventilation gaps.
-// mode 'sky': Sky Rings — fly over the flood through rings; arrows point to the next one.
+// mode 'sky': Sky Rings — fly down a mountain valley over the flood through big rings; an arrow points to the next one.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { tracker, input, PLAYER_CSS } from '../../js/core.js';
@@ -16,13 +16,14 @@ import { loadRiggedCharacter, PHYSICS_FOR } from '../../js/autorig.js';
 import { MODELS, ANIMAL_SIZE } from '../../js/models.js';
 import { addWings } from '../../js/wings.js';
 import { L } from '../../js/body.js';
+import { showHowTo } from '../../js/howto.js';
 
 const ANIMAL_M = 1.2;
 const wrap = (a) => Math.atan2(Math.sin(a), Math.cos(a));
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
 const MODES = {
   ark: { roundMs: 60000, speed: 6, ceiling: 8.6, title: 'Flappy Ark' },
-  sky: { roundMs: 75000, speed: 9, ceiling: 42, title: 'Sky Rings' },
+  sky: { roundMs: 75000, speed: 9, ceiling: 30, title: 'Sky Rings' },
 };
 
 function canvasTex(w, h, draw, repeat) {
@@ -57,22 +58,44 @@ function arkCourse(seed, roundMs, speed) {
   }
   return { walls, half: 4.6 };
 }
+// Sky Rings: a winding valley. A smooth centre line (sampled every ~2 m) with big rings along it;
+// mountains line both sides, and the flyers are gently kept inside.
+const RING_R = 3.9, VALLEY_SOFT = 7, VALLEY_HARD = 12;
 function skyCourse(seed) {
   const r = rng(seed ^ 0x51c);
-  const rings = [];
-  let p = new THREE.Vector3(0, 12, -26), yaw = 0;
-  for (let i = 0; i < 40; i++) {
-    yaw += (r() - 0.5) * 1.1;
-    const dist = 24 + r() * 8;
-    const next = p.clone().add(new THREE.Vector3(Math.sin(yaw) * dist, 0, -Math.cos(yaw) * dist));
-    next.y = clamp(p.y + (r() - 0.5) * 12, 6, 28);
-    const n = next.clone().sub(p).normalize();
-    rings.push({ pos: next, n, r: 2.6 });
-    p = next;
+  const ctrl = [new THREE.Vector3(0, 12, 8), new THREE.Vector3(0, 12, -6)];
+  let p = new THREE.Vector3(0, 12, -24), yaw = 0;
+  ctrl.push(p.clone());
+  for (let i = 0; i < 38; i++) {
+    yaw = clamp(yaw + (r() - 0.5) * 0.7, -1.2, 1.2);   // gentle bends, and the valley never doubles back
+    const dist = 18 + r() * 4;
+    p = p.clone().add(new THREE.Vector3(Math.sin(yaw) * dist, 0, -Math.cos(yaw) * dist));
+    p.y = clamp(p.y + (r() - 0.5) * 7, 8, 20);
+    ctrl.push(p.clone());
   }
-  // the first ring straight ahead
-  rings.unshift({ pos: new THREE.Vector3(0, 12, -26), n: new THREE.Vector3(0, 0, -1), r: 2.6 });
-  return { rings };
+  const curve = new THREE.CatmullRomCurve3(ctrl, false, 'centripetal');
+  const len = curve.getLength(), N = Math.round(len / 2);
+  const path = curve.getSpacedPoints(N).map((pt, i) => ({ p: pt, s: (i / N) * len }));
+  path.forEach((q, i) => { const a = path[Math.max(0, i - 1)].p, b = path[Math.min(N, i + 1)].p; q.t = b.clone().sub(a).normalize(); });
+  // a ring at every control point after the start
+  const rings = ctrl.slice(2).map((pos) => {
+    let best = 0, bd = 1e9;
+    path.forEach((q, i) => { const d = q.p.distanceToSquared(pos); if (d < bd) { bd = d; best = i; } });
+    return { pos: path[best].p.clone(), n: path[best].t.clone(), r: RING_R, s: path[best].s };
+  });
+  return { rings, path, len };
+}
+// where a flyer is along the valley: nearest centre-line sample (searching near the last one)
+function onPath(path, x, z, hint = 0) {
+  let best = hint, bd = 1e9;
+  for (let i = Math.max(0, hint - 15); i < Math.min(path.length, hint + 25); i++) {
+    const q = path[i].p, d = (q.x - x) ** 2 + (q.z - z) ** 2;
+    if (d < bd) { bd = d; best = i; }
+  }
+  if (bd > 400) path.forEach((q, i) => { const d = (q.p.x - x) ** 2 + (q.p.z - z) ** 2; if (d < bd) { bd = d; best = i; } });
+  const q = path[best], tx = q.t.x, tz = q.t.z, tl = Math.hypot(tx, tz) || 1;
+  const lat = ((x - q.p.x) * -tz + (z - q.p.z) * tx) / tl;   // + = right of the centre line
+  return { i: best, s: q.s, lat, tanHeading: Math.atan2(tx, -tz) };
 }
 
 // ---------------------------------------------------------------- the 3D world
@@ -136,6 +159,7 @@ class FlightWorld {
 
   buildSky() {
     const S = this.scene;
+    const path = this.course.path, center = path[Math.floor(path.length / 2)].p;
     S.background = canvasTex(4, 256, (c, w, h) => {
       const g = c.createLinearGradient(0, 0, 0, h); g.addColorStop(0, '#5aa7e6'); g.addColorStop(0.6, '#a8d5f5'); g.addColorStop(1, '#e8f4fb');
       c.fillStyle = g; c.fillRect(0, 0, w, h);
@@ -149,19 +173,20 @@ class FlightWorld {
         c.fillStyle = '#3f7fb8'; c.fillRect(0, 0, w, h);
         for (let i = 0; i < 60; i++) { c.strokeStyle = 'rgba(220,240,255,0.35)'; c.beginPath(); const x = Math.random() * w, y = Math.random() * h; c.moveTo(x, y); c.quadraticCurveTo(x + 6, y - 3, x + 12, y); c.stroke(); }
       }, [160, 160]) }));
+    sea.position.set(center.x, 0, center.z);
     S.add(sea);
+    this.buildValley();
     // clouds: soft puffs, scattered around the course
     const cloudM = new THREE.MeshLambertMaterial({ color: 0xffffff, transparent: true, opacity: 0.92 });
     const puff = new THREE.SphereGeometry(1, 12, 9);
     const r = rng(77);
-    const center = this.course.rings[Math.floor(this.course.rings.length / 2)].pos;
     for (let i = 0; i < (LITE ? 30 : 55); i++) {
       const g = new THREE.Group();
       const n = 3 + Math.floor(r() * 4);
       for (let k = 0; k < n; k++) { const m = new THREE.Mesh(puff, cloudM); m.scale.set(3 + r() * 3, 2 + r() * 1.5, 3 + r() * 3); m.position.set((k - n / 2) * 3.2, r() * 1.5, r() * 2); g.add(m); }
       g.position.set(center.x + (r() - 0.5) * 520, 18 + r() * 40, center.z + (r() - 0.5) * 520);
       // keep clouds away from the rings
-      if (this.course.rings.some((rg) => rg.pos.distanceTo(g.position) < 14)) continue;
+      if (path.some((q) => q.p.distanceTo(g.position) < 16)) continue;
       S.add(g);
     }
     // the ark, floating on the flood
@@ -170,17 +195,13 @@ class FlightWorld {
     const cabin = new THREE.Mesh(new THREE.BoxGeometry(24, 6, 10), new THREE.MeshLambertMaterial({ color: 0xa86b36 })); cabin.position.y = 10;
     const roof = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 8, 4, 4, 1).rotateY(Math.PI / 4).scale(1.9, 1, 1), dark); roof.position.y = 15;
     ark.add(hull, cabin, roof);
-    // somewhere you can see it, but well away from every ring
-    const rings = this.course.rings, mid = rings.reduce((v, rg) => v.add(rg.pos), new THREE.Vector3()).multiplyScalar(1 / rings.length);
-    for (let k = 0; k < 24; k++) {
-      const a = k / 24 * Math.PI * 2, spot = new THREE.Vector3(mid.x + Math.cos(a) * 110, 0, mid.z + Math.sin(a) * 110);
-      if (rings.every((rg) => Math.hypot(rg.pos.x - spot.x, rg.pos.z - spot.z) > 60)) { ark.position.copy(spot); break; }
-      ark.position.set(mid.x + 160, 0, mid.z);
-    }
-    ark.rotation.y = 0.6;
+    // waiting at the far end of the valley
+    const last = path[path.length - 1];
+    ark.position.set(last.p.x + last.t.x * 40, 0, last.p.z + last.t.z * 40);
+    ark.rotation.y = Math.atan2(last.t.x, last.t.z) + Math.PI / 2;
     S.add(ark);
     // the rings
-    const torus = new THREE.TorusGeometry(2.6, 0.22, 10, 40);
+    const torus = new THREE.TorusGeometry(RING_R, 0.32, 10, 44);
     this.ringMat = {
       next: new THREE.MeshStandardMaterial({ color: 0xffc83d, emissive: 0x7a4a00, metalness: 0.4, roughness: 0.35 }),
       later: new THREE.MeshStandardMaterial({ color: 0xf6e7b0, emissive: 0x2a2000, metalness: 0.2, roughness: 0.5, transparent: true, opacity: 0.6 }),
@@ -193,6 +214,44 @@ class FlightWorld {
       S.add(m);
       return m;
     });
+  }
+
+  // mountains on both sides of the valley (instanced cones, with snowy tips on the tall ones)
+  buildValley() {
+    const path = this.course.path, r = rng(4242), spots = [];
+    for (let i = 0; i < path.length; i += 3) {
+      const q = path[i], rx = -q.t.z, rz = q.t.x, rl = Math.hypot(rx, rz) || 1;
+      for (const side of [-1, 1]) for (const row of [0, 1]) {
+        const rad = 9 + r() * 7 + row * 6, off = 18 + rad * 0.55 + row * 16 + r() * 5;
+        const x = q.p.x + side * off * rx / rl, z = q.p.z + side * off * rz / rl;
+        // never inside the valley where it bends
+        const clearance = 15 + rad * 0.45;
+        let ok = true;
+        for (let k = Math.max(0, i - 40); k < Math.min(path.length, i + 40); k += 2) {
+          const pp = path[k].p; if ((pp.x - x) ** 2 + (pp.z - z) ** 2 < clearance * clearance) { ok = false; break; }
+        }
+        if (ok) spots.push({ x, z, rad, h: 32 + r() * 34 + row * 14, tone: r() });
+      }
+    }
+    // the start: a wall of mountains behind, so the valley is the only way
+    for (let k = -3; k <= 3; k++) spots.push({ x: k * 14, z: 40 + r() * 8, rad: 12, h: 45 + r() * 20, tone: r() });
+    const cone = new THREE.ConeGeometry(1, 1, 7, 1).translate(0, 0.5, 0);
+    const rock = new THREE.InstancedMesh(cone, new THREE.MeshLambertMaterial({ color: 0xffffff, flatShading: true }), spots.length);
+    const snow = new THREE.InstancedMesh(cone, new THREE.MeshLambertMaterial({ color: 0xf4f8fb, flatShading: true }), spots.length);
+    const m = new THREE.Matrix4(), col = new THREE.Color();
+    let ns = 0;
+    spots.forEach((sp, i) => {
+      m.compose(new THREE.Vector3(sp.x, -2, sp.z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, sp.tone * 6, 0)), new THREE.Vector3(sp.rad, sp.h, sp.rad));
+      rock.setMatrixAt(i, m);
+      col.setHSL(0.27 - sp.tone * 0.2, 0.22 + sp.tone * 0.15, 0.3 + sp.tone * 0.12); rock.setColorAt(i, col);
+      if (sp.h > 48) {   // the top 28% is snow
+        const k = 0.28;
+        m.compose(new THREE.Vector3(sp.x, -2 + sp.h * (1 - k) + 0.2, sp.z), new THREE.Quaternion().setFromEuler(new THREE.Euler(0, sp.tone * 6, 0)), new THREE.Vector3(sp.rad * k * 1.04, sp.h * k, sp.rad * k * 1.04));
+        snow.setMatrixAt(ns++, m);
+      }
+    });
+    snow.count = ns;
+    this.scene.add(rock, snow);
   }
 
   async addFlyer(f) {
@@ -327,12 +386,11 @@ export class FlightScene extends Phaser.Scene {
     });
     this.timer = new OverlayText(this.game, W / 2, n >= 3 ? H / 2 : H - 40, 44);
     this.banner = new OverlayText(this.game, W / 2, H / 2 - 40, 110);
-    this.help = new OverlayText(this.game, W / 2, H / 2 + 80, 30);
-    this.help.setText(this.mode === 'ark'
-      ? '🪽 Flap your arms DOWN to fly up\n👐 Arms out wide: glide gently  ·  👇 arms down: drop fast\n🪟 Fly through the gaps in the ark walls!'
-      : '🪽 Flap your arms DOWN to fly up  ·  👐 arms out: glide\n✈️ Tilt your arms like a plane to turn\n💍 Fly through the rings — follow the arrow!');
+    this.help = new OverlayText(this.game, W / 2, H / 2 + 20, 30);
+    this.help.setText(this.mode === 'ark' ? '🪟 Fly through the gaps!' : '💍 Fly through the rings!');
+    this.howto = showHowTo(this.game, this.mode === 'ark' ? ['flap', 'glide', 'dive'] : ['flap', 'glide', 'tilt']);
     this.events.once('shutdown', () => {
-      this.world.destroy(); this.timer.destroy(); this.banner.destroy(); this.help.destroy();
+      this.world.destroy(); this.timer.destroy(); this.banner.destroy(); this.help.destroy(); this.howto?.remove();
       this.flyers.forEach((f) => f.hud.destroy());
     });
     this.state = 'countdown';
@@ -345,7 +403,7 @@ export class FlightScene extends Phaser.Scene {
       }],
       [3600, () => this.banner.setText('2!')],
       [4600, () => this.banner.setText('1!')],
-      [5600, () => { this.banner.setText('FLY!!!'); this.help.setText(''); this.state = 'play'; this.startAt = performance.now(); }],
+      [5600, () => { this.banner.setText('FLY!!!'); this.help.setText(''); this.howto?.remove(); this.howto = null; this.state = 'play'; this.startAt = performance.now(); }],
       [6600, () => { if (this.banner.text === 'FLY!!!') this.banner.setText(''); }],
     ];
   }
@@ -390,10 +448,25 @@ export class FlightScene extends Phaser.Scene {
       const steer = inp.present ? inp.steer : 0;
       f.turnRate += (steer * 1.25 - f.turnRate) * Math.min(1, dt * 5);
       f.heading = wrap(f.heading + f.turnRate * dt);
+      // the valley: near its sides you're turned gently back along it (and never through the mountains)
+      const at = onPath(this.course.path, f.x, -f.d, f.pi || 0);
+      f.pi = at.i; f.s = at.s;
+      const out = Math.abs(at.lat) - VALLEY_SOFT;
+      if (out > 0) {
+        const target = at.tanHeading - Math.sign(at.lat) * 0.6;
+        f.heading = wrap(f.heading + wrap(target - f.heading) * Math.min(1, dt * out * 0.9));
+      }
     }
     const speed = this.M.speed * (f.stun ? 0.3 : 1);
     f.x += Math.sin(f.heading) * speed * dt;
     f.d += Math.cos(f.heading) * speed * dt;
+    if (this.mode === 'sky') {
+      const at = onPath(this.course.path, f.x, -f.d, f.pi || 0);
+      if (Math.abs(at.lat) > VALLEY_HARD) {
+        const q = this.course.path[at.i], rx = -q.t.z, rz = q.t.x, rl = Math.hypot(rx, rz) || 1, k = Math.sign(at.lat) * VALLEY_HARD;
+        f.x = q.p.x + k * rx / rl; f.d = -(q.p.z + k * rz / rl);
+      }
+    }
     if (this.mode === 'ark') this.arkRules(f, now); else this.skyRules(f, now);
   }
 
@@ -436,8 +509,8 @@ export class FlightScene extends Phaser.Scene {
       return;
     }
     f.lastSide = side;
-    // flew far past it: on to the next one
-    if (c.distanceTo(rg.pos) > 80) { f.ring++; f.lastSide = undefined; f.hud.msg('Missed that one', 800); }
+    // already further down the valley than the ring: on to the next one
+    if ((f.s ?? 0) > rg.s + 5) { f.ring++; f.lastSide = undefined; f.hud.msg('Missed that one', 800); }
   }
 
   // an arrow at the edge of the pane, pointing to the next ring when it's out of view
