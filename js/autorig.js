@@ -61,7 +61,8 @@ const SHOULDER_FOR = { bear: 0.7, dog: 0.38, chicken: 0.66, hamster: 0.82 };
 // rigged ONCE; every character made from it shares the geometry, skin weights and textures
 // and only gets its own bones. (Character select used to rig 4 animals × 4 players afresh.)
 const rigCache = new Map();
-const _fv = new THREE.Vector3(), _fz = new THREE.Vector3(0, 0, 1), _fq = new THREE.Quaternion(), _fe = new THREE.Euler();
+const _fv = new THREE.Vector3(), _fw = new THREE.Vector3(), _fz = new THREE.Vector3(0, 0, 1), _fx = new THREE.Vector3(1, 0, 0), _fdown = new THREE.Vector3(0, -1, 0);
+const _fq = new THREE.Quaternion(), _fq2 = new THREE.Quaternion(), _fq3 = new THREE.Quaternion(), _fe = new THREE.Euler(), _fm = new THREE.Matrix4();
 export function loadRiggedCharacter(url, opts = {}) {
   const key = url + JSON.stringify(opts);
   if (!rigCache.has(key)) {
@@ -294,24 +295,58 @@ export class RiggedCharacter {
 
   // Shoulders roll out and up as an arm lifts: arms hang close to the body when down,
   // and go up beside the head (not behind it) when raised. Call after posing the arms.
-  // ---- squatting: when the hips go down, the knees bend so the feet stay on the floor
-  // (two-bone IK per leg: thigh forward, shin back, foot right under the hip)
+  // ---- squatting: the whole skeleton folds, like a real squat
+  // How deep the squat is (s: 0 standing … 1 as low as the legs fold) decides how far the
+  // hips push back, the pelvis and back tip forward, and the head lifts to keep looking ahead;
+  // then each leg is solved (two-bone IK, knees forward) so the feet stay planted on the floor.
+  // unfold() takes the fold off again before the next pose.
+  unfold() {
+    const f = this._fold;
+    if (!f) return;
+    for (const k of ['hips', 'spine', 'chest', 'head']) this.b[k].quaternion.copy(f[k]);
+    this.b.hips.position.z = f.hipsZ;
+    this._fold = null;
+  }
   plantFeet() {
-    if (this.hop > -0.01 * this.height) {
-      if (this._planted) { for (const s of ['L', 'R']) { this.b['thigh' + s].rotation.x = 0; this.b['shin' + s].rotation.x = 0; } this._planted = false; }
+    const b = this.b, j = this.joints;
+    const Lt = this.hipY0 - j.kneeY, Ls = j.kneeY;
+    const s = Math.max(0, Math.min(1, -this.hop / (0.55 * this.hipY0)));
+    if (s < 0.02) {
+      if (this._planted) { for (const k of ['L', 'R']) { b['thigh' + k].rotation.x = 0; b['shin' + k].rotation.x = 0; } this._planted = false; }
       return;
     }
     this._planted = true;
-    const j = this.joints, b = this.b;
-    const Lt = this.hipY0 - j.kneeY, Ls = j.kneeY;
-    const d = Math.max(0.3 * (Lt + Ls), b.hips.position.y);
-    if (d >= Lt + Ls - 1e-4) return;
-    const c = (v) => Math.max(-1, Math.min(1, v));
-    const a = Math.acos(c((Lt * Lt + d * d - Ls * Ls) / (2 * Lt * d)));        // thigh forward from straight down
-    const k = Math.acos(c((Lt * Lt + Ls * Ls - d * d) / (2 * Lt * Ls)));        // the angle inside the knee
-    for (const [s, side] of [['L', -1], ['R', 1]]) {
-      b['thigh' + s].quaternion.setFromEuler(_fe.set(-a, 0, side * 0.12));     // knees a little apart
-      b['shin' + s].quaternion.setFromEuler(_fe.set(Math.PI - k, 0, -side * 0.12));
+    this.unfold();
+    this._fold = { hips: b.hips.quaternion.clone(), spine: b.spine.quaternion.clone(), chest: b.chest.quaternion.clone(), head: b.head.quaternion.clone(), hipsZ: b.hips.position.z };
+    // fold: hips back, pelvis and back forward, head up
+    b.hips.position.z = this._fold.hipsZ - 0.25 * Lt * s;
+    b.hips.quaternion.multiply(_fq.setFromAxisAngle(_fx, 0.28 * s));
+    b.spine.quaternion.multiply(_fq.setFromAxisAngle(_fx, 0.14 * s));
+    b.chest.quaternion.multiply(_fq.setFromAxisAngle(_fx, 0.04 * s));
+    b.head.quaternion.multiply(_fq.setFromAxisAngle(_fx, -0.45 * s));
+    // legs: from each hip joint down to its foot on the floor (under where the foot stands)
+    this.root.updateMatrixWorld(true);
+    const invRoot = _fm.copy(this.root.matrixWorld).invert();
+    for (const [k, side] of [['L', -1], ['R', 1]]) {
+      const th = b['thigh' + k], sh = b['shin' + k];
+      const hipJ = _fv.setFromMatrixPosition(th.matrixWorld).applyMatrix4(invRoot).clone();
+      const foot = _fw.set(side * j.legX * 1.08, 0, 0.04 * Lt);      // a touch forward and apart
+      // into the hips' space (the thighs' parent)
+      const hq = b.hips.getWorldQuaternion(_fq2).premultiply(_fq3.copy(this.root.getWorldQuaternion(_fq3)).invert()).invert();
+      const v = foot.sub(hipJ).applyQuaternion(hq).divideScalar(1);
+      let L = v.length();
+      const dir = v.clone().normalize();
+      L = Math.min(L, (Lt + Ls) * 0.999);
+      const c = (x) => Math.max(-1, Math.min(1, x));
+      const a = Math.acos(c((Lt * Lt + L * L - Ls * Ls) / (2 * Lt * L)));
+      // knees bend forward (+Z), and a little outward
+      const fwd = new THREE.Vector3(side * 0.25, 0, 1).normalize();
+      const n = fwd.sub(dir.clone().multiplyScalar(fwd.dot(dir))).normalize();
+      const kneeDir = dir.clone().multiplyScalar(Math.cos(a)).addScaledVector(n, Math.sin(a));
+      th.quaternion.setFromUnitVectors(_fdown, kneeDir);
+      const shinDir = dir.clone().multiplyScalar(L).sub(kneeDir.clone().multiplyScalar(Lt)).normalize()
+        .applyQuaternion(_fq2.copy(th.quaternion).invert());
+      sh.quaternion.setFromUnitVectors(_fdown, shinDir);
     }
   }
 
@@ -435,6 +470,7 @@ export class RiggedCharacter {
 
   // pts: smoothed mirrored points from body.js; base: calibrated posture (optional)
   pose(pts, base = null) {
+    this.unfold();
     this.reset3D();
     const ok = (i) => pts[i].v > 0.4;
     const ang = (a, b) => Math.atan2(pts[b].y - pts[a].y, pts[b].x - pts[a].x);
@@ -474,7 +510,6 @@ export class RiggedCharacter {
       this.hop += (dy * 0.45 * this.height - this.hop) * 0.5;
       this.hop = Math.max(-0.55 * this.hipY0, this.hop);      // no lower than the legs can fold
       this.b.hips.position.y = this.hipY0 + this.hop;
-      this.plantFeet();
     }
     const limbs = [
       ['upperL', 'foreL', L.lShoulder, L.lElbow, L.lWrist, armBase],
@@ -503,6 +538,7 @@ export class RiggedCharacter {
   // the shoulders twist on the spine, and every limb points where the person's does.
   // pts (2D) are used for visibility and the jump height; base is optional.
   pose3D(world, pts, base = null, k = 0.5) {
+    this.unfold();
     const ex = this.ex || EXAGGERATE;
     const ok = (i) => pts[i].v > 0.4;
     const P = (i) => _v(world[i]);
@@ -597,6 +633,7 @@ export class RiggedCharacter {
   }
 
   idle(t) {
+    this.unfold();
     this.reset3D();
     const w = Math.sin(t * 2) * 0.2;
     const ease = (name, target) => { const cur = this.a[name] ?? 0; this.a[name] = cur + (target - cur) * 0.08; this.b[name].rotation.z = -this.a[name]; };
