@@ -234,7 +234,7 @@ export function updateWings(ch) {
   const wb = ch.wingBones;
   if (!wb) return;
   const now = performance.now() / 1000;
-  const st = (ch.wingState = ch.wingState || { t: now, R: { p: 0, v: 0, bend: 0, tgt: 0 }, L: { p: 0, v: 0, bend: 0, tgt: 0 } });
+  const st = (ch.wingState = ch.wingState || { t: now, R: { p: 0, v: 0, vs: 0 }, L: { p: 0, v: 0, vs: 0 } });
   const dt = Math.min(0.05, Math.max(0.001, now - st.t)); st.t = now;
   const chest = wb.wingR.parent;
   _m.copy(chest.matrixWorld).invert();
@@ -246,24 +246,23 @@ export function updateWings(ch) {
     const elev = Math.atan2(_b.y, Math.abs(_b.x) + 1e-6) - (wb.rest ? wb.rest[s] : 0);   // 0 = out like at rest, −π/2 = down
     // stroke position: 0 = top (pose 1), 1 = bottom (pose 6)
     const tgt = smooth(0.15, -1.15, elev);
-    const armSpeed = (tgt - w.tgt) / dt; w.tgt = tgt;
     // the wing follows with drag (a damped spring)
     const k = 90, d = 2 * Math.sqrt(k) * 0.85;
     w.v += (k * (tgt - w.p) - d * w.v) * dt; w.p += w.v * dt;
     const p = Math.max(-0.1, Math.min(1.1, w.p));
-    // bent wing on the way up, straight on the way down / when held still
-    const bendTo = armSpeed < -0.6 ? 1 : armSpeed > 0.6 ? 0 : w.bend * 0.97;
-    w.bend += (bendTo - w.bend) * Math.min(1, dt * 10);
-    const bend = w.bend, mid = Math.sin(Math.max(0, Math.min(1, p)) * Math.PI);
-    // whole wing: up/down (roll about the forward axis) + forward/back sweep (about the vertical axis)
-    const roll = lerp(0.15, -1.5, p) + bend * 0.25;
-    const sweepFwd = 0.45 * Math.max(0, p) * (1 - bend) - 0.35 * bend;     // +: tips forward
+    // feathers bend against the air: the outer wing trails behind the stroke, curling up on
+    // the way down and hanging down on the way up, and straightens out when the wing stops
+    w.vs = (w.vs || 0) + (w.v - (w.vs || 0)) * Math.min(1, dt * 12);
+    const vs = w.vs;
+    // whole wing: up/down (roll about the forward axis) + a little forward sweep at the bottom
+    const roll = lerp(0, -1.45, p);
+    const sweepFwd = 0.35 * Math.max(0, Math.min(1, p));
     _q1.setFromAxisAngle(_Y, -sg * sweepFwd);
     _q2.setFromAxisAngle(_Z, sg * roll);
     wb['wing' + s].quaternion.multiplyQuaternions(_q1, _q2);
-    // outer feathers: hang down and trail back on the upstroke, lag a touch on the downstroke
-    const tipRoll = -bend * (0.45 + 0.75 * mid) + (1 - bend) * 0.2 * mid * Math.sign(w.v);
-    _q1.setFromAxisAngle(_Y, sg * bend * 0.45);
+    const tipRoll = Math.max(-1.0, Math.min(0.8, vs * 0.4));          // + = curl up (moving down)
+    const tipBack = Math.max(0, Math.min(0.3, -vs * 0.12));          // trailing back a little on the way up
+    _q1.setFromAxisAngle(_Y, sg * tipBack);
     _q2.setFromAxisAngle(_Z, sg * tipRoll);
     wb['wingTip' + s].quaternion.multiplyQuaternions(_q1, _q2);
     wb['wing' + s].updateMatrixWorld(true);
