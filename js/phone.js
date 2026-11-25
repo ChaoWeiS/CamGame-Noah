@@ -1,3 +1,4 @@
+import { keepAwake } from './awake.js';
 import { createPoseDetector, BONES } from './pose.js';
 import { SPINE } from './bones.js';
 
@@ -8,7 +9,7 @@ $('room').value = params.get('room') || location.hash.replace('#', '') || '';
 
 let detector = null, stream = null, running = false, conn = null, peer = null;
 let frames = 0, lastFpsT = performance.now(), fps = 0, lastInf = 0;
-let showPreview = true, wakeLock = null, standby = false, wantPics = false, lastPic = 0;
+let showPreview = true, standby = false, wantPics = false, lastPic = 0;
 const picCv = document.createElement('canvas'), pctx = picCv.getContext('2d');
 const frameCv = document.createElement('canvas'), fctx = frameCv.getContext('2d');
 let rot = 0;                     // how far the picture is turned before detection (degrees)
@@ -192,14 +193,20 @@ function uprightFrame() {
   return frameCv;
 }
 
-async function keepAwake() {
-  try {
-    if ('wakeLock' in navigator) {
-      wakeLock = await navigator.wakeLock.request('screen');
-    }
-  } catch (_) {}
+// ---------- staying awake, with a dark screen ----------
+// A web page can't keep the camera running with the screen OFF (the browser pauses the
+// page). So the phone stays awake, and after a while without a touch the page goes fully
+// black instead: on phones whose screens light each pixel (OLED) black pixels are off, so
+// it looks off and uses little power — while the camera keeps tracking. Tap to wake it.
+const SAVER_AFTER = 25000;
+let lastTouch = performance.now(), saver = false;
+function setSaver(on) {
+  if (saver === on) return;
+  saver = on;
+  $('saver').hidden = !on;
 }
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && running) keepAwake(); });
+for (const ev of ['pointerdown', 'touchstart', 'keydown']) window.addEventListener(ev, () => { lastTouch = performance.now(); setSaver(false); }, { passive: true });
+setInterval(() => { if (running && performance.now() - lastTouch > SAVER_AFTER) setSaver(true); }, 1000);
 
 // ---------- main loop ----------
 function loop() {
@@ -234,6 +241,7 @@ function loop() {
 
 const COLORS = ['#f2b544', '#5ec8e5', '#f27a9b', '#8be07a'];
 function draw(poses) {
+  if (saver) return;                                  // dark screen: draw nothing
   const vw = frameCv.width, vh = frameCv.height;
   if (overlay.width !== vw || overlay.height !== vh) { overlay.width = vw; overlay.height = vh; }
   ctx.clearRect(0, 0, vw, vh);
@@ -282,9 +290,10 @@ $('start').addEventListener('click', async () => {
     }
     msg('Running. You can leave this screen on.');
     running = true;
-    keepAwake();
+    keepAwake(true);
     $('start').hidden = true; $('room').hidden = true;
     $('preview').hidden = false;
+    $('darkBtn').hidden = false;
     loop();
   } catch (e) {
     console.error(e);
@@ -294,6 +303,7 @@ $('start').addEventListener('click', async () => {
 });
 
 $('take').addEventListener('click', () => send({ type: 'take' }));
+$('darkBtn').addEventListener('click', (e) => { e.stopPropagation(); setTimeout(() => setSaver(true), 50); });
 
 $('preview').addEventListener('click', () => {
   showPreview = !showPreview;

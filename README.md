@@ -130,3 +130,12 @@ Force a choice with `?models=hd` or `?models=lite`.
    Swipe a raised hand sideways to change; hold both hands up 3 s (a ring in your colour fills)
    to choose. Chosen animals are locked and can't be taken by anyone else.
 4. **Race:** READY?? → 3! → 2! → 1! → GO!!! (standing posture is measured during READY??).
+
+## Staying awake
+
+The game page and the camera page both keep the screen awake (Screen Wake Lock API,
+`js/awake.js`; asked for again whenever the page comes back into view). A web page cannot
+keep the camera running with the screen switched off — the browser pauses the page — so
+the camera page instead goes **fully black** after 25 s without a touch (or with
+"🌙 Dark screen now"): on OLED phones black pixels are off, so it looks off and uses
+little power while tracking carries on. Tap to wake it.

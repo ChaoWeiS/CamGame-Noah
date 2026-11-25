@@ -1,6 +1,10 @@
 import { net, stats, tracker, input, keyboardHelp } from './core.js';
 import { multicam } from './multicam.js';
 import { session } from './scenes/common.js';
+import { keepAwake } from './awake.js';
+
+// the game screen must never go to sleep (phone mode especially; on a PC it stops the display blanking)
+keepAwake(true);
 import { initCalibration, linkCameras } from './calibui.js';
 import { W, H, ASPECT } from './scenes/common.js';
 import { LobbyScene } from './scenes/LobbyScene.js';

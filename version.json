@@ -1,7 +1,8 @@
 {
- "build": "1125-031014-narrower-shoulders",
+ "build": "1125-085917-stay-awake",
  "files": [
   "js/autorig.js",
+  "js/awake.js",
   "js/bear3d.js",
   "js/body.js",
   "js/bones.js",
