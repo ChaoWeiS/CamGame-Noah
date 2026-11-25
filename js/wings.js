@@ -241,16 +241,17 @@ function armAngles(u, f, h, sg) {
   return { elev: a1, bend };
 }
 const _u = new THREE.Vector3(), _f = new THREE.Vector3(), _h = new THREE.Vector3(), _m = new THREE.Matrix4();
-const _q1 = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _Y = new THREE.Vector3(0, 1, 0), _Z = new THREE.Vector3(0, 0, 1);
+const _q1 = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _q3 = new THREE.Quaternion(), _Y = new THREE.Vector3(0, 1, 0), _Z = new THREE.Vector3(0, 0, 1), _X = new THREE.Vector3(1, 0, 0), _dn = new THREE.Vector3();
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
 // a damped spring: the wing joint follows its target with a little drag
 function follow(o, tgt, dt, k = 110, damp = 0.8) {
   o.v += (k * (tgt - o.x) - 2 * Math.sqrt(k) * damp * o.v) * dt; o.x += o.v * dt;
   return o.x;
 }
-function setRot(bone, sg, yaw, roll) {     // yaw: + = swept back · roll: + = up (for either side)
+function setRot(bone, sg, yaw, roll, pitch = 0) {     // yaw: + = swept back · roll: + = up (for either side) · pitch: + = tips forward
   _q1.setFromAxisAngle(_Y, sg * yaw); _q2.setFromAxisAngle(_Z, sg * roll);
   bone.quaternion.multiplyQuaternions(_q1, _q2);
+  if (pitch) bone.quaternion.premultiply(_q3.setFromAxisAngle(_X, -pitch));
 }
 export function updateWings(ch) {
   const wb = ch.wingBones;
@@ -260,24 +261,30 @@ export function updateWings(ch) {
   const st = (ch.wingState = ch.wingState || { t: now, R: mk(), L: mk() });
   const dt = clamp(now - st.t, 0.001, 0.05); st.t = now;
   _m.copy(wb.wingUpR.parent.matrixWorld).invert();
+  // the body leans forward in flight: "down" for a wing means down in the world, below the body
+  _dn.set(0, -1, 0).transformDirection(_m);
+  const lean = Math.atan2(_dn.z, -_dn.y);
   for (const [s, sg] of [['R', 1], ['L', -1]]) {
     const up = ch.b['upper' + s], fore = ch.b['fore' + s], hand = ch.b['hand' + s], w = st[s];
     if (!up || !fore || !hand) continue;
     up.getWorldPosition(_u).applyMatrix4(_m); fore.getWorldPosition(_f).applyMatrix4(_m); hand.getWorldPosition(_h).applyMatrix4(_m);
     const A = armAngles(_u, _f, _h, sg), R0 = wb.rest[s];
-    const elev = follow(w.sh, clamp(A.elev - R0.elev, -1.25, 1.35), dt);
+    const elev = follow(w.sh, clamp(A.elev - R0.elev, -1.45, 1.35), dt);
     const bend = follow(w.el, clamp(A.bend - R0.bend, -1.3, 1.0), dt, 90);
-    const wrist = follow(w.wr, clamp(sg * hand.rotation.z, -1.0, 1.0), dt, 90);   // the player's wrist (fingertips) bend
+    const wrist = follow(w.wr, clamp(sg * hand.rotation.z, -0.7, 0.7), dt, 60);   // the player's wrist (fingertips) bend
     w.vs += (w.sh.v - w.vs) * Math.min(1, dt * 12);          // how fast the wing is beating (+ = up)
     const down = clamp(-elev / 1.2, 0, 1);
     const lift = (R0.lift || 0) * 0.85;
     // shoulder: the beat, sweeping a little forward at the bottom
-    setRot(wb['wingUp' + s], sg, -0.3 * down, Math.max(-1.3, elev - lift));   // arms level → wings level; not so far down they cross
+    const raised = 1 - down;
+    // arms level → wings level; arms down → wings hang straight down below the body (turned
+    // forward by the body's lean so they point down in the world, not back like a glide)
+    setRot(wb['wingUp' + s], sg, 0, Math.max(-1.55, elev - lift), (lean + 0.35) * down);
     // elbow: folds the wing at its middle (down and back) as the player's elbow bends
-    setRot(wb['wingFore' + s], sg, 0.45 * Math.min(1, Math.abs(bend)), bend * 0.85);
+    setRot(wb['wingFore' + s], sg, 0.4 * Math.min(1, Math.abs(bend)) * raised, bend * 0.7 * (0.3 + 0.7 * raised));
     // hand: follows the elbow, and trails the beat (air pushing on the long feathers)
     const trail = clamp(-w.vs * 0.18, -0.8, 0.45);
-    setRot(wb['wingHand' + s], sg, 0.25 * Math.min(1, Math.abs(bend)) + clamp(w.vs * 0.08, 0, 0.25), bend * 0.5 + wrist * 0.9 + trail);
+    setRot(wb['wingHand' + s], sg, (0.25 * Math.min(1, Math.abs(bend)) + clamp(w.vs * 0.08, 0, 0.25)) * raised, (bend * 0.5 + wrist * 0.6) * (0.3 + 0.7 * raised) + trail);
     wb['wingUp' + s].updateMatrixWorld(true);
   }
 }
