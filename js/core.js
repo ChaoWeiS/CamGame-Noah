@@ -27,6 +27,7 @@ export const stats = {
 // for a moment keeps their id. Players and lobby animals follow track ids.
 const CONFIRM_HITS = 3;      // frames before a new person counts
 const KEEP_MS = 800;         // how long a missing person keeps their id
+const PLAYER_KEEP_MS = 2500; // …and a player (hidden behind someone walking past, say)
 
 function boxOf(pts) {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity, n = 0, vis = 0;
@@ -37,6 +38,21 @@ function boxOf(pts) {
   }
   if (n < 4) return null;
   return { x0, y0, x1, y1, cx: (x0 + x1) / 2, cy: (y0 + y1) / 2, w: x1 - x0, h: y1 - y0, vis: vis / 33 };
+}
+// the torso (shoulders + hips): where a person IS, unaffected by waving, flapping or reaching
+// arms (which make the whole-body box jump around). Size = torso length.
+function torsoOf(pts, box) {
+  const ls = pts[11], rs = pts[12], lh = pts[23], rh = pts[24];
+  const shV = ls.v > 0.3 && rs.v > 0.3, hipV = lh.v > 0.3 && rh.v > 0.3;
+  if (shV) {
+    const sx = (ls.x + rs.x) / 2, sy = (ls.y + rs.y) / 2, sw = Math.hypot(ls.x - rs.x, ls.y - rs.y);
+    if (hipV) {
+      const hx = (lh.x + rh.x) / 2, hy = (lh.y + rh.y) / 2;
+      return { x: (sx + hx) / 2, y: (sy + hy) / 2, s: Math.max(Math.hypot(sx - hx, sy - hy), sw * 1.1, 0.02), good: true };
+    }
+    return { x: sx, y: sy + sw * 0.7, s: Math.max(sw * 1.4, 0.02), good: true };
+  }
+  return { x: box.cx, y: box.cy, s: Math.max(0.02, box.h * 0.35), good: false };
 }
 function iou(a, b) {
   const ix = Math.max(0, Math.min(a.x1, b.x1) - Math.max(a.x0, b.x0));
@@ -68,21 +84,27 @@ class Tracker {
       const pts = toPoints(flat, this.aspect);
       return { pts, key: keyPoints(pts), world: worlds && worlds[k] ? toWorld(worlds[k]) : null, box: boxOf(pts) };
     }).filter((d) => d.box);
-    // merge duplicates: two detections that mostly overlap are one person (keep the clearer one)
+    dets.forEach((d) => { d.torso = torsoOf(d.pts, d.box); });
+    // merge duplicates: two detections of one person have their torsos in the same place
+    // (keep the clearer one). Whole-body boxes overlap whenever two kids stand close with arms out.
     dets.sort((a, b) => b.box.vis - a.box.vis);
-    dets = dets.filter((d, i) => !dets.slice(0, i).some((e) => iou(d.box, e.box) > 0.55));
+    dets = dets.filter((d, i) => !dets.slice(0, i).some((e) =>
+      Math.hypot(d.torso.x - e.torso.x, d.torso.y - e.torso.y) < 0.3 * Math.min(d.torso.s, e.torso.s) && iou(d.box, e.box) > 0.4));
 
-    // match to tracks: score every (track, detection) pair, take the best pairs first
+    // match to tracks by the torso: where it is (predicted from how it was moving) and how big
+    // it is; score every (track, detection) pair, take the best pairs first
     const pairs = [];
     for (const t of this.tracks) {
-      const dt = Math.min(0.3, (now - t.lastSeen) / 1000);
-      const pred = { ...t.box, x0: t.box.x0 + t.vx * dt, x1: t.box.x1 + t.vx * dt, y0: t.box.y0 + t.vy * dt, y1: t.box.y1 + t.vy * dt };
-      pred.cx = (pred.x0 + pred.x1) / 2; pred.cy = (pred.y0 + pred.y1) / 2;
+      const hidden = now - t.lastSeen > 150;          // not seen for a moment: someone may be in front of them
+      const dt = hidden ? 0 : Math.min(0.3, (now - t.lastSeen) / 1000);
+      const px = t.torso.x + t.vx * dt, py = t.torso.y + t.vy * dt;
       dets.forEach((d, j) => {
-        const ov = iou(pred, d.box);
-        const dist = Math.hypot(pred.cx - d.box.cx, pred.cy - d.box.cy) / Math.max(0.05, Math.max(t.box.w, t.box.h, d.box.w));
-        const score = ov - 0.5 * dist;             // overlap good, distance (in body sizes) bad
-        if (ov > 0.1 || dist < 0.6) pairs.push({ t, j, score });
+        const size = Math.max(t.torso.s, d.torso.s);
+        const dist = Math.hypot(px - d.torso.x, py - d.torso.y) / size;        // in torso lengths
+        const scale = Math.abs(Math.log(d.torso.s / t.torso.s));               // a nearer/farther person is a different size
+        const score = -dist - 0.8 * scale + 0.15 * iou(t.box, d.box);
+        // a hidden person only comes back as someone in (almost) the same spot, the same size
+        if (hidden ? dist < 0.6 && scale < 0.25 : dist < 1.2) pairs.push({ t, j, score });
       });
     }
     pairs.sort((a, b) => b.score - a.score);
@@ -91,19 +113,23 @@ class Tracker {
       if (usedT.has(t) || usedD.has(j)) continue;
       usedT.add(t); usedD.add(j);
       const d = dets[j], dt = Math.max(0.01, (now - t.lastSeen) / 1000);
-      t.vx += ((d.box.cx - t.box.cx) / dt - t.vx) * 0.3;
-      t.vy += ((d.box.cy - t.box.cy) / dt - t.vy) * 0.3;
-      Object.assign(t, { box: d.box, pts: d.pts, key: d.key, world: d.world, lastSeen: now, seen: true });
+      t.vx += ((d.torso.x - t.torso.x) / dt - t.vx) * 0.3;
+      t.vy += ((d.torso.y - t.torso.y) / dt - t.vy) * 0.3;
+      t.vx = Math.max(-2, Math.min(2, t.vx)); t.vy = Math.max(-2, Math.min(2, t.vy));
+      // size changes slowly (people don't grow), so a misread torso doesn't redefine them
+      const torso = { ...d.torso, s: d.torso.good ? t.torso.s + (d.torso.s - t.torso.s) * 0.3 : t.torso.s };
+      Object.assign(t, { box: d.box, torso, pts: d.pts, key: d.key, world: d.world, lastSeen: now, seen: true });
       t.hits++; if (t.hits >= CONFIRM_HITS) t.confirmed = true;
       d.track = t;
     }
     dets.forEach((d, j) => {
       if (usedD.has(j)) return;
-      const t = { id: this.nextId++, box: d.box, vx: 0, vy: 0, pts: d.pts, key: d.key, world: d.world, hits: 1, lastSeen: now, confirmed: false, seen: true };
+      const t = { id: this.nextId++, born: now, box: d.box, torso: d.torso, vx: 0, vy: 0, pts: d.pts, key: d.key, world: d.world, hits: 1, lastSeen: now, confirmed: false, seen: true };
       this.tracks.push(t); d.track = t;
     });
     for (const t of this.tracks) if (!usedT.has(t) && t.lastSeen < now) t.seen = now - t.lastSeen < 250;
-    this.tracks = this.tracks.filter((t) => now - t.lastSeen < (t.confirmed ? KEEP_MS : 200));
+    const playerTracks = new Set(this.locked ? this.players.map((p) => p.trackId) : []);
+    this.tracks = this.tracks.filter((t) => now - t.lastSeen < (playerTracks.has(t.id) ? PLAYER_KEEP_MS : t.confirmed ? KEEP_MS : 200));
 
     this.skeletons = dets.filter((d) => d.track.confirmed);
     stats.people = this.skeletons.length;
@@ -133,8 +159,10 @@ class Tracker {
 
   unlock() { this.locked = false; this.players = []; }
 
-  // Each player follows their own track. If their track is gone (they left the view),
-  // they take over a new, unclaimed track that appears near where they were.
+  // Each player sticks to their own track — through someone walking in front of them too.
+  // Only if their track is really gone (they left the view for a while) do they take over a
+  // newcomer, and only one who turned up close to where they were and is about their size —
+  // so somebody walking past doesn't become them.
   match() {
     const now = performance.now();
     const cams = this.players.filter((p) => p.kind === 'camera');
@@ -142,10 +170,13 @@ class Tracker {
     for (const pl of cams) {
       let t = this.tracks.find((x) => x.id === pl.trackId);
       if (!t) {
-        let best = null, bestD = 0.9;
+        let best = null, bestD = 1.5;
         for (const x of this.tracks) {
-          if (!x.confirmed || claimed.has(x.id)) continue;
-          const d = Math.hypot(x.key.sh.x - pl.anchor.x, x.key.sh.y - pl.anchor.y);
+          if (!x.confirmed || claimed.has(x.id) || !x.seen) continue;
+          if (pl.torsoS && Math.abs(Math.log(x.torso.s / pl.torsoS)) > 0.3) continue;      // not their size
+          if (x.born < pl.lastSeen - 300) continue;               // was already around elsewhere: someone else
+          if (Math.hypot(x.vx, x.vy) > 0.6 * x.torso.s * 2) continue;   // walking past, not standing to play
+          const d = Math.hypot(x.torso.x - (pl.torsoAt?.x ?? x.torso.x), x.torso.y - (pl.torsoAt?.y ?? x.torso.y)) / x.torso.s;
           if (d < bestD) { bestD = d; best = x; }
         }
         if (best) { t = best; pl.trackId = best.id; claimed.add(best.id); }
@@ -153,6 +184,8 @@ class Tracker {
       if (t && t.lastSeen === stats.lastFrame) {
         pl.body.update(t.pts, t.world);
         pl.anchor = { x: t.key.sh.x, y: t.key.sh.y };
+        pl.torsoAt = { x: t.torso.x, y: t.torso.y };
+        pl.torsoS = pl.torsoS ? pl.torsoS + (t.torso.s - pl.torsoS) * 0.1 : t.torso.s;
         pl.present = true;
         pl.lastSeen = now;
       } else if (now - pl.lastSeen > 400) {
