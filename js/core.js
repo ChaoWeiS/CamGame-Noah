@@ -357,6 +357,13 @@ export const localCam = {
     video.srcObject = stream; await video.play();
     this.video = video;               // the lobby shows this picture
     const det = await createPoseDetector({ numPoses: opts.numPoses || 4, onStatus });
+    // a phone that joined by QR code while this camera was starting stays the camera
+    if (net.conn?.open && stats.source === 'phone') {
+      stream.getTracks().forEach((t) => t.stop());
+      this.video = null;
+      onStatus('Phone connected — using it as the camera');
+      return;
+    }
     stats.source = 'webcam'; stats.camera = stream.getVideoTracks()[0].label;
     this.running = true;
     let frames = 0, t0 = performance.now();

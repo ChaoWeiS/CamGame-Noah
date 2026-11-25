@@ -51,7 +51,13 @@ export class LobbyScene extends Phaser.Scene {
       try {
         await localCam.start((s) => { $('status').textContent = s; }, PHONE ? { facing: 'user', numPoses: PHONE_PLAYERS } : {});
         if (PHONE) { $('camBtn').hidden = true; $('lobby').classList.remove('center'); }
-      } catch (e) { $('status').textContent = 'Camera error: ' + e.message; $('camBtn').disabled = false; }
+      } catch (e) {
+        $('status').textContent = PHONE
+          ? 'No camera on this phone (' + e.message + ') — scan the QR code with another phone to use it as the camera'
+          : 'Camera error: ' + e.message;
+        $('camBtn').disabled = false;
+        if (PHONE) { $('lobby').classList.remove('center'); document.body.classList.add('show-qr'); }
+      }
     };
     // Phone mode: play with this phone's front camera (big button in the middle until it starts)
     if (PHONE) {
@@ -98,6 +104,12 @@ export class LobbyScene extends Phaser.Scene {
   }
 
   update(time) {
+    // phone display: another phone joined by QR code and is the camera now — move the big card aside
+    if (PHONE && stats.source === 'phone' && net.conn?.open && !$('camBtn').hidden) {
+      $('lobby').classList.remove('center'); $('camBtn').hidden = true;
+      document.body.classList.remove('show-qr');
+      $('status').textContent = 'Phone connected — using it as the camera';
+    }
     const g = this.g;
     g.clear();
     const aspect = tracker.aspect;
