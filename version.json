@@ -1,5 +1,5 @@
 {
- "build": "1126-025618-wings-copy-the-arms-exactly",
+ "build": "1126-025930-hanging-wings-no-longer-clip-into-the-body",
  "files": [
   "js/autorig.js",
   "js/awake.js",

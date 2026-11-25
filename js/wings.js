@@ -251,6 +251,8 @@ export async function addWings(ch) {
 const _u = new THREE.Vector3(), _f = new THREE.Vector3(), _h = new THREE.Vector3(), _m = new THREE.Matrix4();
 const _q1 = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _X = new THREE.Vector3(1, 0, 0), _Z = new THREE.Vector3(0, 0, 1), _dn = new THREE.Vector3(), _ad = new THREE.Vector3();
 const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+let TWIST = 1.4, LEAN = 1;
+export function _tune(t, l) { TWIST = t; LEAN = l; }
 // kept for the rest pose (shoulder elevation and elbow bend of one arm, in the chest's frame)
 function armAngles(u, f, h, sg) {
   const a1 = Math.atan2(f.y - u.y, (f.x - u.x) * sg), a2 = Math.atan2(h.y - f.y, (h.x - f.x) * sg);
@@ -282,7 +284,11 @@ export function updateWings(ch) {
     const lift = (wb.rest[s].lift || 0) * 0.85;
     _q1.setFromAxisAngle(_Z, -sg * lift);
     const tUp = _q2.copy(qUp).multiply(_q1);
-    if (lean) tUp.premultiply(_q1.setFromAxisAngle(_X, -lean * down));
+    // the modelled wing's feathers hang BELOW its leading edge (an angel's wing on a back); a
+    // bird's trail BEHIND it. As the wing comes down it turns about its leading edge so the
+    // feathers trail back, instead of pointing in, into the body
+    tUp.multiply(_q1.setFromAxisAngle(_X, TWIST * down));
+    if (lean) tUp.premultiply(_q1.setFromAxisAngle(_X, -lean * LEAN * down));
     const root = wb['wingUp' + s];
     root.quaternion.slerp(tUp, ease(25));
     wb['wingFore' + s].quaternion.slerp(fore.quaternion, ease(18));
