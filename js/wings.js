@@ -236,92 +236,68 @@ export async function addWings(ch) {
   return w;
 }
 
-// The wing's skeleton is a bird's arm (humerus → forearm → hand, along its leading edge),
-// and each joint copies the same joint of the player's arm, through a little drag:
-//   shoulder: arm up / down            → the whole wing beats up / down
-//   elbow:    bent (and wrists curled) → the wing folds back along the body: a small, gliding profile.
-//             Straight arms keep the wing open, up, level or hanging down
-//   hand:     the wing tip = a bird's fingers: follows the player's fingertips (wrist bend),
-//             bends with the elbow (as in birds) and trails the stroke: curls up on the way
-//             down, hangs on the way up, straightens out when the wing stops
-// Arms spread level = wings spread level (the modelled wing is tilted down to level); arms up = wings up. Call once per frame after posing the arms and
-// updating matrices.
-// shoulder elevation (0 = level, + up) and elbow bend (+ = forearm up) of one arm, in the chest's frame
+// The wing's skeleton is a bird's arm (humerus → forearm → hand, along its leading edge), and it
+// copies the player-character's arm exactly, joint for joint: wingUp = upper arm, wingFore =
+// forearm, wingHand = hand, each with the same rotation (as Cluck's own wings do). Spread the
+// arms and the wings spread; curl them in front and the wings curl in front.
+// Only three things are added:
+//  - the wing as modelled is raised (an angel's V): it is tilted down by that much, so level arms
+//    give level wings;
+//  - the wings grow from the back: as the arms come forward or down, each wing's hinge slides
+//    out from the middle of the back round to the animal's side (past its arms), so the wing
+//    curls round to the front, stretching over the body instead of going into it;
+//  - in flight the body leans forward, so wings that hang down are turned forward by the lean.
+// A little smoothing keeps camera jitter out (the tips smooth more than the shoulder).
+const _u = new THREE.Vector3(), _f = new THREE.Vector3(), _h = new THREE.Vector3(), _m = new THREE.Matrix4();
+const _q1 = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _X = new THREE.Vector3(1, 0, 0), _Z = new THREE.Vector3(0, 0, 1), _dn = new THREE.Vector3(), _ad = new THREE.Vector3();
+const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
+// kept for the rest pose (shoulder elevation and elbow bend of one arm, in the chest's frame)
 function armAngles(u, f, h, sg) {
   const a1 = Math.atan2(f.y - u.y, (f.x - u.x) * sg), a2 = Math.atan2(h.y - f.y, (h.x - f.x) * sg);
   let bend = a2 - a1; if (bend > Math.PI) bend -= 2 * Math.PI; if (bend < -Math.PI) bend += 2 * Math.PI;
   return { elev: a1, bend };
 }
-const _u = new THREE.Vector3(), _f = new THREE.Vector3(), _h = new THREE.Vector3(), _m = new THREE.Matrix4();
-const _q1 = new THREE.Quaternion(), _q2 = new THREE.Quaternion(), _q3 = new THREE.Quaternion(), _Y = new THREE.Vector3(0, 1, 0), _Z = new THREE.Vector3(0, 0, 1), _X = new THREE.Vector3(1, 0, 0), _dn = new THREE.Vector3();
-const clamp = (x, a, b) => Math.max(a, Math.min(b, x));
-// a damped spring: the wing joint follows its target with a little drag
-function follow(o, tgt, dt, k = 110, damp = 0.8) {
-  o.v += (k * (tgt - o.x) - 2 * Math.sqrt(k) * damp * o.v) * dt; o.x += o.v * dt;
-  return o.x;
-}
-function setRot(bone, sg, yaw, roll, pitch = 0) {     // yaw: + = swept back · roll: + = up (for either side) · pitch: + = tips forward
-  _q1.setFromAxisAngle(_Y, sg * yaw); _q2.setFromAxisAngle(_Z, sg * roll);
-  bone.quaternion.multiplyQuaternions(_q1, _q2);
-  if (pitch) bone.quaternion.premultiply(_q3.setFromAxisAngle(_X, -pitch));
-}
 export function updateWings(ch) {
   const wb = ch.wingBones;
   if (!wb) return;
   const now = performance.now() / 1000;
-  const mk = () => ({ sh: { x: 0, v: 0 }, el: { x: 0, v: 0 }, wr: { x: 0, v: 0 }, fa: { x: 0, v: 0 }, ha: { x: 0, v: 0 }, vs: 0 });
-  const st = (ch.wingState = ch.wingState || { t: now, R: mk(), L: mk() });
+  const st = (ch.wingState = ch.wingState || { t: now, R: { hinge: 0 }, L: { hinge: 0 } });
   const dt = clamp(now - st.t, 0.001, 0.05); st.t = now;
+  const ease = (rate) => 1 - Math.exp(-dt * rate);
   _m.copy(wb.wingUpR.parent.matrixWorld).invert();
-  // the body leans forward in flight: "down" for a wing means down in the world, below the body
   _dn.set(0, -1, 0).transformDirection(_m);
-  const lean = Math.atan2(_dn.z, -_dn.y);
+  const lean = Math.atan2(_dn.z, -_dn.y);               // how far the body leans forward
+  const H = ch.height || 1, j = ch.joints || {};
+  const zMid = ((j.frontZ || 0) + (j.backZ || 0)) / 2;
   for (const [s, sg] of [['R', 1], ['L', -1]]) {
     const up = ch.b['upper' + s], fore = ch.b['fore' + s], hand = ch.b['hand' + s], w = st[s];
     if (!up || !fore || !hand) continue;
-    up.getWorldPosition(_u).applyMatrix4(_m); fore.getWorldPosition(_f).applyMatrix4(_m); hand.getWorldPosition(_h).applyMatrix4(_m);
-    const A = armAngles(_u, _f, _h, sg), R0 = wb.rest[s];
-    const elev = follow(w.sh, clamp(A.elev - R0.elev, -1.45, 1.35), dt);
-    const bend = follow(w.el, clamp(A.bend - R0.bend, -1.3, 1.0), dt, 90);
-    const wrist = follow(w.wr, clamp(sg * hand.rotation.z, -0.7, 0.7), dt, 60);   // the player's wrist (fingertips) bend
-    w.vs += (w.sh.v - w.vs) * Math.min(1, dt * 12);          // how fast the wing is beating (+ = up)
-    const down = clamp(-elev / 1.2, 0, 1);
-    const lift = (R0.lift || 0) * 0.85;
-    // shoulder: the beat, sweeping a little forward at the bottom
-    // FOLD (a bird gliding or tucking its wings): the player bends the elbows (and curls the
-    // wrists). Straight arms keep the wings open, wherever the arms point.
-    const fold = clamp(smooth(0.75, 1.6, Math.abs(bend)) * (1 + 0.35 * smooth(0.25, 0.7, Math.abs(wrist))), 0, 1);   // a clear bend: elbows bend a little in any flap
-    const open = 1 - fold;
-    // shoulder: arms level → wings level, up → up, down → hanging straight down below the body
-    // (turned forward by the body's lean so they point down in the world); folding swings the
-    // whole wing back along the body
-    const beat = Math.max(-1.2, elev - lift);
-    // a bird's wing hinges at its shoulder, on the side of the body: as the wings come down the
-    // hinge moves out to the shoulders, so the downstroke ends wide, round the body, not behind it
+    // the arm as posed (before the "keep the arms out of the body" fix, which is for the arms)
+    const qUp = (ch._fix && ch._fix['upper' + s]) || up.quaternion;
+    // where the upper arm points, in the chest's frame
+    _ad.set(sg, 0, 0).applyQuaternion(qUp);
+    const down = clamp(-_ad.y, 0, 1), forward = clamp(_ad.z, 0, 1);
+    // shoulder: the arm's own rotation, the modelled V tilted down to level, and hanging wings
+    // turned forward by the body's lean
+    const lift = (wb.rest[s].lift || 0) * 0.85;
+    _q1.setFromAxisAngle(_Z, -sg * lift);
+    const tUp = _q2.copy(qUp).multiply(_q1);
+    if (lean) tUp.premultiply(_q1.setFromAxisAngle(_X, -lean * down));
     const root = wb['wingUp' + s];
-    // the hinge goes out past the animal's sides (its arms included) and a little back
-    const H = ch.height || 1, out = Math.max(0, (wb.girth + 0.06) * H - Math.abs(root.userData.base?.x || 0));
-    if (root.userData.base) root.position.copy(root.userData.base).add(_h.set(sg * out * down * open, -0.06 * H * down * open, -0.05 * H * down * open));
-    // a bird's stroke also goes forward and back: the downstroke sweeps the wings forward and
-    // down in front of the body (they end up forward of the shoulders at the bottom), the
-    // upstroke takes them back and up
-    const fwd = clamp(-w.vs * 0.14, -0.35, 0.5) + 0.3 * down;
-    setRot(wb['wingUp' + s], sg, 0.85 * fold - fwd * open, beat * open + (-0.35) * fold, (lean + 0.35 + fwd) * down * open);
-    // forearm and hand:
-    // Each part follows the one before it on its own looser spring, so the wing bends like a
-    // whip through the stroke: the middle lags the shoulder, the tips lag the middle and
-    // overshoot a little at each turn. Folding tucks them back into a small profile.
-    const upRoll = beat * open + (-0.35) * fold;
-    // gliding (arms held out straight): the wings spread flat and straight out, the tips a
-    // touch higher than the shoulders
-    const glide = open * (1 - smooth(0.25, 1.0, Math.abs(elev)));
-    const foreAbs = follow(w.fa, upRoll + 0.06 * glide, dt, 70, 0.55);
-    const foreRel = clamp(foreAbs - upRoll, -1.1, 1.1) * open;
-    setRot(wb['wingFore' + s], sg, 0.4 * fold, foreRel);
-    const handAbs = follow(w.ha, upRoll + foreRel + 0.1 * glide + wrist * 0.4 * open, dt, 45, 0.5);
-    const handRel = clamp(handAbs - upRoll - foreRel, -1.2, 1.2) * open;
-    setRot(wb['wingHand' + s], sg, 0.15 * fold + clamp(w.vs * 0.08, 0, 0.25) * open, handRel);
-    wb['wingUp' + s].updateMatrixWorld(true);
+    root.quaternion.slerp(tUp, ease(25));
+    wb['wingFore' + s].quaternion.slerp(fore.quaternion, ease(18));
+    wb['wingHand' + s].quaternion.slerp(hand.quaternion, ease(12));
+    // the hinge slides round the body as the arm comes forward or down
+    w.hinge += (clamp(Math.max(forward * 1.3, down), 0, 1) - w.hinge) * ease(14);
+    const th = w.hinge * Math.PI / 2, base = root.userData.base;
+    if (base) {
+      const rx = (wb.girth + 0.06) * H;
+      root.position.set(
+        base.x + sg * Math.max(0, rx - Math.abs(base.x)) * Math.sin(th),
+        base.y - 0.05 * H * w.hinge,
+        base.z + (zMid - base.z) * Math.sin(th) * 0.9);
+    }
+    root.updateMatrixWorld(true);
   }
 }
 

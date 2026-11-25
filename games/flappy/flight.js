@@ -301,12 +301,13 @@ class FlightWorld {
     ch.root.position.set(f.x, f.y, -f.d);
     const pitch = 0.7 - clamp(f.vy * 0.05, -0.3, 0.3) + (f.stun ? Math.sin(t * 20) * 0.3 : 0);
     ch.root.rotation.set(pitch, Math.PI - f.heading, -f.turnRate * 0.35);
-    for (const s of ['L', 'R']) { b['thigh' + s].rotation.set(0.55, 0, 0); b['shin' + s].rotation.set(0.35, 0, 0); }
-    b.spine.rotation.set(0, 0, 0); b.chest.rotation.set(0, 0, 0);
-    b.head.rotation.set(-0.65, 0, 0);                  // look ahead, not at the floor
     ch.unfixArms();
-    if (f.pts) this.copyArms(f, f.pts);
+    // the arms copy the player's: in 3D when the camera sends a 3D skeleton (arms forward/back
+    // too, like on the character screen), else flat
+    if (f.pts && f.world) { ch.pose3D(f.world, f.pts); b.hips.quaternion.identity(); }
+    else if (f.pts) { ch.reset3D(); this.copyArms(f, f.pts); }
     else {
+      ch.reset3D();
       // keyboard players: flap after a flap, wings out when gliding, folded when dropping
       const since = (performance.now() - (f.flapAt || -1e9)) / 1000;
       const a = since < 0.35 ? Math.sin(since / 0.35 * Math.PI * 2) * 0.8 : f.fold > 0.5 ? -1.2 : 0.05;
@@ -314,6 +315,10 @@ class FlightWorld {
       const tuck = since >= 0.35 && f.fold > 0.5 ? -1.4 : 0;      // folded: elbows bent, so the wings tuck back
       b.foreR.rotation.set(0, 0, tuck); b.foreL.rotation.set(0, 0, -tuck);
     }
+    // the rest of the body flies: legs trailing, back straight, looking ahead
+    for (const s of ['L', 'R']) { b['thigh' + s].rotation.set(0.55, 0, 0); b['shin' + s].rotation.set(0.35, 0, 0); }
+    b.spine.rotation.set(0, 0, 0); b.chest.rotation.set(0, 0, 0);
+    b.head.rotation.set(-0.65, 0, 0);
     ch.adjustShoulders();
     ch.fixArms();
     ch.root.updateMatrixWorld(true);
@@ -438,6 +443,7 @@ export class FlightScene extends Phaser.Scene {
   move(f, dt, now, playing) {
     const inp = input(f.pl), cam = f.pl.kind === 'camera';
     f.pts = cam && inp.present ? f.pl.body.vpts : null;
+    f.world = f.pts ? f.pl.body.world || null : null;
     f.hud.lostEl.textContent = inp.present ? '' : 'Come back into view!';
     // flaps since last frame
     const fc = inp.flapCount || 0;
