@@ -225,7 +225,8 @@ export async function addWings(ch) {
 // and each joint copies the same joint of the player's arm, through a little drag:
 //   shoulder: arm up / down            → the whole wing beats up / down
 //   elbow:    forearm bent             → the wing folds at its middle (the upstroke shape)
-//   hand:     bends with the elbow (as in birds) and trails the stroke: curls up on the way
+//   hand:     the wing tip = a bird's fingers: follows the player's fingertips (wrist bend),
+//             bends with the elbow (as in birds) and trails the stroke: curls up on the way
 //             down, hangs on the way up, straightens out when the wing stops
 // Arms out straight = the wings as modelled. Call once per frame after posing the arms and
 // updating matrices.
@@ -251,7 +252,7 @@ export function updateWings(ch) {
   const wb = ch.wingBones;
   if (!wb) return;
   const now = performance.now() / 1000;
-  const mk = () => ({ sh: { x: 0, v: 0 }, el: { x: 0, v: 0 }, vs: 0 });
+  const mk = () => ({ sh: { x: 0, v: 0 }, el: { x: 0, v: 0 }, wr: { x: 0, v: 0 }, vs: 0 });
   const st = (ch.wingState = ch.wingState || { t: now, R: mk(), L: mk() });
   const dt = clamp(now - st.t, 0.001, 0.05); st.t = now;
   _m.copy(wb.wingUpR.parent.matrixWorld).invert();
@@ -262,6 +263,7 @@ export function updateWings(ch) {
     const A = armAngles(_u, _f, _h, sg), R0 = wb.rest[s];
     const elev = follow(w.sh, clamp(A.elev - R0.elev, -1.35, 0.8), dt);
     const bend = follow(w.el, clamp(A.bend - R0.bend, -1.3, 1.0), dt, 90);
+    const wrist = follow(w.wr, clamp(sg * hand.rotation.z, -1.0, 1.0), dt, 90);   // the player's wrist (fingertips) bend
     w.vs += (w.sh.v - w.vs) * Math.min(1, dt * 12);          // how fast the wing is beating (+ = up)
     const down = clamp(-elev / 1.2, 0, 1);
     // shoulder: the beat, sweeping a little forward at the bottom
@@ -270,7 +272,7 @@ export function updateWings(ch) {
     setRot(wb['wingFore' + s], sg, 0.45 * Math.min(1, Math.abs(bend)), bend * 0.85);
     // hand: follows the elbow, and trails the beat (air pushing on the long feathers)
     const trail = clamp(-w.vs * 0.18, -0.8, 0.45);
-    setRot(wb['wingHand' + s], sg, 0.25 * Math.min(1, Math.abs(bend)) + clamp(w.vs * 0.08, 0, 0.25), bend * 0.6 + trail);
+    setRot(wb['wingHand' + s], sg, 0.25 * Math.min(1, Math.abs(bend)) + clamp(w.vs * 0.08, 0, 0.25), bend * 0.5 + wrist * 0.9 + trail);
     wb['wingUp' + s].updateMatrixWorld(true);
   }
 }

@@ -334,7 +334,17 @@ class FlightWorld {
       b.upperL.rotation.set(0, 0, ease('u2', wrap(u)));
       if (ok(L.rWrist)) b.foreL.rotation.set(0, 0, ease('f2', wrap(ang(L.rElbow, L.rWrist) - u)));
     }
-    b.handL.rotation.set(0, 0, 0); b.handR.rotation.set(0, 0, 0);
+    // the hands (wrist → fingertips) — they steer the wing tips, which are a bird's fingers
+    const tips = (i, j) => ({ x: (pts[i].x + pts[j].x) / 2, y: (pts[i].y + pts[j].y) / 2 });
+    const handAng = (elbow, wrist, i1, i2, key, bone) => {
+      if (!(ok(elbow) && ok(wrist) && ok(i1) && ok(i2))) { e.arm[key] = (e.arm[key] || 0) * 0.8; bone.rotation.set(0, 0, e.arm[key]); return; }
+      const f = tips(i1, i2), wv = pts[wrist];
+      const a = Math.atan2(f.y - wv.y, f.x - wv.x) - Math.atan2(wv.y - pts[elbow].y, wv.x - pts[elbow].x);
+      e.arm[key] = e.arm[key] || 0;
+      bone.rotation.set(0, 0, ease(key, clamp(wrap(a), -1.0, 1.0)));
+    };
+    handAng(L.lElbow, L.lWrist, L.lIndex, L.lPinky, 'h1', b.handR);
+    handAng(L.rElbow, L.rWrist, L.rIndex, L.rPinky, 'h2', b.handL);
   }
 
   destroy() {
