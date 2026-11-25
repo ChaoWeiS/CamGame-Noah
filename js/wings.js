@@ -220,8 +220,9 @@ export async function addWings(ch) {
   return w;
 }
 
-// Wings with their own bones follow the arms: arms out (or up) → wings spread and lift with
-// them; arms down by the sides → wings fold back along the back. Call after posing the arms
+// Wings with their own bones flap with the arms, like a bird: arms up → wings up,
+// arms down → wings swing down (the tips trail a little behind the stroke). Only with the
+// arms right down by the sides do they also tuck back a little. Call after posing the arms
 // and updating matrices.
 const _a = new THREE.Vector3(), _b = new THREE.Vector3(), _m = new THREE.Matrix4();
 const _qy = new THREE.Quaternion(), _qz = new THREE.Quaternion(), _Y = new THREE.Vector3(0, 1, 0), _Z = new THREE.Vector3(0, 0, 1);
@@ -236,12 +237,12 @@ export function updateWings(ch) {
     up.getWorldPosition(_a).applyMatrix4(_m); fore.getWorldPosition(_b).applyMatrix4(_m);
     _b.sub(_a);
     const elev = Math.atan2(_b.y, Math.abs(_b.x) + 1e-6) - (wb.rest ? wb.rest[s] : 0);   // 0 = as at rest (out), −π/2 = down by the side
-    const spread = smooth(-1.3, -0.35, elev), fold = 1 - spread;
-    const lift = Math.max(-0.35, Math.min(0.9, elev)) * 0.7 * spread - fold * 0.2;
-    _qz.setFromAxisAngle(_Z, sg * lift);
-    _qy.setFromAxisAngle(_Y, sg * fold * 1.3);
-    wb['wing' + s].quaternion.multiplyQuaternions(_qz, _qy);
-    wb['wingTip' + s].quaternion.setFromAxisAngle(_Y, sg * fold * 0.95);
+    const e = Math.max(-1.15, Math.min(1.0, elev));
+    const tuck = smooth(0.9, 1.4, -elev);                         // arms right down: tuck back a little
+    _qz.setFromAxisAngle(_Z, sg * e * 0.85);                      // flap: the whole wing up / down with the arm
+    _qy.setFromAxisAngle(_Y, sg * tuck * 0.45);
+    wb['wing' + s].quaternion.multiplyQuaternions(_qy, _qz);
+    wb['wingTip' + s].quaternion.setFromAxisAngle(_Z, sg * e * 0.25);   // the outer feathers bend a bit further
     wb['wing' + s].updateMatrixWorld(true);
   }
 }

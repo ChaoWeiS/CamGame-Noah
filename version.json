@@ -1,5 +1,5 @@
 {
- "build": "1126-001808-wing-models-reload-on-a-new-build",
+ "build": "1126-002837-wings-flap-up-and-down-with-the-arms",
  "files": [
   "js/autorig.js",
   "js/awake.js",
