@@ -19,6 +19,9 @@ const POOL = ['apple', 'banana', 'orange', 'grapes', 'watermelon', 'strawberry',
 const NAME = { apple: 'apple', banana: 'banana', orange: 'orange', grapes: 'grapes', watermelon: 'watermelon', strawberry: 'strawberry',
   blueberry: 'blueberries', pineapple: 'pineapple', coconut: 'coconut', kiwi: 'kiwi', pear: 'pear', cherry: 'cherries',
   dragonfruit: 'dragon fruit', durian: 'durian', starfruit: 'star fruit', avocado: 'avocado' };
+const CRUMB = { apple: 0xe0473a, banana: 0xf4d34a, orange: 0xf39a2b, grapes: 0x7a3fb5, watermelon: 0xe94b5a, strawberry: 0xe0303a,
+  blueberry: 0x3f5fc4, pineapple: 0xf2c94a, coconut: 0xf5f0e6, kiwi: 0x8cc63f, pear: 0xb7d45a, cherry: 0xc8202f,
+  dragonfruit: 0xe5397c, durian: 0xe8d27a, starfruit: 0xf3d03e, avocado: 0x9cc44b };
 const SIZE = { watermelon: 1.3, pineapple: 1.2, durian: 1.15, coconut: 1.1, blueberry: 0.85, cherry: 0.9, kiwi: 0.95 };
 
 let fruitPromise = null;
@@ -86,7 +89,7 @@ export class FruitScene extends Phaser.Scene {
     // the side columns keep away from the screen edges so raised arms stay in view;
     // with a full house the animals are a little smaller and slide less, so arms don't cross much
     const n = players.length, margin = n >= 3 ? W * 0.05 : 0, colW = (W - 2 * margin) / n;
-    this.hpx = Math.min(H * 0.6, colW * (n >= 4 ? 0.95 : 1.05));    // animal height in pixels
+    this.hpx = Math.min(H * 0.46, colW * (n >= 4 ? 0.85 : 1.0));    // animal height in pixels: lots of sky above them, to see fruit coming
     this.slide = n >= 4 ? 0.18 : 0.3;
     this.p = players.map((pl, i) => ({
       pl, colX: margin + colW * (i + 0.5), colW, x: margin + colW * (i + 0.5), score: 0, thought: null,
@@ -194,10 +197,11 @@ export class FruitScene extends Phaser.Scene {
     // the rain of fruit: more and faster as time goes
     if (playing && this.ready && now > (this.nextDrop || 0)) {
       this.drop(k);
-      this.nextDrop = now + (1150 - 800 * k) * (0.7 + this.r() * 0.6) / Math.max(1, this.p.length * 0.6);
+      this.nextDrop = now + (1900 - 1000 * k) * (0.7 + this.r() * 0.6) / Math.max(1, this.p.length * 0.55);
     }
     this.physics(dt, now, k);
     this.drawFruits(time);
+    this.moveCrumbs(dt);
     this.stage.render();
 
     for (const pp of this.p) {
@@ -223,17 +227,29 @@ export class FruitScene extends Phaser.Scene {
     const target = pp.colX + side * pp.colW * this.slide;
     pp.x += (target - pp.x) * 0.25;
     pp.lost.setText(inp.present ? '' : 'Come back into view!');
+    // take last frame's chomp nod off the head before it is posed again
+    const prev = this.stage.actors.get(pl.slot)?.ch;
+    if (prev && pp.chompApplied) { prev.b.head.rotation.x -= pp.chompApplied; pp.chompApplied = 0; }
     const shown = this.stage.place(pl.slot, pl.animal || 'bear', pp.x, this.floorY, this.hpx,
       cam && inp.present ? pl.body.vpts : null, null, time / 1000, cam && inp.present ? pl.body.world : null);
     const a = this.stage.actors.get(pl.slot), ch = a?.ch;
     pp.ch = shown ? ch : null;
     if (!pp.ch) return;
+    // chomp chomp: quick nods with a little squash, for ~0.7 s after eating
+    const ct = (now - (pp.chompAt || -1e9)) / 700;
+    if (ct < 1) {
+      const c = Math.sin(ct * Math.PI * 6) * (1 - ct);
+      pp.chompApplied = c * 0.35;
+      ch.b.head.rotation.x += pp.chompApplied;
+      ch.b.head.scale.set(1 + c * 0.06, 1 - c * 0.08, 1 + c * 0.06);
+    } else ch.b.head.scale.set(1, 1, 1);
     const j = ch.joints, Hm = ch.height, v = new THREE.Vector3();
     const toScreen = (bone, x, y, z) => { v.set(x, y, z); bone.localToWorld(v); return { x: v.x, y: -v.y }; };
     const headLen = Hm - j.neckY;
     pp.mouth = toScreen(ch.b.head, 0, headLen * 0.3, (j.frontZ || 0) * 0.6);
     pp.headC = toScreen(ch.b.head, 0, headLen * 0.5, 0);
     pp.top = toScreen(ch.b.head, 0, headLen * 1.0, 0);
+    pp.headR = Math.hypot(pp.top.x - pp.headC.x, pp.top.y - pp.headC.y) * 1.05;   // about half the head's height
     pp.chest = toScreen(ch.b.chest, 0, 0, 0);
     pp.hips = toScreen(ch.b.hips, 0, 0, 0);
     // the paw: a bit past the wrist bone, along the forearm
@@ -254,22 +270,27 @@ export class FruitScene extends Phaser.Scene {
     // often one of the fruits someone is thinking of, so there's always something to catch
     const wanted = this.p.filter((pp) => pp.thought).map((pp) => pp.thought);
     const kind = wanted.length && this.r() < 0.45 ? wanted[Math.floor(this.r() * wanted.length)] : POOL[Math.floor(this.r() * POOL.length)];
-    const r = this.hpx * 0.085 * (SIZE[kind] || 1);
+    const r = Math.max(26, this.hpx * 0.1) * (SIZE[kind] || 1);
     this.fruits.push({
-      kind, r, x: r + this.r() * (W - 2 * r), y: -r - 10, vx: (this.r() - 0.5) * 80, vy: 60 + 80 * k,
-      maxV: 230 + 220 * k, spin: new THREE.Vector3(this.r() - 0.5, this.r() - 0.5, this.r() - 0.5).normalize(), spinV: 1 + this.r() * 2.5,
+      kind, r, x: r + this.r() * (W - 2 * r), y: -r - 10, vx: (this.r() - 0.5) * 50, vy: 30 + 40 * k,
+      maxV: 120 + 110 * k, spin: new THREE.Vector3(this.r() - 0.5, this.r() - 0.5, this.r() - 0.5).normalize(), spinV: 1 + this.r() * 2.5,
       ang: this.r() * 6, state: 'fall', ground: 0, noCatch: 0,
     });
   }
 
   physics(dt, now, k) {
-    const G = 520;
+    const G = 240;
     for (const f of this.fruits) {
       if (f.state === 'held') {
         const pp = f.holder, h = f.hand;
         f.x = h.pos.x; f.y = h.pos.y;
-        // into the mouth?
-        if (pp.mouth && Math.hypot(f.x - pp.mouth.x, f.y - pp.mouth.y) < this.hpx * 0.17) { this.eat(pp, f, now); continue; }
+        // eaten when the PLAYER brings that hand to their mouth (the animals' arms are too short
+        // to reach their own faces), or when the fruit / paw touches the animal's head
+        if (this.handAtMouth(pp, h)) { this.eat(pp, f, now); continue; }
+        if (pp.headC) {
+          const reach = pp.headR + f.r * 0.6;
+          if (Math.hypot(f.x - pp.headC.x, f.y - pp.headC.y) < reach || Math.hypot(h.pos.x - pp.headC.x, h.pos.y - pp.headC.y) < pp.headR * 1.05) { this.eat(pp, f, now); continue; }
+        }
         // slipped out of the paw (or let go of: the paw lowered below the waist)
         const low = pp.pl.kind === 'camera' && pp.hips && h.pos.y > pp.hips.y + this.hpx * 0.05;
         if (now - f.heldAt > HOLD_MS || low || !input(pp.pl).present) this.release(f, now);
@@ -297,7 +318,7 @@ export class FruitScene extends Phaser.Scene {
       if (now > f.noCatch) {
         for (const pp of this.p) {
           if (!pp.ch) continue;
-          const h = pp.hands.find((hh) => !hh.fruit && now > hh.freeAt && Math.hypot(f.x - hh.pos.x, f.y - hh.pos.y) < f.r + this.hpx * 0.07);
+          const h = pp.hands.find((hh) => !hh.fruit && now > hh.freeAt && Math.hypot(f.x - hh.pos.x, f.y - hh.pos.y) < f.r + this.hpx * 0.09);
           if (h) { f.state = 'held'; f.holder = pp; f.hand = h; f.heldAt = now; h.fruit = f; break; }
         }
       }
@@ -314,6 +335,16 @@ export class FruitScene extends Phaser.Scene {
     this.fruits = this.fruits.filter((f) => f.state !== 'gone' || this.removeMesh(f));
   }
 
+  // the player's own wrist (paw L = their wrist on the left of the mirror view) near their mouth
+  handAtMouth(pp, h) {
+    const pl = pp.pl;
+    if (pl.kind !== 'camera' || !pl.body?.pts) return false;
+    const p = pl.body.pts, w = p[h.bone === 'handL' ? 15 : 16], nose = p[0];
+    if (w.v < 0.4 || nose.v < 0.4) return false;
+    const T = Math.max(0.05, Math.hypot((p[11].x + p[12].x - p[23].x - p[24].x) / 2, (p[11].y + p[12].y - p[23].y - p[24].y) / 2));
+    return Math.hypot(w.x - nose.x, w.y - (nose.y + 0.08 * T)) < 0.42 * T;
+  }
+
   release(f, now) {
     const h = f.hand;
     if (h) { h.fruit = null; h.freeAt = now + 500; }
@@ -323,6 +354,8 @@ export class FruitScene extends Phaser.Scene {
   eat(pp, f, now) {
     f.hand.fruit = null; f.hand.freeAt = now + 250;
     f.state = 'gone';
+    pp.chompAt = now;
+    this.crumbs(pp, f.kind);
     if (f.kind === pp.thought) {
       pp.score++;
       this.say(pp, ['Yum! +1 😋', 'Delicious! +1', 'Munch munch! +1'][pp.score % 3]);
@@ -330,6 +363,30 @@ export class FruitScene extends Phaser.Scene {
     } else {
       this.say(pp, `Yuck, ${NAME[f.kind]}! 🤢`, '#ffd2c8');
     }
+  }
+
+  // a little burst of crumbs from the mouth
+  crumbs(pp, kind) {
+    if (!pp.mouth) return;
+    const col = CRUMB[kind] || 0xf2c14e;
+    this.crumbGeo = this.crumbGeo || new THREE.IcosahedronGeometry(1, 0);
+    for (let i = 0; i < 9; i++) {
+      const m = new THREE.Mesh(this.crumbGeo, new THREE.MeshLambertMaterial({ color: i % 3 ? col : 0xffffff }));
+      const a = -Math.PI / 2 + (this.r() - 0.5) * 2.4, sp = 120 + this.r() * 160;
+      m.userData = { x: pp.mouth.x, y: pp.mouth.y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, t: 0, s: 4 + this.r() * 4 };
+      this.stage.scene.add(m);
+      this.bits = this.bits || [];
+      this.bits.push(m);
+    }
+  }
+  moveCrumbs(dt) {
+    if (!this.bits) return;
+    for (const m of this.bits) {
+      const u = m.userData;
+      u.t += dt; u.vy += 600 * dt; u.x += u.vx * dt; u.y += u.vy * dt;
+      m.position.set(u.x, -u.y, 600); m.scale.setScalar(u.s * Math.max(0, 1 - u.t / 0.7)); m.rotation.x += dt * 8;
+    }
+    this.bits = this.bits.filter((m) => { if (m.userData.t < 0.7) return true; this.stage.scene.remove(m); m.material.dispose(); return false; });
   }
 
   // the fruit meshes in the 3D layer (in front of the animals)
