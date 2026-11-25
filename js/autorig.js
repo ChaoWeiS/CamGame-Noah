@@ -61,7 +61,7 @@ const SHOULDER_FOR = { bear: 0.7, dog: 0.38, chicken: 0.66, hamster: 0.82 };
 // rigged ONCE; every character made from it shares the geometry, skin weights and textures
 // and only gets its own bones. (Character select used to rig 4 animals × 4 players afresh.)
 const rigCache = new Map();
-const _fv = new THREE.Vector3(), _fz = new THREE.Vector3(0, 0, 1), _fq = new THREE.Quaternion();
+const _fv = new THREE.Vector3(), _fz = new THREE.Vector3(0, 0, 1), _fq = new THREE.Quaternion(), _fe = new THREE.Euler();
 export function loadRiggedCharacter(url, opts = {}) {
   const key = url + JSON.stringify(opts);
   if (!rigCache.has(key)) {
@@ -294,6 +294,27 @@ export class RiggedCharacter {
 
   // Shoulders roll out and up as an arm lifts: arms hang close to the body when down,
   // and go up beside the head (not behind it) when raised. Call after posing the arms.
+  // ---- squatting: when the hips go down, the knees bend so the feet stay on the floor
+  // (two-bone IK per leg: thigh forward, shin back, foot right under the hip)
+  plantFeet() {
+    if (this.hop > -0.01 * this.height) {
+      if (this._planted) { for (const s of ['L', 'R']) { this.b['thigh' + s].rotation.x = 0; this.b['shin' + s].rotation.x = 0; } this._planted = false; }
+      return;
+    }
+    this._planted = true;
+    const j = this.joints, b = this.b;
+    const Lt = this.hipY0 - j.kneeY, Ls = j.kneeY;
+    const d = Math.max(0.3 * (Lt + Ls), b.hips.position.y);
+    if (d >= Lt + Ls - 1e-4) return;
+    const c = (v) => Math.max(-1, Math.min(1, v));
+    const a = Math.acos(c((Lt * Lt + d * d - Ls * Ls) / (2 * Lt * d)));        // thigh forward from straight down
+    const k = Math.acos(c((Lt * Lt + Ls * Ls - d * d) / (2 * Lt * Ls)));        // the angle inside the knee
+    for (const [s, side] of [['L', -1], ['R', 1]]) {
+      b['thigh' + s].quaternion.setFromEuler(_fe.set(-a, 0, side * 0.12));     // knees a little apart
+      b['shin' + s].quaternion.setFromEuler(_fe.set(Math.PI - k, 0, -side * 0.12));
+    }
+  }
+
   // ---- arms don't go through the body or the head
   // The chest/belly is an upright rounded column and the head a ball. After the arms are
   // posed, an arm whose elbow, wrist or paw would sink in is swung FORWARD at the shoulder
@@ -451,7 +472,9 @@ export class RiggedCharacter {
     if (base) {
       const dy = (base.hipY - hip.y) / torso;
       this.hop += (dy * 0.45 * this.height - this.hop) * 0.5;
+      this.hop = Math.max(-0.55 * this.hipY0, this.hop);      // no lower than the legs can fold
       this.b.hips.position.y = this.hipY0 + this.hop;
+      this.plantFeet();
     }
     const limbs = [
       ['upperL', 'foreL', L.lShoulder, L.lElbow, L.lWrist, armBase],
@@ -471,6 +494,7 @@ export class RiggedCharacter {
         set(lo, t2);
       }
     }
+    this.plantFeet();                    // after the legs copied the player: squats keep the feet on the floor
     this.poseHands2D(pts);
     this.adjustShoulders();
   }
@@ -543,7 +567,9 @@ export class RiggedCharacter {
       const { hip, torso } = keyPoints(pts);
       const dy = (base.hipY - hip.y) / torso;
       this.hop += (dy * 0.45 * this.height - this.hop) * 0.5;
+      this.hop = Math.max(-0.55 * this.hipY0, this.hop);      // no lower than the legs can fold
       this.b.hips.position.y = this.hipY0 + this.hop;
+      this.plantFeet();
     }
     this.adjustShoulders();
     this.used3D = true;
