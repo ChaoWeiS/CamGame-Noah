@@ -181,9 +181,11 @@ export class Body {
 
 // Running on the spot: knees take turns lifting. Each switch of the higher knee
 // counts as a step; steps per second over the last ~1.5 s gives the running speed.
-// Swipe: a raised hand (above the hips) moving quickly sideways — at least about a
-// shoulder-and-a-bit across, within 0.45 s, much more sideways than up/down. Measured
-// against the shoulders, so leaning or walking doesn't count. After a swipe there is a
+// Swipe: a raised hand (above the hips) sweeping quickly ACROSS the body — from one side of
+// the shoulders' middle to the other, about a shoulder-and-a-bit in all, within 0.45 s, much
+// more sideways than up/down. Measured against the shoulders, so leaning or walking doesn't
+// count. Not a swipe: spreading the arms or bringing them in (each hand stays on its own side,
+// and the hands move opposite ways), or both hands crossing in a hug. After a swipe there is a
 // short pause, so the hand coming back isn't read as a swipe the other way.
 // takeSwipe() returns +1 (to the right on screen), -1 (left) or 0, once per swipe.
 Body.prototype.detectSwipe = function (p, T) {
@@ -192,18 +194,29 @@ Body.prototype.detectSwipe = function (p, T) {
   const shW = Math.max(0.5 * T, Math.abs(p[L.lShoulder].x - p[L.rShoulder].x));
   this.swipeHist = this.swipeHist || { l: [], r: [] };
   if (now - (this.swipeAt || 0) < 700) { this.swipeHist.l = []; this.swipeHist.r = []; return; }
+  // how far a hand moved sideways over the window (for "the other hand went the other way")
+  const moved = (h) => (h.length > 1 ? h[h.length - 1].x - h[0].x : 0);
   for (const [k, i] of [['l', L.lWrist], ['r', L.rWrist]]) {
     const w = p[i], h = this.swipeHist[k];
     if (w.v < 0.4 || w.y > hipY) { h.length = 0; continue; }
     h.push({ t: now, x: w.x - shX, y: w.y });
     while (h.length && now - h[0].t > 450) h.shift();
+  }
+  for (const k of ['l', 'r']) {
+    const h = this.swipeHist[k];
+    if (h.length < 2) continue;
+    const cur = h[h.length - 1], other = this.swipeHist[k === 'l' ? 'r' : 'l'];
     for (const o of h) {
-      const dx = w.x - shX - o.x, dy = w.y - o.y;
-      if (Math.abs(dx) > 1.1 * shW && Math.abs(dy) < 0.6 * Math.abs(dx)) {
-        this.swipe = Math.sign(dx); this.swipeAt = now;
-        this.swipeHist.l = []; this.swipeHist.r = [];
-        return;
-      }
+      const dx = cur.x - o.x, dy = cur.y - o.y;
+      if (!(Math.abs(dx) > 1.1 * shW && Math.abs(dy) < 0.6 * Math.abs(dx))) continue;
+      // it has to cross the middle: start well on one side, end well on the other
+      if (!(Math.sign(o.x) === -Math.sign(dx) && Math.abs(o.x) > 0.3 * shW && Math.sign(cur.x) === Math.sign(dx) && Math.abs(cur.x) > 0.3 * shW)) continue;
+      // the other hand moving the opposite way = spreading / bringing the arms in, not a swipe
+      const om = moved(other);
+      if (Math.sign(om) === -Math.sign(dx) && Math.abs(om) > 0.5 * shW) continue;
+      this.swipe = Math.sign(dx); this.swipeAt = now;
+      this.swipeHist.l = []; this.swipeHist.r = [];
+      return;
     }
   }
 };

@@ -1,5 +1,5 @@
 {
- "build": "1126-025930-hanging-wings-no-longer-clip-into-the-body",
+ "build": "1126-031058-swipes-must-cross-the-body",
  "files": [
   "js/autorig.js",
   "js/awake.js",

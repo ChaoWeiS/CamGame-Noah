@@ -2,7 +2,7 @@
 //   • the animals' portraits in a row along the top — each square shows, in the
 //     player's colour, who is looking at it (P1 red, P2 blue, P3 green, P4 yellow);
 //   • below, a column per player with their animal copying their body.
-// Swipe a raised hand sideways to flip to the next animal (keyboard: ← →).
+// Swipe a raised hand across the body to flip to the next animal (keyboard: ← →).
 // Hold both hands up for 3 seconds to choose — a ring in your colour fills up around
 // your animal. Once chosen it's yours (no take-backs), and nobody else can pick it.
 // When everyone has chosen, off to the race.
@@ -21,7 +21,7 @@ export class PickScene extends Phaser.Scene {
     const players = tracker.players;
     sky(this, 0x8fcbe8, 0xe3f2d0);
     this.add.text(W / 2, 40, 'Choose your animal!', txt(44, '#1d3b52')).setOrigin(0.5);
-    this.add.text(W / 2, 82, 'Swipe a hand sideways to change · hold both hands up for 3 seconds to choose',
+    this.add.text(W / 2, 82, 'Swipe a hand across your body to change · hold both hands up for 3 seconds to choose',
       txt(22, '#1d3b52')).setOrigin(0.5);
 
     // the portrait row
