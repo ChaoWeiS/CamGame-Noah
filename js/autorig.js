@@ -84,7 +84,14 @@ function instantiate(t) {
   mesh.bind(new THREE.Skeleton(t.order.map((k) => B[k])));
   const root = new THREE.Group();
   root.add(mesh);
-  return new RiggedCharacter(root, mesh, B, t.H, t.joints);
+  const ch = new RiggedCharacter(root, mesh, B, t.H, t.joints);
+  ch.src = t.url; ch.shift = t.shift; ch.rigged = t.rigged;
+  return ch;
+}
+
+// rest-pose transform of a skinned mesh's vertices (same for every bone at rest)
+export function restMatrix(sm) {
+  return new THREE.Matrix4().multiplyMatrices(sm.skeleton.bones[0].matrixWorld, sm.skeleton.boneInverses[0]).multiply(sm.bindMatrix);
 }
 
 async function buildRig(url, opts = {}) {
@@ -94,14 +101,24 @@ async function buildRig(url, opts = {}) {
   gltf.scene.updateMatrixWorld(true);
   let src = null;
   gltf.scene.traverse((o) => { if (o.isMesh && !src) src = o; });
+  // A model rigged in Blender (tools/blender_rig) brings its own skeleton and skin weights:
+  // its joints are used as they are and its weights replace the guessed ones below.
+  // Add ?autorig to the page address to ignore Blender's rig and go back to the measured one.
+  const skinned = !!(src.isSkinnedMesh && src.skeleton);
+  const forceAuto = typeof location !== 'undefined' && new URLSearchParams(location.search).has('autorig');
+  const rigged = skinned && !forceAuto && ['hips', 'upperL', 'upperR', 'thighL', 'thighR'].every((k) => src.skeleton.getBoneByName(k));
 
   // 1. Plain float geometry in model space (undo quantization / node transforms)
   const g0 = src.geometry;
   const n = g0.attributes.position.count;
   const pos = new Float32Array(n * 3), nor = new Float32Array(n * 3);
-  const v = new THREE.Vector3(), nm = new THREE.Matrix3().getNormalMatrix(src.matrixWorld);
+  // Where each vertex sits at rest. For a skinned (Blender-rigged) model that's through its
+  // skeleton: compressed models keep their size and offset in the bones' inverse bind
+  // matrices, not on the mesh node.
+  const M = skinned ? restMatrix(src) : src.matrixWorld;
+  const v = new THREE.Vector3(), nm = new THREE.Matrix3().getNormalMatrix(M);
   for (let i = 0; i < n; i++) {
-    v.fromBufferAttribute(g0.attributes.position, i).applyMatrix4(src.matrixWorld);
+    v.fromBufferAttribute(g0.attributes.position, i).applyMatrix4(M);
     pos[i * 3] = v.x; pos[i * 3 + 1] = v.y; pos[i * 3 + 2] = v.z;
     if (g0.attributes.normal) {
       v.fromBufferAttribute(g0.attributes.normal, i).applyMatrix3(nm).normalize();
@@ -122,7 +139,11 @@ async function buildRig(url, opts = {}) {
   // centre on X/Z, feet at y = 0
   geo.computeBoundingBox();
   const bb = geo.boundingBox;
-  geo.translate(-(bb.min.x + bb.max.x) / 2, -bb.min.y, -(bb.min.z + bb.max.z) / 2);
+  const shift = new THREE.Vector3(-(bb.min.x + bb.max.x) / 2, -bb.min.y, -(bb.min.z + bb.max.z) / 2);
+  geo.translate(shift.x, shift.y, shift.z);
+  // Blender joints, in the same (centred) space as the geometry
+  const RJ = {};
+  if (rigged) for (const b of src.skeleton.bones) RJ[b.name] = b.getWorldPosition(new THREE.Vector3()).add(shift);
   geo.computeBoundingBox();
   const H = geo.boundingBox.max.y, X = geo.boundingBox.max.x;
 
@@ -209,6 +230,7 @@ async function buildRig(url, opts = {}) {
 
   // 3. Skeleton: hips → spine → arms ; hips → legs
   const bone = (name, x, y, parent, z = 0) => {
+    if (RJ[name]) ({ x, y, z } = RJ[name]);
     const b = new THREE.Bone(); b.name = name;
     const p = parent ? parent.userData.world : new THREE.Vector3();
     b.position.set(x - p.x, y - p.y, z - p.z);
@@ -237,10 +259,20 @@ async function buildRig(url, opts = {}) {
   const order = ['hips', 'spine', 'upperL', 'foreL', 'thighL', 'shinL', 'upperR', 'foreR', 'thighR', 'shinR', 'handL', 'handR', 'chest', 'head', 'belly', 'tail'];
   const idx = Object.fromEntries(order.map((k, i) => [k, i]));
 
-  // 4. Skin weights: arms, legs, then the rest split between spine and hips
+  // 4. Skin weights. A Blender-rigged model brings its own (bone indices remapped by name);
+  // otherwise: arms, legs, then the rest split between spine and hips
   const si = new Uint16Array(n * 4), sw = new Float32Array(n * 4);
+  if (rigged) {
+    const map = src.skeleton.bones.map((bn) => idx[bn.name] ?? idx.hips);
+    const SI = g0.attributes.skinIndex, SW = g0.attributes.skinWeight;
+    for (let i = 0; i < n; i++) {
+      let sum = 0;
+      for (let j = 0; j < 4; j++) { si[i * 4 + j] = map[SI.getComponent(i, j)]; sw[i * 4 + j] = SW.getComponent(i, j); sum += sw[i * 4 + j]; }
+      if (sum > 0) for (let j = 0; j < 4; j++) sw[i * 4 + j] /= sum; else { si[i * 4] = idx.hips; sw[i * 4] = 1; }
+    }
+  }
   const bA = H * 0.08;                      // softness at the shoulders (a gentle blend, no square edge)
-  for (let i = 0; i < n; i++) {
+  if (!rigged) for (let i = 0; i < n; i++) {
     const x = pos[i * 3], y = pos[i * 3 + 1], ax = Math.abs(x), s = x < 0 ? 'L' : 'R';
     const ws = {};
     // arm: outside the shoulder, near the arm's height
@@ -279,7 +311,7 @@ async function buildRig(url, opts = {}) {
   geo.setAttribute('skinWeight', new THREE.Float32BufferAttribute(sw, 4));
 
   // the template: shared by every character made from this model (its bones are only copied)
-  return { geo, mat: src.material, hips, order, H, joints: { shoulderInner: sx * shoulderIn, shoulderOuter: sx * 0.98, shoulderY: armRootY - H * 0.01, hasTail, frontZ, backZ, sx, elbowX, wristX, chestY, neckY, crotchY, kneeY, armRootY, armTipY, legX, waistY } };
+  return { url, shift, rigged, geo, mat: src.material, hips, order, H, joints: { shoulderInner: sx * shoulderIn, shoulderOuter: sx * 0.98, shoulderY: armRootY - H * 0.01, hasTail, frontZ, backZ, sx, elbowX, wristX, chestY, neckY, crotchY, kneeY, armRootY, armTipY, legX, waistY } };
 }
 
 export class RiggedCharacter {

@@ -7,6 +7,7 @@
 // back you see the wings, not the arms.
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { restMatrix } from './autorig.js';
 
 const WING_FILE = new URL('../assets/wings.glb', import.meta.url).href;
 // the right wing's leading edge in the model (from the reference picture): shoulder, elbow, wrist, fingertip
@@ -131,10 +132,39 @@ async function fitWings(ch) {
   return p;
 }
 
+// Wings fitted and weighted in Blender for each animal (tools/blender_rig), skinned to the same
+// bone names as the body. Used when the character's model came from Blender too.
+const PREFIT = new Map();
+function prefitFor(ch) {
+  const id = ch.rigged && ch.src && ['bear', 'chicken', 'dog', 'hamster'].find((k) => ch.src.includes(k));
+  if (!id) return null;
+  const file = new URL(`../assets/models/wings/${id}.glb`, import.meta.url).href;
+  if (!PREFIT.has(file)) PREFIT.set(file, new GLTFLoader().loadAsync(file).then((gltf) => {
+    gltf.scene.updateMatrixWorld(true);
+    let src = null;
+    gltf.scene.traverse((o) => { if (o.isSkinnedMesh && !src) src = o; });
+    if (!src) return null;
+    return { geo: src.geometry.clone().applyMatrix4(restMatrix(src)), names: src.skeleton.bones.map((b) => b.name), mat: src.material };
+  }).catch((e) => { console.warn('Blender wings failed, fitting them instead', e); return null; }));
+  return PREFIT.get(file).then((w) => {
+    if (!w) return null;
+    const geo = w.geo.clone();
+    if (ch.shift) geo.translate(ch.shift.x, ch.shift.y, ch.shift.z);
+    // bone numbers in the wing file → this character's skeleton
+    const bones = ch.mesh.skeleton.bones;
+    const map = w.names.map((nm) => Math.max(0, bones.findIndex((b) => b.name === nm)));
+    const SI = geo.attributes.skinIndex, out = new Uint16Array(SI.count * 4);
+    for (let i = 0; i < SI.count; i++) for (let j = 0; j < 4; j++) out[i * 4 + j] = map[SI.getComponent(i, j)];
+    geo.setAttribute('skinIndex', new THREE.Uint16BufferAttribute(out, 4));
+    const m = w.mat.clone(); m.side = THREE.DoubleSide;
+    return { geo, mat: m };
+  });
+}
+
 // give a character its wings (skinned to its own arm bones); returns the wing mesh
 export async function addWings(ch) {
   if (ch.wings) return ch.wings;
-  const { geo, mat } = await fitWings(ch);
+  const { geo, mat } = (await prefitFor(ch)) || (await fitWings(ch));
   const w = new THREE.SkinnedMesh(geo, mat);
   w.frustumCulled = false;
   ch.mesh.add(w);

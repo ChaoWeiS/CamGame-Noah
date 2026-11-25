@@ -1,5 +1,5 @@
 {
- "build": "1125-224308-playtest-fixes-2",
+ "build": "1125-232805-blender-rigs",
  "files": [
   "js/autorig.js",
   "js/awake.js",

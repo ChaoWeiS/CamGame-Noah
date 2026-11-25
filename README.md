@@ -34,6 +34,9 @@ Drag to look around, H hides the panel. `?weights` colours the auto-rig, `?model
 
 - `js/autorig.js` rigs a single-mesh T-pose model automatically: it measures the mesh to find shoulders, elbows,
   hips and knees, builds a skeleton and paints smooth skin weights. Works for unrigged Tripo/Meshy exports.
+- The four animals are now rigged in Blender (real skeleton, Blender skin weights, wings fitted per animal):
+  `autorig.js` uses that rig when a model has one. Add `?autorig` to the address to go back to the measured rig.
+  How it was made, and how to redo it: `tools/blender_rig/README.md`.
 - Model prep (keeps the page light): the 60 MB Tripo export was reduced with glTF-Transform
   (`simplify` → `resize` textures to 1024 → `simplify` → `quantize`) to ~3.8 MB, ~118k triangles — `tools/optimize_model.sh in.glb out.glb`.
 - To add a character: optimise its Tripo GLB into `assets/models/`, then add it to `CHARS` in `bear3d.html`.
