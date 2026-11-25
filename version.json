@@ -1,5 +1,5 @@
 {
- "build": "1125-235853-wings-original-shape-fold-when-arms-are-down",
+ "build": "1126-000232-wings-repositioned-in-blender-bones-realigned",
  "files": [
   "js/autorig.js",
   "js/awake.js",
