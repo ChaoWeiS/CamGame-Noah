@@ -293,16 +293,18 @@ export function updateWings(ch) {
     // upstroke takes them back and up
     const fwd = clamp(-w.vs * 0.14, -0.35, 0.5) + 0.3 * down;
     setRot(wb['wingUp' + s], sg, 0.85 * fold - fwd * open, beat * open + (-0.35) * fold, (lean + 0.35 + fwd) * down * open);
-    // forearm and hand: an open wing arches over (the tips droop, a dome), less so when raised.
+    // forearm and hand:
     // Each part follows the one before it on its own looser spring, so the wing bends like a
     // whip through the stroke: the middle lags the shoulder, the tips lag the middle and
     // overshoot a little at each turn. Folding tucks them back into a small profile.
     const upRoll = beat * open + (-0.35) * fold;
-    const arch = open * (1 - smooth(0.2, 1.1, elev));
-    const foreAbs = follow(w.fa, upRoll - 0.3 * arch, dt, 70, 0.55);
+    // gliding (arms held out straight): the wings spread flat and straight out, the tips a
+    // touch higher than the shoulders
+    const glide = open * (1 - smooth(0.25, 1.0, Math.abs(elev)));
+    const foreAbs = follow(w.fa, upRoll + 0.06 * glide, dt, 70, 0.55);
     const foreRel = clamp(foreAbs - upRoll, -1.1, 1.1) * open;
     setRot(wb['wingFore' + s], sg, 0.4 * fold, foreRel);
-    const handAbs = follow(w.ha, upRoll + foreRel - 0.4 * arch + wrist * 0.4 * open, dt, 45, 0.5);
+    const handAbs = follow(w.ha, upRoll + foreRel + 0.1 * glide + wrist * 0.4 * open, dt, 45, 0.5);
     const handRel = clamp(handAbs - upRoll - foreRel, -1.2, 1.2) * open;
     setRot(wb['wingHand' + s], sg, 0.15 * fold + clamp(w.vs * 0.08, 0, 0.25) * open, handRel);
     wb['wingUp' + s].updateMatrixWorld(true);
