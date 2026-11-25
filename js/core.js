@@ -2,6 +2,7 @@
 // player tracking/identity and keyboard test players.
 import { Body, toPoints, toWorld, keyPoints } from './body.js';
 import { multicam } from './multicam.js';
+import { clothesOf, clothesDiff, clothesBlend } from './clothes.js';
 
 // soft pastel player colours: P1 red, P2 blue, P3 green, P4 yellow
 export const PLAYER_COLORS = [0xef8f86, 0x86b6e8, 0x93d18e, 0xf1d074];
@@ -76,13 +77,13 @@ class Tracker {
     return this.tracks.filter((t) => t.confirmed && t.seen).sort((a, b) => a.box.cx - b.box.cx);
   }
 
-  ingest(posesFlat, aspect, worlds = null) {
+  ingest(posesFlat, aspect, worlds = null, colors = null) {
     this.aspect = aspect || this.aspect;
     stats.world3D = !!(worlds && worlds.length);
     const now = performance.now();
     let dets = posesFlat.map((flat, k) => {
       const pts = toPoints(flat, this.aspect);
-      return { pts, key: keyPoints(pts), world: worlds && worlds[k] ? toWorld(worlds[k]) : null, box: boxOf(pts) };
+      return { pts, key: keyPoints(pts), world: worlds && worlds[k] ? toWorld(worlds[k]) : null, box: boxOf(pts), col: colors?.[k] || null };
     }).filter((d) => d.box);
     dets.forEach((d) => { d.torso = torsoOf(d.pts, d.box); });
     // merge duplicates: two detections of one person have their torsos in the same place
@@ -102,9 +103,10 @@ class Tracker {
         const size = Math.max(t.torso.s, d.torso.s);
         const dist = Math.hypot(px - d.torso.x, py - d.torso.y) / size;        // in torso lengths
         const scale = Math.abs(Math.log(d.torso.s / t.torso.s));               // a nearer/farther person is a different size
-        const score = -dist - 0.8 * scale + 0.15 * iou(t.box, d.box);
-        // a hidden person only comes back as someone in (almost) the same spot, the same size
-        if (hidden ? dist < 0.6 && scale < 0.25 : dist < 1.2) pairs.push({ t, j, score });
+        const cd = clothesDiff(t.look, d.col);                                // different clothes: a different person
+        const score = -dist - 0.8 * scale + 0.15 * iou(t.box, d.box) - (cd === null ? 0 : 0.03 * cd);
+        // a hidden person only comes back as someone in (almost) the same spot, the same size, the same clothes
+        if (hidden ? dist < 0.6 && scale < 0.25 && (cd === null || cd < 25) : dist < 1.2) pairs.push({ t, j, score });
       });
     }
     pairs.sort((a, b) => b.score - a.score);
@@ -119,12 +121,13 @@ class Tracker {
       // size changes slowly (people don't grow), so a misread torso doesn't redefine them
       const torso = { ...d.torso, s: d.torso.good ? t.torso.s + (d.torso.s - t.torso.s) * 0.3 : t.torso.s };
       Object.assign(t, { box: d.box, torso, pts: d.pts, key: d.key, world: d.world, lastSeen: now, seen: true });
+      if (d.col) { t.col = d.col; t.look = clothesBlend(t.look, d.col, 0.15); }
       t.hits++; if (t.hits >= CONFIRM_HITS) t.confirmed = true;
       d.track = t;
     }
     dets.forEach((d, j) => {
       if (usedD.has(j)) return;
-      const t = { id: this.nextId++, born: now, box: d.box, torso: d.torso, vx: 0, vy: 0, pts: d.pts, key: d.key, world: d.world, hits: 1, lastSeen: now, confirmed: false, seen: true };
+      const t = { id: this.nextId++, born: now, box: d.box, torso: d.torso, look: clothesBlend(null, d.col, 1), col: d.col, vx: 0, vy: 0, pts: d.pts, key: d.key, world: d.world, hits: 1, lastSeen: now, confirmed: false, seen: true };
       this.tracks.push(t); d.track = t;
     });
     for (const t of this.tracks) if (!usedT.has(t) && t.lastSeen < now) t.seen = now - t.lastSeen < 250;
@@ -148,6 +151,7 @@ class Tracker {
       body.calibrateFromCurrent();
       const pl = makePlayer(this.players.length, 'camera', body, t.key.sh);
       pl.trackId = t.id;
+      pl.look = t.look ? clothesBlend(null, t.look, 1) : null;
       this.players.push(pl);
     });
     for (let i = 0; i < keyboardCount && this.players.length < MAX_PLAYERS; i++) {
@@ -176,7 +180,10 @@ class Tracker {
           if (pl.torsoS && Math.abs(Math.log(x.torso.s / pl.torsoS)) > 0.3) continue;      // not their size
           if (x.born < pl.lastSeen - 300) continue;               // was already around elsewhere: someone else
           if (Math.hypot(x.vx, x.vy) > 0.6 * x.torso.s * 2) continue;   // walking past, not standing to play
-          const d = Math.hypot(x.torso.x - (pl.torsoAt?.x ?? x.torso.x), x.torso.y - (pl.torsoAt?.y ?? x.torso.y)) / x.torso.s;
+          const cd = clothesDiff(pl.look, x.look);
+          if (cd !== null && cd > 22) continue;                    // different clothes: not them
+          let d = Math.hypot(x.torso.x - (pl.torsoAt?.x ?? x.torso.x), x.torso.y - (pl.torsoAt?.y ?? x.torso.y)) / x.torso.s;
+          if (cd !== null && cd < 12) d *= 0.4;                    // same clothes: them, even a little further off
           if (d < bestD) { bestD = d; best = x; }
         }
         if (best) { t = best; pl.trackId = best.id; claimed.add(best.id); }
@@ -186,10 +193,43 @@ class Tracker {
         pl.anchor = { x: t.key.sh.x, y: t.key.sh.y };
         pl.torsoAt = { x: t.torso.x, y: t.torso.y };
         pl.torsoS = pl.torsoS ? pl.torsoS + (t.torso.s - pl.torsoS) * 0.1 : t.torso.s;
+        // keep learning their clothes — slowly, and only from readings that look like them and
+        // while nobody else is right next to them (so another child's colours don't creep in)
+        if (t.col) {
+          const cd = clothesDiff(pl.look, t.col);
+          const alone = this.tracks.every((o) => o === t || !o.seen || Math.hypot(o.torso.x - t.torso.x, o.torso.y - t.torso.y) > 1.3 * t.torso.s);
+          if (!pl.look) pl.look = clothesBlend(null, t.col, 1);
+          else if (alone && cd !== null && cd < 18) pl.look = clothesBlend(pl.look, t.col, 0.03);
+        }
         pl.present = true;
         pl.lastSeen = now;
       } else if (now - pl.lastSeen > 400) {
         pl.present = false;
+      }
+    }
+    this.fixSwaps(cams, now);
+  }
+
+  // Two players' animals on the wrong children (after they crossed, say)? Their clothes say
+  // so: if each child's clothes match the OTHER player much better, for a few checks in a
+  // row, the two players swap back.
+  fixSwaps(cams, now) {
+    if (now - (this.swapCheckAt || 0) < 300) return;
+    this.swapCheckAt = now;
+    for (let i = 0; i < cams.length; i++) for (let j = i + 1; j < cams.length; j++) {
+      const A = cams[i], B = cams[j];
+      const tA = this.tracks.find((x) => x.id === A.trackId), tB = this.tracks.find((x) => x.id === B.trackId);
+      const key = `${A.slot}-${B.slot}`;
+      this.swapVotes = this.swapVotes || {};
+      if (!tA || !tB || !A.look || !B.look || !tA.look || !tB.look || !tA.seen || !tB.seen) { this.swapVotes[key] = 0; continue; }
+      const keep = clothesDiff(A.look, tA.look) + clothesDiff(B.look, tB.look);
+      const swap = clothesDiff(A.look, tB.look) + clothesDiff(B.look, tA.look);
+      if (swap + 14 < keep && swap < 0.6 * keep) this.swapVotes[key] = (this.swapVotes[key] || 0) + 1;
+      else this.swapVotes[key] = 0;
+      if (this.swapVotes[key] >= 3) {
+        [A.trackId, B.trackId] = [B.trackId, A.trackId];
+        this.swapVotes[key] = 0;
+        stats.swapsFixed = (stats.swapsFixed || 0) + 1;
       }
     }
   }
@@ -374,7 +414,7 @@ export const net = {
           stats.linked = 0;
           if (c !== this.conn) return;                   // standby phones only help with linking
           stats.fps = d.fps; stats.inf = d.inf;
-          tracker.ingest(d.poses, d.aspect, d.worlds);
+          tracker.ingest(d.poses, d.aspect, d.worlds, d.colors);
           return;
         }
         if (c !== this.conn) return;
@@ -443,7 +483,7 @@ export const localCam = {
         stats.inf = Math.round(ms); frames++;
         const now = performance.now();
         if (now - t0 > 1000) { stats.fps = Math.round(frames * 1000 / (now - t0)); frames = 0; t0 = now; }
-        tracker.ingest(poses, video.videoWidth / video.videoHeight, worlds);
+        tracker.ingest(poses, video.videoWidth / video.videoHeight, worlds, frames % 3 === 0 ? clothesOf(video, poses) : undefined);
       }
       requestAnimationFrame(loop);
     };

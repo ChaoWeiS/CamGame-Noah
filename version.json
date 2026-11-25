@@ -1,5 +1,5 @@
 {
- "build": "1125-215245-sticky-players",
+ "build": "1125-215732-clothes-id",
  "files": [
   "js/autorig.js",
   "js/awake.js",
@@ -7,6 +7,7 @@
   "js/body.js",
   "js/bones.js",
   "js/calibui.js",
+  "js/clothes.js",
   "js/core.js",
   "js/facecrop.js",
   "js/faces.js",

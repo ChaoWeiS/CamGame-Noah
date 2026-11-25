@@ -1,4 +1,5 @@
 import { cropFaces } from './facecrop.js';
+import { clothesOf } from './clothes.js';
 import { keepAwake } from './awake.js';
 import { createPoseDetector, BONES } from './pose.js';
 import { SPINE } from './bones.js';
@@ -283,7 +284,9 @@ function loop() {
     lastInf = ms;
     frames++;
     const aspect = src.width / src.height;
-    send({ type: 'pose', t: performance.now(), inf: Math.round(ms), fps, aspect, poses, worlds, still: isStill() });
+    // everyone's clothes colours, a few times a second (to tell the players apart)
+    const colors = frames % 3 === 0 ? clothesOf(src, poses) : undefined;
+    send({ type: 'pose', t: performance.now(), inf: Math.round(ms), fps, aspect, poses, worlds, colors, still: isStill() });
     draw(poses);
     $('people').textContent = `${poses.length} ${poses.length === 1 ? 'person' : 'people'}`;
   }
