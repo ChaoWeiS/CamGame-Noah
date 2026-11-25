@@ -301,6 +301,14 @@ export const net = {
       const old = this.conns.find((x) => x.peer === c.peer);
       if (old) { this.conns = this.conns.filter((x) => x !== old); if (this.conn === old) this.conn = c; try { old.close(); } catch (_) {} }
       this.conns.push(c);
+      // say a phone is knocking — and if the link never opens, say that too (a browser that
+      // can't finish the phone-to-screen link shows up here)
+      if (!this.conn || !this.conn.open) this.onStatus('A phone is connecting…');
+      setTimeout(() => {
+        if (c.open || !this.conns.includes(c)) return;
+        const ice = c.peerConnection?.iceConnectionState || '?';
+        if (!this.conn || !this.conn.open) this.onStatus(`A phone tried to connect, but the link didn't open (${ice}) — this browser or network may not allow it. Try a computer or Chrome as the screen.`);
+      }, 12000);
       c.on('open', () => {
         if (!this.conn || !this.conn.open) this.conn = c;
         this.roles();

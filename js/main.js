@@ -35,7 +35,7 @@ net.onStatus = (s) => {
   if (!b.contains('phone') || b.contains('show-qr')) $('status').textContent = s;
   // …and always on its own line by the QR code, so problems are visible
   const n = $('netStatus');
-  if (n) { n.textContent = '📶 ' + s; n.className = /error|can.t/i.test(s) ? 'bad' : /connected/i.test(s) ? 'ok' : ''; }
+  if (n) { n.textContent = '📶 ' + s; n.className = /error|can.t|didn.t/i.test(s) ? 'bad' : /connected/i.test(s) && !/connecting/i.test(s) ? 'ok' : ''; }
 };
 net.start();
 if (!window.RTCPeerConnection) {
