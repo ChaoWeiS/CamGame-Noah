@@ -6,14 +6,22 @@ import { keepAwake } from './awake.js';
 // the game screen must never go to sleep (phone mode especially; on a PC it stops the display blanking)
 keepAwake(true);
 
-// the host's game queue (the menu will set this; for now the last queue, or every game)
-// — queued games start downloading straight away, in the background
-setQueue(savedQueue());
+// a blank first screen: the host's menu sits over it until Start opens the lobby
+class BootScene extends Phaser.Scene {
+  constructor() { super('Boot'); }
+  create() {
+    initMenu();
+    const go = () => this.scene.start('Lobby');
+    // ?menu=0 skips the menu (straight to the lobby with the last queue)
+    if (new URLSearchParams(location.search).get('menu') === '0') { import('./games.js').then((g) => { g.setQueue(g.savedQueue()); go(); }); }
+    else showMenu(go);
+  }
+}
 import { initCalibration, linkCameras } from './calibui.js';
 import { W, H, ASPECT } from './scenes/common.js';
 import { LobbyScene } from './scenes/LobbyScene.js';
 import { PickScene } from './scenes/PickScene.js';
-import { setQueue, savedQueue } from './games.js';
+import { showMenu, initMenu } from './menu.js';
 import { ResultsScene } from './scenes/ResultsScene.js';
 
 const $ = (id) => document.getElementById(id);
@@ -74,5 +82,5 @@ window.game = new Phaser.Game({
   height: H,
   backgroundColor: '#10202b',
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-  scene: [LobbyScene, PickScene, ResultsScene],          // the mini games are added when they're loaded (js/games.js)
+  scene: [BootScene, LobbyScene, PickScene, ResultsScene],          // the mini games are added when they're loaded (js/games.js)
 });

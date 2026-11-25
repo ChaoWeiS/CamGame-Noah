@@ -54,11 +54,13 @@ export class ResultsScene extends Phaser.Scene {
       return { pl: r.pl, x: xs[i], h, win: r.total === best };
     });
 
-    this.add.text(W / 2, H - 40, 'Raise both hands (or press Enter) to play again · press L for a new lobby',
+    this.add.text(W / 2, H - 40, 'Raise both hands (or press Enter) to play again · L: new lobby · M: choose games',
       txt(22, '#1d3b52')).setOrigin(0.5);
     this.hold = new Hold(1200);
     this.enter = this.input.keyboard.addKey('ENTER');
     this.input.keyboard.once('keydown-L', () => this.scene.start('Lobby'));
+    // M: back to the host's menu (choose different games)
+    this.input.keyboard.once('keydown-M', () => { this.scene.start('Boot'); });
     this.ready = false;
     this.time.delayedCall(2500, () => { this.ready = true; });
   }

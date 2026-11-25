@@ -1,5 +1,5 @@
 {
- "build": "1125-094934-split-games",
+ "build": "1125-095813-host-menu",
  "files": [
   "js/autorig.js",
   "js/awake.js",
@@ -10,6 +10,7 @@
   "js/core.js",
   "js/games.js",
   "js/main.js",
+  "js/menu.js",
   "js/mode.js",
   "js/models.js",
   "js/multicam.js",
