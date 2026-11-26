@@ -1,5 +1,5 @@
 {
- "build": "1127-031946-rig-fixes",
+ "build": "1127-032334-sticky-main-camera",
  "files": [
   "js/autorig.js",
   "js/awake.js",

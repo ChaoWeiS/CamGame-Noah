@@ -76,7 +76,7 @@ function openConn(room) {
     clearTimeout(openTimer); tries = 0;
     setConn(running ? 'Connected' : 'Connected to the big screen ✓', 'ok');
     if (!running) msg('Linked to the big screen ✓ — now tap “Start camera”.');
-    conn.send({ type: 'hello', ua: navigator.userAgent, camera: currentCameraLabel(), cam: running, build: document.querySelector('meta[name=build]')?.content });
+    conn.send({ type: 'hello', dev: DEV, ua: navigator.userAgent, camera: currentCameraLabel(), cam: running, build: document.querySelector('meta[name=build]')?.content });
   });
   conn.on('data', (d) => {
     if (d && d.type === 'ping') conn.send({ type: 'pong', t: d.t });
@@ -87,7 +87,7 @@ function openConn(room) {
     if (d && d.type === 'faces') send({ type: 'faces', id: d.id, images: frameCv.width ? cropFaces(frameCv, d.boxes || []) : [] });
     if (d && d.type === 'role') {
       standby = !d.active && !d.linked;
-      setConn(d.active ? 'Connected — main camera' : d.linked ? 'Connected — linked camera' : 'Standby — another phone is the camera (calibrate on the big screen to use both)', standby ? 'wait' : 'ok');
+      setConn(d.active ? 'Connected — main camera' : d.linked ? 'Connected — linked camera' : 'Standby — another phone is the main camera (link the cameras on the big screen to use both)', standby ? 'wait' : 'ok');
       $('take').hidden = d.active;
     }
   });
@@ -110,6 +110,8 @@ function currentCameraLabel() {
 // way out if the phone allows it, and a camera called "ultra wide" is preferred.
 // The camera picked in the list is remembered for next time.
 const SAVED = 'ark-camera';
+// this phone's own lasting name, so the big screen knows it again after a reconnect
+const DEV = (() => { try { let v = localStorage.getItem('ark-dev'); if (!v) { v = Math.random().toString(36).slice(2, 10); localStorage.setItem('ark-dev', v); } return v; } catch (_) { return Math.random().toString(36).slice(2, 10); } })();
 // Always the widest shot: an ultra-wide back camera whenever the phone has one we can recognise
 // (every start, not just the first); otherwise the camera picked last time; and always zoomed
 // all the way out (on many phones the ultra-wide lens is reached by zooming below 1×).
@@ -132,7 +134,7 @@ async function startCamera(deviceId = null, firstTime = false) {
   await zoomOut();
   await fillCameraList();
   showCamInfo();
-  send({ type: 'hello', ua: navigator.userAgent, camera: currentCameraLabel(), build: document.querySelector('meta[name=build]')?.content });
+  send({ type: 'hello', dev: DEV, ua: navigator.userAgent, camera: currentCameraLabel(), build: document.querySelector('meta[name=build]')?.content });
 }
 // zoom: all the way out at every start (the widest shot); the slider lets the player choose
 // any zoom the phone offers, and that choice holds until the camera is started again

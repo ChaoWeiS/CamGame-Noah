@@ -379,11 +379,31 @@ export const net = {
       c.send({ type: 'faces', id, boxes });
     });
   },
+  // this phone is the main camera from now on (remembered across reconnects)
+  setMain(c) {
+    this.conn = c; this.mainDev = c.dev || null; multicam.view = c.peer;
+    try { if (c.dev) sessionStorage.setItem('ark-main-dev', c.dev); } catch (_) {}
+    this.roles();
+  },
+  // main camera gone for a while: a standby phone that sees every player from the front
+  // (faces and both eyes visible, left and right the right way round) for 3 s takes over
+  frontCheck(c, d) {
+    const now = performance.now();
+    if (now - (this.lostMainAt || now) < 5000) return;
+    const want = Math.max(1, tracker.players.filter((p) => p.kind === 'camera').length);
+    const front = (d.poses || []).filter((f) => {
+      const v = (i) => f[i * 3 + 2];
+      return v(0) > 0.6 && v(2) > 0.5 && v(5) > 0.5 && v(11) > 0.5 && v(12) > 0.5 && f[11 * 3] > f[12 * 3];   // facing it: their left shoulder on the picture's right
+    }).length;
+    if (front >= want) { c.frontSince = c.frontSince || now; if (now - c.frontSince > 3000) { this.setMain(c); this.onStatus('Main camera: the phone in front of the players ✓'); } }
+    else c.frontSince = 0;
+  },
   viewConn() {
     const v = multicam.active() ? multicam.view : null;
     return (v && this.conns.find((c) => c.peer === v && c.open)) || this.conn;
   },
   start() {
+    try { this.mainDev = sessionStorage.getItem('ark-main-dev') || null; } catch (_) {}
     // the same room code after a reload (e.g. the automatic update), so camera phones that
     // were connected find this screen again by themselves
     let id = null;
@@ -430,12 +450,28 @@ export const net = {
         if (!this.conn || !this.conn.open) this.onStatus(`A phone tried to connect, but the link didn't open (${ice}) — this browser or network may not allow it. Try a computer or Chrome as the screen.`);
       }, 12000);
       c.on('open', () => {
-        if (!this.conn || !this.conn.open) this.conn = c;
+        // the main camera is whichever phone took the job (the first one, or "Use as main camera"),
+        // and stays that phone: a reconnecting main takes it back (see 'hello'); another phone
+        // never takes over by itself, it may be looking from the side or the back
+        if (!this.conn && !this.mainDev) this.conn = c;
         this.roles();
       });
       c.on('data', (d) => {
         if (!d) return;
-        if (d.type === 'take') { this.conn = c; this.roles(); return; }
+        if (d.type === 'take') { this.setMain(c); return; }
+        if (d.type === 'hello' && d.dev) {
+          c.dev = d.dev;
+          // a phone coming back: same camera as before (keeps its link to the room, unless it moves)
+          const cur = multicam.cam(c.peer); cur.dev = d.dev;
+          for (const [id, m] of multicam.cams) if (id !== c.peer && m.dev === d.dev) {
+            if (m.calib && !cur.calib) { cur.calib = m.calib; cur.num = m.num; }
+            if (multicam.view === id) multicam.view = c.peer;
+            multicam.cams.delete(id);
+          }
+          if (!this.mainDev && c === this.conn) this.setMain(c);
+          else if (d.dev === this.mainDev && c !== this.conn) { this.conn = c; multicam.view = c.peer; this.roles(); this.onStatus('Main camera is back ✓'); }
+          else if (!this.conn && !this.conns.some((x) => x !== c && x.open)) { this.conn = c; multicam.view = c.peer; this.roles(); }   // the only phone here
+        }
         if (d.type === 'faces' && this.faceWait?.has(d.id)) { this.faceWait.get(d.id)(d.images || []); this.faceWait.delete(d.id); return; }
         if (d.type === 'pic') { if (c === this.viewConn()) this.pic = { data: d.data, at: performance.now() }; return; }
         if (d.type === 'moved') {
@@ -448,18 +484,21 @@ export const net = {
         if (d.type === 'pose') {
           multicam.addFrame(c.peer, { poses: d.poses, worlds: d.worlds, aspect: d.aspect, still: d.still });
           if (stats.source !== 'phone') return;
-          if (multicam.active()) {
-            // linked cameras: the game sees everyone, merged, through the view camera
-            if (!multicam.cams.get(multicam.view)?.calib) multicam.view = multicam.linked()[0].id;
-            if (c.peer !== multicam.view) return;
+          const view = multicam.cams.get(multicam.view);
+          const fused = view?.calib && multicam.linked().filter((x) => x.id !== view.id).length >= 1 && multicam.cams.get(c.peer)?.calib;
+          if (fused) {
+            // linked cameras: the game sees everyone, merged, as seen from the main camera's place
+            // (if the main camera is away, the others still fill it in)
+            const viewAway = !view.connected || performance.now() - view.at > 300;
+            if (c.peer !== multicam.view && !viewAway) return;
             const f = multicam.fuse();
             if (!f) return;
             stats.fps = d.fps; stats.inf = d.inf; stats.linked = f.cams;
-            tracker.ingest(f.poses, f.aspect, f.worlds, null, d.hands);   // hands as the view camera saw them
+            tracker.ingest(f.poses, f.aspect, f.worlds, null, c.peer === multicam.view ? d.hands : null);   // hands as the view camera saw them
             return;
           }
           stats.linked = 0;
-          if (c !== this.conn) return;                   // standby phones only help with linking
+          if (c !== this.conn) { if (!this.conn && this.mainDev) this.frontCheck(c, d); return; }   // standby phones only help with linking
           stats.fps = d.fps; stats.inf = d.inf;
           tracker.ingest(d.poses, d.aspect, d.worlds, d.colors, d.hands);
           return;
@@ -480,8 +519,14 @@ export const net = {
       c.on('close', () => {
         this.conns = this.conns.filter((x) => x !== c);
         if (!this.conns.some((x) => x.peer === c.peer)) multicam.disconnect(c.peer);
-        if (this.conn === c) { this.conn = this.conns.find((x) => x.open) || null; this.roles(); }
-        if (!this.conn) { stats.connected = false; this.onStatus('Phone disconnected — waiting…'); }
+        if (this.conn === c) {
+          // the main camera dropped: wait for it (its phone reconnects by itself); linked cameras
+          // keep the game going meanwhile, still seen from the main camera's place
+          this.conn = this.mainDev ? null : (this.conns.find((x) => x.open) || null);
+          this.lostMainAt = performance.now();
+          this.roles();
+        }
+        if (!this.conn) { stats.connected = this.conns.some((x) => x.open); this.onStatus(this.mainDev ? 'Main camera disconnected — waiting for it to come back… (or tap “Use as main camera” on a phone in front of the players)' : 'Phone disconnected — waiting…'); }
       });
     });
     if (!this.pinging) this.pinging = setInterval(() => {
