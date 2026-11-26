@@ -47,10 +47,12 @@ Done this way for the walrus (`walrus_joints.json`):
    (keeps every UV seam, so it stops at ~25 %), then `python3 decimate.py mid.glb walrus.glb 0.3`,
    which joins the seam-split vertices before decimating. Decimating Tripo's split seams directly
    tears thousands of tiny cracks you can see through (the model looks speckled/noisy).
+   rig_one.py joins them again after importing (glTF splits them on export), before weighting:
+   otherwise each side of a seam gets its own weights and cracks open when the animal moves.
 2. Measure with `measure.py`'s `measure()`, then fix joints by hand where the shape is unusual (the
    walrus's flippers: wrist where the paddle starts, the hand bone along the paddle to `handTip`).
    Put them in `<folder>/joints.json` as `{ "walrus": {...} }`.
-3. `DECIMATE=0.55 python3 rig_one.py walrus <folder>` — builds the skeleton (rig_animals.py's
+3. `DECIMATE=1 python3 rig_one.py walrus <folder>` (and again with `DECIMATE=0.42` for the phone version — don't simplify a rigged file with gltf-transform, it pulls the seams apart) — builds the skeleton (rig_animals.py's
    `build`), weights it with `weights_np.py` (Blender's heat weights failed on this mesh: distance to
    each bone, limited to the bones that may move that part, smoothed over the mesh), exports
    `<folder>/walrus_rigged.glb`. Then shrink as in step 6.

@@ -7,6 +7,13 @@ bpy.ops.wm.read_factory_settings(use_empty=True)
 g = {'DIR': DIR}
 exec(src, g)
 mesh, arm = g['build'](aid, 0.0)
+# glTF import splits every UV seam into separate vertices again: join them, or the two sides of
+# each seam get slightly different weights and pull apart into cracks when the animal moves
+for o in bpy.context.selected_objects: o.select_set(False)
+mesh.select_set(True); bpy.context.view_layer.objects.active = mesh
+bpy.ops.object.mode_set(mode='EDIT'); bpy.ops.mesh.select_all(action='SELECT')
+bpy.ops.mesh.remove_doubles(threshold=1e-6); bpy.ops.object.mode_set(mode='OBJECT')
+print('WELDED', len(mesh.data.vertices))
 import os
 ratio = float(os.environ.get('DECIMATE', '1'))
 if ratio < 1:
