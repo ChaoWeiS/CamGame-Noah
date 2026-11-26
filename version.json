@@ -1,5 +1,5 @@
 {
- "build": "1126-121045-radar-coverage",
+ "build": "1126-150210-hand-reading",
  "files": [
   "js/autorig.js",
   "js/awake.js",
@@ -13,6 +13,7 @@
   "js/faces.js",
   "js/games.js",
   "js/halloffame.js",
+  "js/hands.js",
   "js/hofview.js",
   "js/howto.js",
   "js/main.js",

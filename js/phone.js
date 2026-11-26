@@ -3,6 +3,7 @@ import { clothesOf } from './clothes.js';
 import { keepAwake } from './awake.js';
 import { createPoseDetector, BONES } from './pose.js';
 import { SPINE } from './bones.js';
+import { createHandReader } from './hands.js';
 
 const $ = (id) => document.getElementById(id);
 const video = $('video'), overlay = $('overlay'), ctx = overlay.getContext('2d');
@@ -15,6 +16,11 @@ let showPreview = true, standby = false, wantPics = false, lastPic = 0;
 const picCv = document.createElement('canvas'), pctx = picCv.getContext('2d');
 const frameCv = document.createElement('canvas'), fctx = frameCv.getContext('2d');
 let rot = 0;                     // how far the picture is turned before detection (degrees)
+// the camera runs at high resolution (for reading hands and faces close up); the pose model,
+// preview and clothes colours use a 640-wide copy
+const smallCv = document.createElement('canvas'), sctx = smallCv.getContext('2d');
+const SMALL_W = 640;
+let hands = null, handsOff = params.get('hands') === '0', lastHands = [];
 
 function setConn(text, cls) { const el = $('conn'); el.textContent = text; el.className = 'pill ' + cls; }
 function msg(t) { $('msg').textContent = t; }
@@ -163,8 +169,8 @@ async function openCamera(deviceId) {
   const constraints = {
     audio: false,
     video: deviceId
-      ? { deviceId: { exact: deviceId }, width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } }
-      : { facingMode: { ideal: 'environment' }, width: { ideal: 640 }, height: { ideal: 480 }, frameRate: { ideal: 30 } },
+      ? { deviceId: { exact: deviceId }, width: { ideal: 1600 }, height: { ideal: 1200 }, frameRate: { ideal: 30 } }
+      : { facingMode: { ideal: 'environment' }, width: { ideal: 1600 }, height: { ideal: 1200 }, frameRate: { ideal: 30 } },
   };
   stream = await navigator.mediaDevices.getUserMedia(constraints);
   video.srcObject = stream;
@@ -252,7 +258,10 @@ function uprightFrame() {
   // a tall (portrait) picture sees far fewer people: ask for the phone to go sideways
   const tall = h > w * 1.05;
   if ($('turnTip').hidden === tall) $('turnTip').hidden = !tall;
-  return frameCv;
+  const sw = Math.min(SMALL_W, w), sh = Math.round(sw * h / w);
+  if (smallCv.width !== sw || smallCv.height !== sh) { smallCv.width = sw; smallCv.height = sh; }
+  sctx.drawImage(frameCv, 0, 0, sw, sh);
+  return smallCv;
 }
 
 // ---------- staying awake, with a dark screen ----------
@@ -289,8 +298,18 @@ function loop() {
     const aspect = src.width / src.height;
     // everyone's clothes colours, a few times a second (to tell the players apart)
     const colors = frames % 3 === 0 ? clothesOf(src, poses) : undefined;
-    send({ type: 'pose', t: performance.now(), inf: Math.round(ms), fps, aspect, poses, worlds, colors, still: isStill() });
+    // hands, read close up from the full-resolution picture (a few per frame, taking turns)
+    if (hands && !handsOff && poses.length) {
+      try { lastHands = hands.read(frameCv, poses); } catch (e) { console.warn('hands', e); }
+      if (hands.msPerHand > 70) { handsOff = true; msg('Hand reading switched off (this phone is too slow for it)'); }
+    } else lastHands = [];
+    send({ type: 'pose', t: performance.now(), inf: Math.round(ms), fps, aspect, poses, worlds, colors, hands: lastHands.length ? lastHands : undefined, still: isStill() });
     draw(poses);
+    if (!saver && lastHands.length) {
+      // what the hand reader sees: ✊ fist, ✋ open (fresh readings only)
+      ctx.font = '28px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      for (const h of lastHands) if (h.a < 250) ctx.fillText(h.g > 0.6 ? '✊' : h.g < 0.35 ? '✋' : '🤏', h.u * overlay.width, h.v * overlay.height - 22);
+    }
     $('people').textContent = `${poses.length} ${poses.length === 1 ? 'person' : 'people'}`;
   }
   const now = performance.now();
@@ -306,11 +325,11 @@ function loop() {
 const COLORS = ['#f2b544', '#5ec8e5', '#f27a9b', '#8be07a'];
 function draw(poses) {
   if (saver) return;                                  // dark screen: draw nothing
-  const vw = frameCv.width, vh = frameCv.height;
+  const vw = smallCv.width, vh = smallCv.height;
   if (overlay.width !== vw || overlay.height !== vh) { overlay.width = vw; overlay.height = vh; }
   ctx.clearRect(0, 0, vw, vh);
   if (!showPreview) { ctx.fillStyle = '#000'; ctx.fillRect(0, 0, vw, vh); }
-  else if (rot !== 0) ctx.drawImage(frameCv, 0, 0);       // the turned picture (the <video> is hidden then)
+  else if (rot !== 0) ctx.drawImage(smallCv, 0, 0);       // the turned picture (the <video> is hidden then)
   poses.forEach((p, k) => {
     ctx.strokeStyle = COLORS[k % COLORS.length]; ctx.lineWidth = 4; ctx.lineCap = 'round';
     for (const [a, b] of BONES) {
@@ -352,6 +371,7 @@ $('start').addEventListener('click', async () => {
       detector = await createPoseDetector({ numPoses: 4, onStatus: msg });
       $('engine').textContent = 'engine ' + detector.delegate;
     }
+    if (!hands && !handsOff) createHandReader().then((h) => { hands = h; }).catch((e) => { console.warn('no hand reader', e); handsOff = true; });
     msg('Running. You can leave this screen on.');
     running = true;
     send({ type: 'cam', on: true, camera: currentCameraLabel() });

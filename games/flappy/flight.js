@@ -28,6 +28,14 @@ function mirrored(world, pts) {
   return { world: w, pts: q };
 }
 const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+// Palms (hand reading on the phone) tip the wings like a hand out of a car window: palm down =
+// flat, tipped forward = leading edge up. The animal is a mirror image (seen from behind), so
+// its R wing follows your left hand.
+function palmPitch(hands) {
+  if (!hands) return null;
+  const p = (h) => (h ? clamp(Math.atan2(h.palm[2], -h.palm[1]), -1.2, 1.2) : 0);
+  return { R: p(hands.L), L: p(hands.R) };
+}
 const MODES = {
   ark: { roundMs: 60000, speed: 6, ceiling: 8.6, title: 'Flappy Ark' },
   sky: { roundMs: 75000, speed: 9, ceiling: 30, title: 'Sky Rings' },
@@ -331,7 +339,7 @@ class FlightWorld {
     ch.adjustShoulders();
     ch.fixArms();
     ch.root.updateMatrixWorld(true);
-    updateWings(ch);
+    updateWings(ch, f.pl.kind === 'camera' ? palmPitch(input(f.pl).hands) : null);
     ch.physics();
   }
   copyArms(e, pts) {

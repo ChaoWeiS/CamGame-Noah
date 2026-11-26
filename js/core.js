@@ -77,7 +77,7 @@ class Tracker {
     return this.tracks.filter((t) => t.confirmed && t.seen).sort((a, b) => a.box.cx - b.box.cx);
   }
 
-  ingest(posesFlat, aspect, worlds = null, colors = null) {
+  ingest(posesFlat, aspect, worlds = null, colors = null, hands = null) {
     this.aspect = aspect || this.aspect;
     stats.world3D = !!(worlds && worlds.length);
     const now = performance.now();
@@ -131,6 +131,21 @@ class Tracker {
       this.tracks.push(t); d.track = t;
     });
     for (const t of this.tracks) if (!usedT.has(t) && t.lastSeen < now) t.seen = now - t.lastSeen < 250;
+    // hands read close up on the phone: each belongs to whoever's wrist (same side) it's at
+    if (hands) for (const h of hands) {
+      if (!h || h.a > 400) continue;
+      const x = (1 - h.u) * this.aspect, y = h.v, wi = h.s === 'L' ? 15 : 16, at = now - (h.a || 0);
+      let best = null, bd = 0.6;
+      for (const t of this.tracks) {
+        if (!t.seen || !t.pts) continue;
+        const d = Math.hypot(t.pts[wi].x - x, t.pts[wi].y - y) / (t.torso.s || 0.3);
+        if (d < bd) { bd = d; best = t; }
+      }
+      if (!best) continue;
+      best.hands = best.hands || {};
+      if ((best.hands[h.s]?.at || 0) >= at) continue;
+      best.hands[h.s] = { grip: h.g, palm: [-h.n[0], -h.n[1], -h.n[2]], at };   // palm: same axes as the 3D skeleton
+    }
     const playerTracks = new Set(this.locked ? this.players.map((p) => p.trackId) : []);
     this.tracks = this.tracks.filter((t) => now - t.lastSeen < (playerTracks.has(t.id) ? PLAYER_KEEP_MS : t.confirmed ? KEEP_MS : 200));
 
@@ -202,6 +217,7 @@ class Tracker {
       }
       if (t && t.lastSeen === stats.lastFrame) {
         pl.body.update(t.pts, t.world);
+        pl.hands = t.hands || null;
         pl.anchor = { x: t.key.sh.x, y: t.key.sh.y };
         pl.torsoAt = { x: t.torso.x, y: t.torso.y };
         pl.torsoS = pl.torsoS ? pl.torsoS + (t.torso.s - pl.torsoS) * 0.1 : t.torso.s;
@@ -279,11 +295,27 @@ export function input(pl) {
   }
   const b = pl.body;
   return {
+    hands: handsOf(pl),
     present: pl.present, lane: b.lane, side: b.side, ducking: b.ducking, jumping: b.jumping,
     pose: b.pose, handsUp: b.handsUp, run: b.run,
     pump: b.pump || 0, steer: b.steer || 0, twist: b.twist || 0,
     flapCount: b.flapCount || 0, glide: b.glide || 0, fold: b.fold || 0,
   };
+}
+
+// Each hand (the person's own left / right), if the phone read it in the last 0.7 s:
+//   grip 0 (open) … 1 (fist), fist (with a little hysteresis), palm: unit vector out of the
+//   palm in the 3D skeleton's axes (x: the mirrored picture's right, y up, z towards the camera)
+function handsOf(pl) {
+  const now = performance.now(), out = { L: null, R: null };
+  pl.fist = pl.fist || { L: false, R: false };
+  for (const s of ['L', 'R']) {
+    const h = pl.hands?.[s];
+    if (!h || now - h.at > 700) { pl.fist[s] = false; continue; }
+    if (h.grip > 0.6) pl.fist[s] = true; else if (h.grip < 0.4) pl.fist[s] = false;
+    out[s] = { grip: h.grip, fist: pl.fist[s], palm: h.palm };
+  }
+  return out;
 }
 
 // ---------------------------------------------------------------- keyboard test players
@@ -423,13 +455,13 @@ export const net = {
             const f = multicam.fuse();
             if (!f) return;
             stats.fps = d.fps; stats.inf = d.inf; stats.linked = f.cams;
-            tracker.ingest(f.poses, f.aspect, f.worlds);
+            tracker.ingest(f.poses, f.aspect, f.worlds, null, d.hands);   // hands as the view camera saw them
             return;
           }
           stats.linked = 0;
           if (c !== this.conn) return;                   // standby phones only help with linking
           stats.fps = d.fps; stats.inf = d.inf;
-          tracker.ingest(d.poses, d.aspect, d.worlds, d.colors);
+          tracker.ingest(d.poses, d.aspect, d.worlds, d.colors, d.hands);
           return;
         }
         if (c !== this.conn) return;
@@ -497,14 +529,17 @@ export const localCam = {
     }
     stats.source = 'webcam'; stats.camera = stream.getVideoTracks()[0].label;
     this.running = true;
-    let frames = 0, t0 = performance.now();
+    let frames = 0, t0 = performance.now(), hands = null;
+    import('./hands.js').then((m) => m.createHandReader()).then((h) => { hands = h; }).catch((e) => console.warn('no hand reader', e));
     const loop = () => {
       if (video.readyState >= 2 && stats.source === 'webcam') {
         const { poses, worlds, ms } = det.detect(video);
         stats.inf = Math.round(ms); frames++;
         const now = performance.now();
         if (now - t0 > 1000) { stats.fps = Math.round(frames * 1000 / (now - t0)); frames = 0; t0 = now; }
-        tracker.ingest(poses, video.videoWidth / video.videoHeight, worlds, frames % 3 === 0 ? clothesOf(video, poses) : undefined);
+        let hs = null;
+        if (hands && poses.length) try { hs = hands.read(video, poses); } catch (_) {}
+        tracker.ingest(poses, video.videoWidth / video.videoHeight, worlds, frames % 3 === 0 ? clothesOf(video, poses) : undefined, hs);
       }
       requestAnimationFrame(loop);
     };

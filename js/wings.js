@@ -259,7 +259,12 @@ function armAngles(u, f, h, sg) {
   let bend = a2 - a1; if (bend > Math.PI) bend -= 2 * Math.PI; if (bend < -Math.PI) bend += 2 * Math.PI;
   return { elev: a1, bend };
 }
-export function updateWings(ch) {
+// pitch: optional { R, L } radians from the player's palms (hand reading): the wing turns about
+// its leading edge like a hand out of a car window — palm tipped forward = leading edge up.
+let PITCH_SIGN = 1, PS_R = -1, PS_L = 1;   // measured: + raises the leading edge on both sides
+const _Yb = new THREE.Vector3(0, 1, 0);
+export function _pitchSign(r, l) { PS_R = r; PS_L = l; }
+export function updateWings(ch, pitch = null) {
   const wb = ch.wingBones;
   if (!wb) return;
   const now = performance.now() / 1000;
@@ -291,8 +296,11 @@ export function updateWings(ch) {
     if (lean) tUp.premultiply(_q1.setFromAxisAngle(_X, -lean * LEAN * down));
     const root = wb['wingUp' + s];
     root.quaternion.slerp(tUp, ease(25));
-    wb['wingFore' + s].quaternion.slerp(fore.quaternion, ease(18));
-    wb['wingHand' + s].quaternion.slerp(hand.quaternion, ease(12));
+    // palm pitch (smoothed; eases back to flat when the hand isn't being read)
+    w.pitch = (w.pitch || 0) + ((pitch?.[s] ?? 0) - (w.pitch || 0)) * ease(8);
+    const pq = _q1.setFromAxisAngle(_Yb, PITCH_SIGN * (s === 'R' ? PS_R : PS_L) * w.pitch * 0.5);   // about the bone's own length (Blender bones point along +Y)
+    wb['wingFore' + s].quaternion.slerp(fore.quaternion.clone().multiply(pq), ease(18));
+    wb['wingHand' + s].quaternion.slerp(hand.quaternion.clone().multiply(pq), ease(12));
     // the hinge slides round the body as the arm comes forward or down
     w.hinge += (clamp(Math.max(forward * 1.3, down), 0, 1) - w.hinge) * ease(14);
     const th = w.hinge * Math.PI / 2, base = root.userData.base;

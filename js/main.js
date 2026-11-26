@@ -67,7 +67,8 @@ setInterval(() => {
 const BUILD = document.querySelector('meta[name=build]')?.content || 'dev';   // stamped by tools/stamp.py
 setInterval(() => {
   const live = performance.now() - stats.lastFrame < 1500;
-  const players = tracker.players.map((p, i) => `P${i + 1}${input(p).present ? '' : ' (lost)'}`).join(' ');
+  const icon = (h) => (h ? (h.fist ? '✊' : h.grip < 0.35 ? '✋' : '🤏') : '·');
+  const players = tracker.players.map((p, i) => { const inp = input(p); return `P${i + 1}${inp.present ? '' : ' (lost)'}${inp.hands ? ` ${icon(inp.hands.L)}${icon(inp.hands.R)}` : ''}`; }).join(' ');
   $('hud').innerHTML = [
     `${stats.source}${live ? '' : ' (no frames)'} · <b>${stats.fps}</b> fps · pose <b>${stats.inf}</b> ms`,
     `round trip <b>${stats.rtt ?? '–'}</b> ms · people <b>${stats.people}</b>${stats.linked > 1 ? ` · cameras <b>${stats.linked}</b> linked` : ''}`,
