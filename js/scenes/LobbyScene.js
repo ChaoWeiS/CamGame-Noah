@@ -108,7 +108,7 @@ export class LobbyScene extends Phaser.Scene {
     if (PHONE && stats.source === 'phone' && net.conn?.open && !$('camBtn').hidden) {
       $('lobby').classList.remove('center'); $('camBtn').hidden = true;
       document.body.classList.remove('show-qr');
-      $('status').textContent = 'Phone connected — using it as the camera';
+      $('status').textContent = stats.phoneCam ? 'Phone connected ✓ — using it as the camera' : 'Phone connected ✓ — tap “Start camera” on it';
     }
     const g = this.g;
     g.clear();
@@ -183,7 +183,9 @@ export class LobbyScene extends Phaser.Scene {
     const turnTip = tall.length ? ` · ↻ turn camera ${tall.join(' & ')} sideways` : '';
     this.count.setText(live
       ? `${n} ${n === 1 ? 'person' : 'people'} in view${session.kbCount ? ` + ${session.kbCount} keyboard` : ''}${turnTip}`
-      : (session.kbCount ? `${session.kbCount} keyboard player(s)` : 'No camera yet — scan the QR code with a phone'));
+      : (session.kbCount ? `${session.kbCount} keyboard player(s)`
+        : net.conn?.open ? (stats.phoneCam ? '📱 Phone linked ✓ · camera starting…' : '📱 Phone linked ✓ · tap “Start camera”')
+        : 'No camera yet — scan the QR code with a phone'));
 
     // Everyone raises both hands → 3, 2, 1 (it stops if anyone lowers theirs) → pick animals
     const allUp = (n > 0 && people.every((t) => time - (t.handsUpAt ?? -1e9) < 300)) || this.enterKey.isDown;

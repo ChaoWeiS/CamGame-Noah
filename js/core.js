@@ -13,7 +13,7 @@ export const MAX_PLAYERS = 4;
 export const stats = {
   source: 'none',        // 'phone' | 'webcam' | 'none'
   connected: false,
-  fps: 0, inf: 0, rtt: null, people: 0, lastFrame: 0, camera: '',
+  fps: 0, inf: 0, rtt: null, people: 0, lastFrame: 0, camera: '', phoneCam: false,
   world3D: false,
   phoneBuild: null,      // the phone page's build (from its hello)
   tracks: 0,             // people being tracked (confirmed boxes)
@@ -438,6 +438,11 @@ export const net = {
         } else if (d.type === 'hello') {
           stats.camera = d.camera || '';
           stats.phoneBuild = d.build || 'old';
+          stats.phoneCam = d.cam !== false;          // older phone pages only connect once the camera runs
+          this.roles();
+        } else if (d.type === 'cam') {
+          stats.phoneCam = !!d.on; if (d.camera) stats.camera = d.camera;
+          this.roles();
         }
       });
       c.on('close', () => {
@@ -458,7 +463,8 @@ export const net = {
     if (this.conn) {
       stats.connected = true; stats.source = 'phone';
       const extra = this.conns.filter((c) => c.open).length - 1;
-      this.onStatus(extra > 0 ? `Phone connected (+${extra} on standby)` : 'Phone connected');
+      const cam = stats.phoneCam ? ' — camera on ✓' : ' — waiting for its camera (tap “Start camera” on the phone)';
+      this.onStatus((extra > 0 ? `Phone connected (+${extra} on standby)` : 'Phone connected ✓') + cam);
     }
   },
 };

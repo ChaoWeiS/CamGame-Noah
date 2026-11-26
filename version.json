@@ -1,5 +1,5 @@
 {
- "build": "1126-033452-flight-mirroring-fixed-flaps-count-better",
+ "build": "1126-110609-connect-first",
  "files": [
   "js/autorig.js",
   "js/awake.js",

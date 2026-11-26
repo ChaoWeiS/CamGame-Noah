@@ -32,6 +32,7 @@ document.getElementById('conn').addEventListener('click', () => {
 });
 function connect() {
   const room = $('room').value.trim();
+  if (conn && !conn.destroyed && (conn.open || performance.now() - connAt < 10000)) return;   // already linked / linking
   if (!room) { setConn('No room code', 'bad'); return; }
   if (!peer || peer.destroyed) {
     peer = new Peer();
@@ -47,11 +48,12 @@ function connect() {
     openConn(room);
   }
 }
-let tries = 0, openTimer = null;
+let tries = 0, openTimer = null, connAt = -1e9;
 function openConn(room) {
   tries++;
   setConn(tries > 1 ? `Connecting… (try ${tries})` : 'Connecting…', 'wait');
   if (tries > 2) msg('Still connecting — check the big screen is on this game with its QR code showing, and that both are on the same Wi-Fi. Tap the yellow pill to try again.');
+  connAt = performance.now();
   conn = peer.connect(room, { reliable: false, serialization: 'json' });
   const c = conn;
   // a link that never opens (the screen reloaded, slept, or the network blocks it): start again
@@ -66,8 +68,9 @@ function openConn(room) {
   }, 10000);
   conn.on('open', () => {
     clearTimeout(openTimer); tries = 0;
-    setConn('Connected', 'ok');
-    conn.send({ type: 'hello', ua: navigator.userAgent, camera: currentCameraLabel(), build: document.querySelector('meta[name=build]')?.content });
+    setConn(running ? 'Connected' : 'Connected to the big screen ✓', 'ok');
+    if (!running) msg('Linked to the big screen ✓ — now tap “Start camera”.');
+    conn.send({ type: 'hello', ua: navigator.userAgent, camera: currentCameraLabel(), cam: running, build: document.querySelector('meta[name=build]')?.content });
   });
   conn.on('data', (d) => {
     if (d && d.type === 'ping') conn.send({ type: 'pong', t: d.t });
@@ -351,6 +354,7 @@ $('start').addEventListener('click', async () => {
     }
     msg('Running. You can leave this screen on.');
     running = true;
+    send({ type: 'cam', on: true, camera: currentCameraLabel() });
     keepAwake(true);
     $('start').hidden = true; $('room').hidden = true;
     $('preview').hidden = false;
@@ -371,3 +375,9 @@ $('preview').addEventListener('click', () => {
   document.body.classList.toggle('hidden-preview', !showPreview);
   $('preview').textContent = showPreview ? 'Hide preview (saves battery)' : 'Show preview';
 });
+
+// link up with the big screen straight away (before the camera), so the two steps are separate:
+// first "Connected to the big screen ✓", then "Start camera"
+if ($('room').value.trim()) connect();
+else setConn('Not connected — type the room code', 'wait');
+$('room').addEventListener('change', () => { if (!conn || !conn.open) { try { peer?.destroy(); } catch (_) {} peer = null; conn = null; connAt = -1e9; connect(); } });
