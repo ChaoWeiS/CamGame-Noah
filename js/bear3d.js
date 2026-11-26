@@ -61,6 +61,7 @@ addEventListener('resize', () => {
 const CHARS = [
   { id: 'bear', name: 'Barnaby', emoji: '🐻', file: MODELS.bear },
   { id: 'hamster', name: 'Hammy', emoji: '🐹', file: MODELS.hamster },
+  { id: 'walrus', name: 'Wally', emoji: '🦭', file: MODELS.walrus },
   { id: 'chicken', name: 'Cluck', emoji: '🐔', file: MODELS.chicken },
   { id: 'dog', name: 'Scout', emoji: '🐶', file: MODELS.dog },
 ];

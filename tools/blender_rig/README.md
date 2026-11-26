@@ -40,3 +40,17 @@ of the wing (and the feathers hanging below it) stays on `chest`.
 In the game `js/wings.js` adds these bones to the character, and `updateWings(ch)` copies the player's arm
 joint for joint, through a little drag: shoulder → the beat, elbow → the wing folds at its middle,
 hand → follows the elbow and trails the beat (curls up on the way down, hangs on the way up).
+
+## Adding an animal without the PC (headless Blender: `pip install bpy`)
+Done this way for the walrus (`walrus_joints.json`):
+1. `python3 decimate.py big.glb walrus.glb 0.065` — Tripo's 3–5 M triangles down to a workable size.
+2. Measure with `measure.py`'s `measure()`, then fix joints by hand where the shape is unusual (the
+   walrus's flippers: wrist where the paddle starts, the hand bone along the paddle to `handTip`).
+   Put them in `<folder>/joints.json` as `{ "walrus": {...} }`.
+3. `DECIMATE=0.55 python3 rig_one.py walrus <folder>` — builds the skeleton (rig_animals.py's
+   `build`), weights it with `weights_np.py` (Blender's heat weights failed on this mesh: distance to
+   each bone, limited to the bones that may move that part, smoothed over the mesh), exports
+   `<folder>/walrus_rigged.glb`. Then shrink as in step 6.
+4. Wings: `node borrow_wings.mjs wings/bear.glb wings/walrus.glb <scale> <bear back x y z> <walrus back x y z>`
+   reuses the bear's fitted wings, scaled by height and moved from the bear's back (between the
+   shoulders, at the back surface) to the walrus's.

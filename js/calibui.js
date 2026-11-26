@@ -11,7 +11,7 @@ import { net, tracker, input } from './core.js';
 import { CHARACTERS } from './scenes/common.js';
 
 const $ = (id) => document.getElementById(id);
-const EMOJI = { bear: '🐻', dog: '🐶', chicken: '🐔', hamster: '🐹' };
+const EMOJI = { bear: '🐻', dog: '🐶', chicken: '🐔', hamster: '🐹', walrus: '🦭' };
 const camName = (id) => `Camera ${multicam.cam(id).num}`;
 
 let el = null, map = null, flow = null, paused = [];
