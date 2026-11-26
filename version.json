@@ -1,5 +1,5 @@
 {
- "build": "1127-031743-portraits",
+ "build": "1127-031946-rig-fixes",
  "files": [
   "js/autorig.js",
   "js/awake.js",

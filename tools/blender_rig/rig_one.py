@@ -28,7 +28,7 @@ if tip:   # the hand bone runs along the flipper to its tip
         e = arm.data.edit_bones['hand' + s]; e.tail = g['B']([sg * tip[0], tip[1], tip[2]], 0.0)
     bpy.ops.object.mode_set(mode='OBJECT')
 exec(open('/home/claude/walrus/weights.py').read(), g)
-print('WEIGHT', g['weight_np'](mesh, arm, g['J'][aid]['H']))
+print('WEIGHT', g['weight_np'](mesh, arm, g['J'][aid]['H'], jaw=g['J'][aid].get('jaw')))
 for o in bpy.context.selected_objects: o.select_set(False)
 mesh.select_set(True); arm.select_set(True); bpy.context.view_layer.objects.active = arm
 bpy.ops.export_scene.gltf(filepath=DIR + aid + '_rigged.glb', export_format='GLB', use_selection=True, export_skins=True, export_animations=False)
