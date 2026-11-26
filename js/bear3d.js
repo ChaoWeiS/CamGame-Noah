@@ -64,6 +64,7 @@ const CHARS = [
   { id: 'walrus', name: 'Wally', emoji: '🦭', file: MODELS.walrus },
   { id: 'cat', name: 'Whiskers', emoji: '🐱', file: MODELS.cat },
   { id: 'lion', name: 'Leo', emoji: '🦁', file: MODELS.lion },
+  { id: 'otter', name: 'Ollie', emoji: '🦦', file: MODELS.otter },
   { id: 'chicken', name: 'Cluck', emoji: '🐔', file: MODELS.chicken },
   { id: 'dog', name: 'Scout', emoji: '🐶', file: MODELS.dog },
 ];

@@ -53,6 +53,7 @@ export const CHARACTERS = [
   { id: 'walrus', name: 'Wally' },
   { id: 'cat', name: 'Whiskers' },
   { id: 'lion', name: 'Leo' },
+  { id: 'otter', name: 'Ollie' },
 ];
 // Characters with 2D art only (not offered in the pick screen for now).
 export const EXTRA_CHARACTERS = [

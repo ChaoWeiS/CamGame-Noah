@@ -165,6 +165,12 @@ export class LobbyScene extends Phaser.Scene {
       const footY = Math.min(f.y + f.h - 6, ank.length ? Math.max(...ank) : hipY + (hipY - shY) * 1.3);
       return { x: (hipL.x + hipR.x) / 2, footY, h: (footY - nose.y) * 1.1 };
     });
+    // one shared size for everyone (the middle person's), so the animals keep their own sizes
+    // next to each other (the bear the biggest) instead of following who stands nearer the camera
+    if (spots.length) {
+      const hs = spots.map((o) => o.h).sort((x, y) => x - y), mid = hs[Math.floor(hs.length / 2)];
+      this.commonH = this.commonH ? this.commonH + (mid - this.commonH) * 0.1 : mid;
+    }
     let handsUp = 0;
     const shown = new Set();
     people.forEach((t, i) => {
@@ -177,7 +183,7 @@ export class LobbyScene extends Phaser.Scene {
       const raised = time - (t.handsUpAt ?? -1e9) < 300;
       g.lineStyle(raised ? 6 : 3, PLAYER_COLORS[slot], raised ? 1 : 0.5).strokeRoundedRect(bx0, by0, bx1 - bx0, by1 - by0, 10);
       const gap = Math.min(...spots.filter((o) => o !== sp).map((o) => Math.abs(o.x - sp.x)), Infinity);
-      const h = Math.min(sp.h, gap * 1.15, f.h * 0.85, sp.footY - f.y - 4);
+      const h = Math.min(this.commonH || sp.h, gap * 1.15, f.h * 0.85, sp.footY - f.y - 4);
       const in3D = this.stage.place(slot, id, sp.x, sp.footY, h, t.view.pts, null, time / 1000, t.view.world);
       this.puppets[slot].setVisible(!in3D);
       if (!in3D) this.puppets[slot].pose(t.view.pts, map);

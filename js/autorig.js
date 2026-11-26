@@ -34,6 +34,7 @@ export const EXAGGERATE_FOR = {
   walrus: { torso: 2.3, head: 1.5, wrist: 1.4 },   // Wally: the roundest of all
   cat: { torso: 1.7, head: 1.4, wrist: 1.3 },
   lion: { torso: 1.6, head: 1.3, wrist: 1.3 },
+  otter: { torso: 1.7, head: 1.3, wrist: 1.3 },
 };
 
 // Jiggle physics per animal (set ch.phys = PHYSICS_FOR[id]); amounts 0…1+
@@ -46,7 +47,8 @@ export const PHYSICS_FOR = {
   dog: { belly: 0.3, bob: 0.4, tail: 0.35, wag: 0 },
   walrus: { belly: 1.4, bob: 0.5, tail: 0.3, wag: 0 },
   cat: { belly: 0.4, bob: 0.8, tail: 0.5, wag: 0 },
-  lion: { belly: 0.3, bob: 0.4, tail: 0.8, wag: 0 },   // one-bone tail: a big swing/wag looked like a shaking sausage
+  lion: { belly: 0.3, bob: 0.4, tail: 0.8, wag: 0 },
+  otter: { belly: 0.5, bob: 0.6, tail: 0.7, wag: 0 },   // one-bone tail: a big swing/wag looked like a shaking sausage
 };
 
 // which way each bone points in the T-pose (the rig is built with no rotations)
@@ -61,7 +63,7 @@ const REST = {
 // how far in from the body's edge the shoulder joint sits (1 = at the edge)
 export const SHOULDER_IN = 0.62;
 // rounder animals need their arms a bit further out, or the arms sink into the belly
-const SHOULDER_FOR = { bear: 0.7, dog: 0.38, chicken: 0.66, hamster: 0.82, walrus: 0.75, cat: 0.6, lion: 0.6 };
+const SHOULDER_FOR = { bear: 0.7, dog: 0.38, chicken: 0.66, hamster: 0.82, walrus: 0.75, cat: 0.6, lion: 0.6, otter: 0.5 };
 
 // Building a rig (measuring the body, weighting ~200k vertices) is heavy, so each model is
 // rigged ONCE; every character made from it shares the geometry, skin weights and textures
