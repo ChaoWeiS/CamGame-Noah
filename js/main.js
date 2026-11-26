@@ -71,6 +71,7 @@ setInterval(() => {
   $('hud').innerHTML = [
     `${stats.source}${live ? '' : ' (no frames)'} · <b>${stats.fps}</b> fps · pose <b>${stats.inf}</b> ms`,
     `round trip <b>${stats.rtt ?? '–'}</b> ms · people <b>${stats.people}</b>${stats.linked > 1 ? ` · cameras <b>${stats.linked}</b> linked` : ''}`,
+    ...[...multicam.filled].filter(([, s]) => s >= 1).map(([id, s]) => `camera ${multicam.cam(id).num} filled in <b>${Math.round(s)}</b> s of blocked view`),
     live ? (stats.world3D ? '3D body: <b>✓</b>' : '3D body: <b>✗</b> — reload the phone page') : '',
     `build <b>${BUILD}</b>`,
     stats.phoneBuild && stats.phoneBuild !== BUILD ? `<span style="color:#ffb4a8">phone is on build <b>${stats.phoneBuild}</b> — reload the phone page</span>` : '',

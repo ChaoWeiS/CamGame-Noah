@@ -162,7 +162,9 @@ export const multicam = {
   nextNum: 1,
   session: null,          // calibration in progress
   view: null,             // id of the camera whose picture the game uses
-  spots: [],              // where people stand in the room (for the map)
+  spots: [],              // where people stand in the room (for the map): {x, z, cams, ids}
+  filled: new Map(),      // camera id → seconds it supplied someone the view camera couldn't see
+  lastFuse: 0,
 
   cam(id) {
     let c = this.cams.get(id);
@@ -328,6 +330,7 @@ export const multicam = {
     }
     if (!this.view || !this.cams.get(this.view)?.calib) this.view = (S.ref || this.linked()[0]?.id) ?? null;
     this.session = null;
+    this.filled = new Map();
     return { ok: true, results };
   },
 
@@ -354,7 +357,13 @@ export const multicam = {
     }
     const toView = invert(view.calib.toRoom);
     const poses = [], worlds = [];
-    this.spots = groups.map((g) => { const h = hip(g[0]); return { x: h[0], z: h[2], cams: g.length }; });   // for the map
+    this.spots = groups.map((g) => { const h = hip(g[0]); return { x: h[0], z: h[2], cams: g.length, ids: g.map((p) => p.cam) }; });   // for the map
+    // blind spots caught: people the view camera can't see right now, supplied by the others
+    const dt = Math.min(0.25, Math.max(0, (now - (this.lastFuse || now)) / 1000)); this.lastFuse = now;
+    if (dt > 0 && view.frame && now - view.at < 400) for (const g of groups) {
+      if (g.some((p) => p.cam === view.id)) continue;
+      for (const p of g) this.filled.set(p.cam, (this.filled.get(p.cam) || 0) + dt / g.length);
+    }
     for (const g of groups) {
       const J = [], V = [];
       for (let i = 0; i < 33; i++) {

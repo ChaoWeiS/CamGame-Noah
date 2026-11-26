@@ -1,5 +1,5 @@
 {
- "build": "1126-114459-radar",
+ "build": "1126-121045-radar-coverage",
  "files": [
   "js/autorig.js",
   "js/awake.js",
