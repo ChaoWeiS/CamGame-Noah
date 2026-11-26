@@ -51,10 +51,11 @@ export const CHARACTERS = [
   { id: 'chicken', name: 'Cluck' },
   { id: 'hamster', name: 'Hammy' },
   { id: 'walrus', name: 'Wally' },
+  { id: 'cat', name: 'Whiskers' },
+  { id: 'lion', name: 'Leo' },
 ];
 // Characters with 2D art only (not offered in the pick screen for now).
 export const EXTRA_CHARACTERS = [
-  { id: 'cat', name: 'Whiskers' },
   { id: 'lizard', name: 'Spike' },
   { id: 'mouse', name: 'Squeak' },
   { id: 'pine', name: 'Pine' },

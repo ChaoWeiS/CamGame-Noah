@@ -16,7 +16,7 @@ const WING_EDGE = 0.6;           // the wing's leading edge is this many animal-
 
 // How wide each animal is with its arms down by its sides (half-width ÷ height): the wings must
 // wrap round that without going into the body, so wider animals get bigger wings, hinged wider.
-const GIRTH_FOR = { bear: 0.30, chicken: 0.33, dog: 0.26, hamster: 0.31, walrus: 0.36 };
+const GIRTH_FOR = { bear: 0.30, chicken: 0.33, dog: 0.26, hamster: 0.31, walrus: 0.36, cat: 0.27, lion: 0.28 };
 const wingScale = (girth) => 1.35 * (0.75 + girth * 1.4);      // the Blender wings × this, grown from their roots
 let srcPromise = null;
 function loadSource() {
@@ -154,7 +154,7 @@ function floatGeo(geo) {
 }
 
 function prefitFor(ch) {
-  const id = ch.rigged && ch.src && ['bear', 'chicken', 'dog', 'hamster', 'walrus'].find((k) => ch.src.includes(k));
+  const id = ch.rigged && ch.src && ['bear', 'chicken', 'dog', 'hamster', 'walrus', 'cat', 'lion'].find((k) => ch.src.includes(k));
   if (!id) return null;
   // ?v=build: the code refreshes itself on a new build, but a cached .glb would not
   const v = (typeof document !== 'undefined' && document.querySelector('meta[name=build]')?.content) || '';
