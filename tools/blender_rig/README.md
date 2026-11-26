@@ -43,7 +43,10 @@ hand → follows the elbow and trails the beat (curls up on the way down, hangs 
 
 ## Adding an animal without the PC (headless Blender: `pip install bpy`)
 Done this way for the walrus (`walrus_joints.json`):
-1. `python3 decimate.py big.glb walrus.glb 0.065` — Tripo's 3–5 M triangles down to a workable size.
+1. Shrink without tearing: first `gltf-transform simplify big.glb mid.glb --ratio 0.06 --error 0.004`
+   (keeps every UV seam, so it stops at ~25 %), then `python3 decimate.py mid.glb walrus.glb 0.3`,
+   which joins the seam-split vertices before decimating. Decimating Tripo's split seams directly
+   tears thousands of tiny cracks you can see through (the model looks speckled/noisy).
 2. Measure with `measure.py`'s `measure()`, then fix joints by hand where the shape is unusual (the
    walrus's flippers: wrist where the paddle starts, the hand bone along the paddle to `handTip`).
    Put them in `<folder>/joints.json` as `{ "walrus": {...} }`.
