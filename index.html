@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="build" content="1126-150210-hand-reading">
+<meta name="build" content="1126-153115-ark-kitchen">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Race to the Ark</title>
@@ -56,6 +56,21 @@
     background: rgba(255,255,255,0.88); border: 3px solid var(--c); border-radius: 999px; padding: 0.15em 0.8em; color: #1d3b52;
     font: 700 22px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
   .fruitchip b { margin-left: 0.4em; }
+  .recipe { position: absolute; transform: translate(-50%, -50%); z-index: 24; pointer-events: none; display: flex; align-items: center; gap: 0.25em;
+    background: rgba(255,248,230,0.95); border: 0.2em solid var(--c); border-radius: 0.9em; padding: 0.25em 0.6em; white-space: nowrap;
+    box-shadow: 0 0.25em 0.6em rgba(0,0,0,0.35); font: 800 1em system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #5a3416; }
+  .recipe img { width: 2.6em; height: 2.6em; object-fit: contain; display: block; }
+  .recipe .dish { display: flex; flex-direction: column; align-items: center; }
+  .recipe .dish img { width: 3.2em; height: 3.2em; }
+  .recipe .dish em { font-style: normal; font-size: 0.75em; margin-top: -0.2em; }
+  .recipe .eq { font-size: 1.6em; margin: 0 0.15em; opacity: 0.6; }
+  .recipe .then { font-size: 1.4em; opacity: 0.45; }
+  .recipe .ing { position: relative; border-radius: 0.6em; padding: 0.1em; }
+  .recipe .ing.done img { opacity: 0.35; }
+  .recipe .ing.done::after { content: '✓'; position: absolute; inset: 0; display: grid; place-items: center; color: #2e9e4f; font-size: 2em; text-shadow: 0 0 3px #fff; }
+  .recipe .ing.now { background: #ffe08a; box-shadow: 0 0 0 0.15em var(--c); animation: recipenow 0.9s ease-in-out infinite alternate; }
+  @keyframes recipenow { from { transform: scale(1); } to { transform: scale(1.12); } }
+  .recipe.pop { animation: thoughtpop 0.4s ease-out; }
   .radar { position: absolute; z-index: 20; pointer-events: none; border-radius: 12px; box-shadow: 0 0.3em 0.8em rgba(0,0,0,0.35); }
   .howto { position: absolute; transform: translateX(-50%); z-index: 21; display: flex; gap: 0.8em; pointer-events: none; }
   .howto .hcard { background: rgba(255,248,230,0.94); border: 0.18em solid #1d3b52; border-radius: 0.8em; padding: 0.4em 0.6em 0.5em; text-align: center;

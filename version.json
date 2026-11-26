@@ -1,5 +1,5 @@
 {
- "build": "1126-150210-hand-reading",
+ "build": "1126-153115-ark-kitchen",
  "files": [
   "js/autorig.js",
   "js/awake.js",
@@ -37,6 +37,8 @@
   "games/flappy/index.js",
   "games/fruit/FruitScene.js",
   "games/fruit/index.js",
+  "games/kitchen/KitchenScene.js",
+  "games/kitchen/index.js",
   "games/poses/PosesScene.js",
   "games/poses/index.js",
   "games/poses/posedemo.js",
@@ -49,6 +51,7 @@
   "games/skyrings/index.js",
   "games/flappy/manifest.json",
   "games/fruit/manifest.json",
+  "games/kitchen/manifest.json",
   "games/poses/manifest.json",
   "games/race/manifest.json",
   "games/ski/manifest.json",

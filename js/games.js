@@ -13,7 +13,7 @@ import { session } from './scenes/common.js';
 import { tracker, PLAYER_CSS } from './core.js';
 import { addEntry, best } from './halloffame.js';
 
-export const GAME_IDS = ['race', 'poses', 'ski', 'fruit', 'flappy', 'skyrings'];        // the menu's games, in menu order
+export const GAME_IDS = ['race', 'poses', 'ski', 'fruit', 'kitchen', 'flappy', 'skyrings'];        // the menu's games, in menu order
 
 const manifests = new Map();                       // id → manifest
 const loading = new Map();                         // id → { promise, done, total, ready, error }
