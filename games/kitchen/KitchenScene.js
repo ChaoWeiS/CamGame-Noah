@@ -163,7 +163,8 @@ export class KitchenScene extends Phaser.Scene {
         hands: [{ bone: 'handL', side: 'L', item: null, freeAt: 0, pos: { x: 0, y: 0 }, dwell: null },
           { bone: 'handR', side: 'R', item: null, freeAt: 0, pos: { x: 0, y: 0 }, dwell: null }],
         baskets: SPOTS.map(([dx, dy]) => ({ x: clampX(rect, cx + dx * sz, sz * 0.14), y: chestY + dy * sz, r: sz * 0.13, kind: null })),
-        pot: { x: cx, y: floorY - sz * 0.27, r: sz * 0.24 },
+        stove: { x: cx, w: sz * 0.56, h: sz * 0.27 },
+        pot: { x: cx, y: floorY - sz * 0.27 - sz * 0.2 * 0.86, r: sz * 0.2 },     // sitting on the stove, at tummy height
         card: new RecipeCard(this.game, PLAYER_CSS[pl.slot]),
         chip: this.makeChip(pl), msg: new OverlayText(this.game, cx, rect.y + rect.h * 0.3, n >= 3 ? 26 : 34),
         lost: new OverlayText(this.game, cx, rect.y + rect.h * 0.55, n >= 3 ? 24 : 30, '#ffd2c8'),
@@ -264,6 +265,18 @@ export class KitchenScene extends Phaser.Scene {
   buildProps(pp) {
     pp.baskets.forEach((b) => this.buildBasket(pp, b));
     if (!pp.potMesh) { pp.potMesh = makePot(); this.stage.scene.add(pp.potMesh); }
+    if (!pp.stoveMesh) {
+      // a brick stove with an iron top; fire glowing through the oven door; steam from the pot
+      const t = this.P.stove;
+      pp.stoveMesh = new THREE.Mesh(t.geo, t.mat); pp.stoveH = t.h; this.stage.scene.add(pp.stoveMesh);
+      pp.glow = new THREE.Mesh(new THREE.CircleGeometry(1, 24), new THREE.MeshBasicMaterial({ color: 0xff8a2a, transparent: true, opacity: 0.6, blending: THREE.AdditiveBlending, depthWrite: false }));
+      this.stage.scene.add(pp.glow);
+      this.puffGeo = this.puffGeo || new THREE.SphereGeometry(1, 10, 8);
+      pp.steam = [0, 1, 2, 3, 4].map((i) => {
+        const m = new THREE.Mesh(this.puffGeo, new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0, depthWrite: false }));
+        m.userData.phase = i / 5; this.stage.scene.add(m); return m;
+      });
+    }
   }
   buildBasket(pp, b) {
     if (!b.mesh) {
@@ -484,6 +497,25 @@ export class KitchenScene extends Phaser.Scene {
         b.food.position.set(b.x, -(b.y - (bare ? -b.r * 0.1 : b.r * 0.25) - bob), 360);
         b.food.scale.setScalar(b.r * (bare ? 1.9 : 1.35) * (0.3 + 0.7 * pop));
         b.food.rotation.set(0.25, Math.sin(t * 0.8 + b.x) * 0.4, 0);
+      }
+    }
+    if (pp.stoveMesh) {
+      const S = pp.stove, top = pp.floorY - S.h;
+      pp.stoveMesh.position.set(S.x, -(pp.floorY - S.h / 2), 560);
+      pp.stoveMesh.scale.set(S.w, S.h / pp.stoveH, S.w);
+      pp.stoveMesh.rotation.x = 0.18;
+      const fl = 0.75 + 0.25 * Math.sin(t * 13) * Math.sin(t * 7.3);
+      pp.glow.position.set(S.x, -(pp.floorY - S.h * 0.3), 590);
+      pp.glow.scale.set(S.w * 0.2 * fl, S.h * 0.22 * fl, 1);
+      pp.glow.material.opacity = 0.45 + 0.3 * fl;
+      // steam: puffs rising from the pot (not while it's being poured out)
+      const pouring = pp.pourAt && now - pp.pourAt < POUR_MS;
+      for (const m of pp.steam) {
+        const u = (t * 0.45 + m.userData.phase) % 1;
+        m.visible = !pouring;
+        m.position.set(pp.pot.x + Math.sin(u * 6 + m.userData.phase * 9) * pp.pot.r * 0.4, -(top - pp.pot.r * 1.5 - u * pp.sz * 0.22), 620);
+        m.scale.setScalar(pp.pot.r * (0.08 + u * 0.18));
+        m.material.opacity = 0.28 * Math.sin(u * Math.PI);
       }
     }
     if (pp.potMesh) {
