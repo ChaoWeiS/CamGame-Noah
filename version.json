@@ -1,5 +1,5 @@
 {
- "build": "1126-110609-connect-first",
+ "build": "1126-114459-radar",
  "files": [
   "js/autorig.js",
   "js/awake.js",
@@ -24,6 +24,7 @@
   "js/pose.js",
   "js/puppet.js",
   "js/puppet3d.js",
+  "js/radar.js",
   "js/scenes/GameOverScene.js",
   "js/scenes/LobbyScene.js",
   "js/scenes/PickScene.js",

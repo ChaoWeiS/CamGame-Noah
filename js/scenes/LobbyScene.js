@@ -1,9 +1,10 @@
-import { tracker, stats, net, localCam, PLAYER_COLORS, MAX_PLAYERS } from '../core.js';
+import { tracker, stats, net, localCam, PLAYER_COLORS, PLAYER_CSS, MAX_PLAYERS } from '../core.js';
 import { W, H, txt, sky, drawSkeleton, Hold, session, loadCharacters, CHARACTERS } from './common.js';
 import { Puppet } from '../puppet.js';
 import { Stage3D, preloadCast, OverlayText } from '../stage3d.js';
 import { SkeletonSmoother } from '../body.js';
 import { multicam } from '../multicam.js';
+import { showRadar } from '../radar.js';
 import { snapFaces } from '../faces.js';
 import { PHONE, PHONE_PLAYERS, goFullLandscape } from '../mode.js';
 
@@ -73,6 +74,16 @@ export class LobbyScene extends Phaser.Scene {
       $('hud').hidden = true;
     }
 
+    // 📡 the radar: a small map from above of the cameras and where everyone stands
+    const radarOn = () => { try { return localStorage.getItem('ark-radar') !== 'off'; } catch (_) { return true; } };
+    const setRadar = (on) => {
+      this.radar?.remove(); this.radar = null;
+      if (on) this.radar = showRadar(this.game, { colorOf: (t) => (this.slotOf?.has(t.id) ? PLAYER_CSS[this.slotOf.get(t.id)] : null) });
+      $('radarBtn').textContent = `📡 Map: ${on ? 'on' : 'off'}`;
+    };
+    setRadar(radarOn());
+    $('radarBtn').onclick = () => { const on = !radarOn(); try { localStorage.setItem('ark-radar', on ? 'on' : 'off'); } catch (_) {} setRadar(on); $('radarBtn').blur(); };
+
     this.enterKey = this.input.keyboard.addKey('ENTER');
     // 3D animals copy the people in view (the 2D puppets stand in until they load)
     this.stage = new Stage3D(this.game);
@@ -80,6 +91,7 @@ export class LobbyScene extends Phaser.Scene {
     this.events.once('shutdown', () => {
       $('lobby').hidden = true; $('lobby').classList.remove('center');
       net.previews(false);
+      this.radar?.remove(); this.radar = null;
       this.stage.destroy(); this.big.destroy(); this.msg.destroy();
     });
   }

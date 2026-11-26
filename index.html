@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="build" content="1126-110609-connect-first">
+<meta name="build" content="1126-114459-radar">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Race to the Ark</title>
@@ -56,6 +56,7 @@
     background: rgba(255,255,255,0.88); border: 3px solid var(--c); border-radius: 999px; padding: 0.15em 0.8em; color: #1d3b52;
     font: 700 22px system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
   .fruitchip b { margin-left: 0.4em; }
+  .radar { position: absolute; z-index: 20; pointer-events: none; border-radius: 12px; box-shadow: 0 0.3em 0.8em rgba(0,0,0,0.35); }
   .howto { position: absolute; transform: translateX(-50%); z-index: 21; display: flex; gap: 0.8em; pointer-events: none; }
   .howto .hcard { background: rgba(255,248,230,0.94); border: 0.18em solid #1d3b52; border-radius: 0.8em; padding: 0.4em 0.6em 0.5em; text-align: center;
     box-shadow: 0 0.3em 0.8em rgba(0,0,0,0.3); font: 800 1em system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: #1d3b52; white-space: nowrap; }
@@ -212,6 +213,7 @@
     </div>
     <button id="qrBtn" hidden>Use another phone as the camera</button>
     <button id="linkBtn" hidden>🔗 Link cameras</button>
+    <button id="radarBtn">📡 Map: on</button>
     <div id="kbhelp" class="pc-only"></div>
   </div>
   <div id="hud"></div>
