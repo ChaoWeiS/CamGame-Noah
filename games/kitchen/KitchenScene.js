@@ -1,8 +1,9 @@
 // Ark Kitchen — each animal cooks its own dishes. The recipe at the top of the window shows
 // the dish and its ingredients, in order. Baskets around the animal each hold one ingredient:
-// reach out to the right basket and grab (make a fist, or just hold your paw there a moment),
-// then bring it to the pot. Right ingredient: in it goes. Wrong one, or out of order: it
-// bounces back to its basket. Finish the list and the dish is served.
+// reach out to the right one and grab (make a fist, or just hold your paw there a moment),
+// then bring it to the pot in the middle. The order matters: put in a wrong one and the pot
+// is poured away — a fresh pot, and the recipe starts again from the first ingredient.
+// Finish the list and the dish is served (points for its ingredients, plus a bonus).
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { tracker, input, PLAYER_CSS } from '../../js/core.js';
@@ -48,8 +49,12 @@ const NAME = {
 const SPLASH = { carrot: 0xf08a2a, onion: 0xd9a05b, leek: 0x9ccf6a, cabbage: 0x8cc45a, flour: 0xf5f0e6, tomatoes: 0xe0473a,
   cheese: 0xf6cf3e, mushrooms: 0xc9a27a, bread: 0xd49a52, meat: 0xc94a4a, eggs: 0xfff3d6, butter: 0xf7e07a, jam: 0xb3203a,
   pumpkin: 0xf08a2a, honey: 0xf2b134, milk_jug: 0xffffff, apple: 0xd8302c, pear: 0xc4d65a, grapes: 0x7a3fb5, wheat: 0xe0b866 };
-// basket spots around the animal (× its height, from the middle of its chest): two each side,
-const SPOTS = [[-0.44, -0.25], [-0.44, 0.36], [0.44, -0.25], [0.44, 0.36]];   // arms up at 45° and down at 45° (arms straight out reach neither)
+// six spots around the animal (× its height, from the middle of its chest), three each side:
+// arms up at 45°, arms straight out, arms down at 45°
+const SPOTS = [[-0.44, -0.27], [-0.57, 0.05], [-0.44, 0.38], [0.44, -0.27], [0.57, 0.05], [0.44, 0.38]];
+// ingredients that come in their own sack, basket, jar, jug or dish: no basket under them
+const BARE = new Set(['flour', 'eggs', 'butter', 'tomatoes', 'jam', 'honey', 'milk_jug']);
+const POUR_MS = 1400;
 
 const loader = new GLTFLoader();
 const cache = {};
@@ -157,7 +162,7 @@ export class KitchenScene extends Phaser.Scene {
         pl, rect, sz, colX: cx, x: cx, floorY, chestY, score: 0, dishes: 0, kbFlaps: input(pl).flapCount || 0,
         hands: [{ bone: 'handL', side: 'L', item: null, freeAt: 0, pos: { x: 0, y: 0 }, dwell: null },
           { bone: 'handR', side: 'R', item: null, freeAt: 0, pos: { x: 0, y: 0 }, dwell: null }],
-        baskets: SPOTS.map(([dx, dy]) => ({ x: clampX(rect, cx + dx * sz, sz * 0.14), y: chestY + dy * sz, r: sz * 0.15, kind: null })),
+        baskets: SPOTS.map(([dx, dy]) => ({ x: clampX(rect, cx + dx * sz, sz * 0.14), y: chestY + dy * sz, r: sz * 0.13, kind: null })),
         pot: { x: cx, y: floorY - sz * 0.27, r: sz * 0.24 },
         card: new RecipeCard(this.game, PLAYER_CSS[pl.slot]),
         chip: this.makeChip(pl), msg: new OverlayText(this.game, cx, rect.y + rect.h * 0.3, n >= 3 ? 26 : 34),
@@ -170,7 +175,7 @@ export class KitchenScene extends Phaser.Scene {
     this.timer = new OverlayText(this.game, W / 2, n >= 3 ? H / 2 : H - 30, n >= 3 ? 40 : 44);
     this.banner = new OverlayText(this.game, W / 2, H / 2 - 40, 110);
     this.help = new OverlayText(this.game, W / 2, H / 2 + 70, 28);
-    this.help.setText('📜 Cook the dish on your card — ingredients in order!\n🧺 Reach a basket and make a fist ✊ (or hold your paw there)\n🍲 Bring it to the pot');
+    this.help.setText('📜 Cook the dish on your card — ingredients in order!\n🙌 Stretch to an ingredient and make a fist ✊ (or hold your paw there)\n🍲 Bring it to the pot — the wrong one and the pot is poured away!');
     this.events.once('shutdown', () => {
       this.stage.destroy(); this.timer.destroy(); this.banner.destroy(); this.help.destroy();
       this.p.forEach((pp) => { pp.card.destroy(); pp.chip.remove(); pp.msg.destroy(); pp.lost.destroy(); });
@@ -245,22 +250,11 @@ export class KitchenScene extends Phaser.Scene {
     pp.list = RECIPES[pp.dish]; pp.idx = 0;
     pp.card.set(pp.dish, pp.list, 0); pp.card.pop();
     // fill the baskets: the next ingredient, the rest of the recipe, then others
-    const want = [...new Set(pp.list)];
-    const pick = [want[0]];
-    for (const k of want.slice(1)) if (pick.length < 3) pick.push(k);
+    const pick = [...new Set(pp.list)];
     const others = [...new Set([...Object.values(RECIPES).flat(), ...EXTRA])].filter((k) => !pick.includes(k));
     while (pick.length < pp.baskets.length) pick.push(others.splice(Math.floor(this.r() * others.length), 1)[0]);
     pick.sort(() => this.r() - 0.5);
     pp.baskets.forEach((b, i) => this.fillBasket(pp, b, pick[i]));
-  }
-  // make sure the ingredient needed next is in a basket (swap out one that isn't needed)
-  stockNext(pp) {
-    const next = pp.list[pp.idx];
-    if (!next || pp.baskets.some((b) => b.kind === next)) return;
-    const later = new Set(pp.list.slice(pp.idx));
-    const spare = pp.baskets.filter((b) => !later.has(b.kind));
-    const b = (spare.length ? spare : pp.baskets)[Math.floor(this.r() * (spare.length || pp.baskets.length))];
-    this.fillBasket(pp, b, next);
   }
   fillBasket(pp, b, kind) {
     b.kind = kind; b.popAt = performance.now();
@@ -278,6 +272,7 @@ export class KitchenScene extends Phaser.Scene {
       b.mesh.rotation.x = 0.5;
       this.stage.scene.add(b.mesh);
     }
+    b.mesh.visible = !BARE.has(b.kind);
     if (!b.food && b.kind) { const t = this.I[b.kind]; b.food = new THREE.Mesh(t.geo, t.mat); this.stage.scene.add(b.food); }
   }
 
@@ -374,26 +369,34 @@ export class KitchenScene extends Phaser.Scene {
   intoPot(pp, kind, now, h) {
     if (!kind) return;
     const P = pp.pot;
+    // the pot is being poured out / replaced, or the dish is being served: back to its basket
+    if (pp.idx < 0 || now < (pp.pourAt || 0) + POUR_MS) {
+      this.flyBack(pp, kind, { x: P.x, y: P.y - P.r * 0.4 }, h?.from || pp.baskets.find((b) => b.kind === kind), true);
+      return;
+    }
+    this.splash(pp, kind);
+    pp.potBob = now;
     if (kind === pp.list[pp.idx]) {
-      pp.idx++; pp.score++;
-      this.splash(pp, kind);
-      pp.potBob = now;
+      pp.idx++;
       if (pp.idx >= pp.list.length) {
-        pp.score += DISH_BONUS; pp.dishes++;
+        const pts = pp.list.length + DISH_BONUS;
+        pp.score += pts; pp.dishes++;
         pp.card.set(pp.dish, pp.list, pp.idx);
-        this.say(pp, `${NAME[pp.dish]} is ready! +${1 + DISH_BONUS} 🎉`, '#ffe08a');
+        this.say(pp, `${NAME[pp.dish]} is ready! +${pts} 🎉`, '#ffe08a');
         this.serve(pp, pp.dish);
         pp.idx = -1;                                       // nothing goes in while it's served
         setTimeout(() => { if (this.state === 'play' && this.sys.isActive()) this.newRecipe(pp); }, 1800);
       } else {
         pp.card.set(pp.dish, pp.list, pp.idx);
-        this.say(pp, [`${cap(NAME[kind])} ✓`, `Yum, ${NAME[kind]}! ✓`, `In goes the ${NAME[kind]} ✓`][pp.score % 3]);
-        this.stockNext(pp);
+        this.say(pp, [`${cap(NAME[kind])} ✓`, `Yum, ${NAME[kind]}! ✓`, `In goes the ${NAME[kind]} ✓`][pp.idx % 3]);
       }
     } else {
-      const next = pp.list[pp.idx];
-      this.say(pp, next ? `Not ${NAME[kind]} — ${NAME[next]} next!` : 'Wait for the next dish!', '#ffd2c8');
-      this.flyBack(pp, kind, { x: P.x, y: P.y - P.r * 0.4 }, h?.from || pp.baskets.find((b) => b.kind === kind), true);
+      // wrong one: the pot is poured away and a fresh one comes; start the recipe again
+      const want = pp.list[pp.idx];
+      pp.pourAt = now; pp.pourDir = this.r() < 0.5 ? -1 : 1; pp.poured = false;
+      pp.idx = 0;
+      pp.card.set(pp.dish, pp.list, 0); pp.card.pop();
+      this.say(pp, `Oops — not ${NAME[kind]}${want ? `, it was ${NAME[want]}` : ''}! 🫗\nStart again: ${NAME[pp.list[0]]} first`, '#ffd2c8');
     }
   }
 
@@ -446,10 +449,21 @@ export class KitchenScene extends Phaser.Scene {
       this.bits.push(m);
     }
   }
+  // the stew pouring out over the rim, onto the floor
+  pour(pp) {
+    const P = pp.pot, d = pp.pourDir;
+    this.bitGeo = this.bitGeo || new THREE.IcosahedronGeometry(1, 0);
+    for (let i = 0; i < 26; i++) {
+      const m = new THREE.Mesh(this.bitGeo, new THREE.MeshLambertMaterial({ color: i % 4 ? 0xb5651d : 0x7a3e12 }));
+      m.userData = { x: P.x + d * P.r * 1.1, y: P.y - P.r * 0.3, vx: d * (60 + this.r() * 160), vy: -40 + this.r() * 80, t: -i * 0.012, s: 4 + this.r() * 5 };
+      this.stage.scene.add(m);
+      this.bits.push(m);
+    }
+  }
   moveBits(dt) {
     for (const m of this.bits) {
       const u = m.userData;
-      u.t += dt; u.vy += 700 * dt; u.x += u.vx * dt; u.y += u.vy * dt;
+      u.t += dt; if (u.t < 0) { m.visible = false; continue; } m.visible = true; u.vy += 700 * dt; u.x += u.vx * dt; u.y += u.vy * dt;
       m.position.set(u.x, -u.y, 640); m.scale.setScalar(u.s * Math.max(0, 1 - u.t / 0.7));
     }
     this.bits = this.bits.filter((m) => { if (m.userData.t < 0.7) return true; this.stage.scene.remove(m); m.material.dispose(); return false; });
@@ -466,14 +480,29 @@ export class KitchenScene extends Phaser.Scene {
       b.mesh.scale.setScalar(b.r * 2.3);
       if (b.food) {
         const bob = b.kind === next ? Math.abs(Math.sin(t * 4)) * b.r * 0.35 : 0;
-        b.food.position.set(b.x, -(b.y - b.r * 0.25 - bob), 360);
-        b.food.scale.setScalar(b.r * 1.35 * (0.3 + 0.7 * pop));
+        const bare = BARE.has(b.kind);
+        b.food.position.set(b.x, -(b.y - (bare ? -b.r * 0.1 : b.r * 0.25) - bob), 360);
+        b.food.scale.setScalar(b.r * (bare ? 1.9 : 1.35) * (0.3 + 0.7 * pop));
         b.food.rotation.set(0.25, Math.sin(t * 0.8 + b.x) * 0.4, 0);
       }
     }
     if (pp.potMesh) {
       const P = pp.pot, bob = pp.potBob ? Math.max(0, 1 - (now - pp.potBob) / 400) : 0;
-      pp.potMesh.position.set(P.x, -P.y, 600);
+      let x = P.x, y = P.y, tip = 0, k = 1;
+      const u = pp.pourAt ? (now - pp.pourAt) / POUR_MS : 9;
+      if (u < 0.45) {                                   // tips over to the side, the stew pours out
+        const e = Math.sin(Math.min(1, u / 0.3) * Math.PI / 2);
+        tip = pp.pourDir * 1.9 * e; x += pp.pourDir * P.r * 0.5 * e;
+        if (u > 0.15 && !pp.poured) { pp.poured = true; this.pour(pp); }
+      } else if (u < 0.6) {                             // gone
+        k = 0;
+      } else if (u < 1) {                               // a fresh pot drops in, with a little bounce
+        const v = (u - 0.6) / 0.4;
+        y -= (1 - v) * (1 - v) * P.r * 3 - Math.sin(v * Math.PI) * P.r * 0.15 * (v > 0.7 ? 1 : 0);
+      }
+      pp.potMesh.visible = k > 0;
+      pp.potMesh.position.set(x, -y, 600);
+      pp.potMesh.rotation.set(0.42, 0, -tip);
       pp.potMesh.scale.set(P.r * 2 * (1 + bob * 0.08), P.r * 2 * (1 - bob * 0.06), P.r * 2);
       pp.potMesh.userData.stew.position.y = 0.02 + Math.sin(t * 6) * 0.01;
     }
