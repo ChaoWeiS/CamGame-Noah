@@ -462,14 +462,22 @@ export class RiggedCharacter {
         if (theta && fwdAxis.lengthSq() > 0.5) _fq.premultiply(_fw2.setFromAxisAngle(fwdAxis, theta));
         return _fq.multiply(q0);
       };
+      // two ways out: to the side (an arm hanging by a round body) or forward (hands raised in
+      // front, on the tummy, at the mouth). Take whichever needs the smaller turn; stick with
+      // last frame's choice unless the other is clearly better, so it doesn't flip.
       let phi = 0, theta = 0;
       if (pen() > 0) {
-        for (phi = 0.1; phi <= 0.8; phi += 0.1) { up.quaternion.copy(rot(phi, 0)); if (pen() <= 0) break; }
-        if (phi > 0.8) {
-          phi = 0.8;
+        let po = 9, pf = 9;
+        for (let a = 0.1; a <= 0.81; a += 0.1) { up.quaternion.copy(rot(a, 0)); if (pen() <= 0) { po = a; break; } }
+        for (let a = 0.1; a <= 1.01; a += 0.1) { up.quaternion.copy(rot(0, a)); if (pen() <= 0) { pf = a; break; } }
+        const st0 = this._armFix[s];
+        const preferFwd = st0.mode === 'f' ? pf <= po + 0.2 : pf + 0.2 < po;
+        if (po === 9 && pf === 9) {          // neither alone: some of both
+          phi = 0.5;
           for (theta = 0.1; theta <= 1.0; theta += 0.1) { up.quaternion.copy(rot(phi, theta)); if (pen() <= 0) break; }
           theta = Math.min(theta, 1.0);
-        }
+        } else if (preferFwd) { theta = pf; st0.mode = 'f'; }
+        else { phi = po; st0.mode = 'o'; }
       }
       // ease, so the arm doesn't pop
       const st = this._armFix[s];
@@ -633,7 +641,8 @@ export class RiggedCharacter {
     const aim = (name, from, to, maxBend = 0) => {
       const bone = this.b[name];
       const tos = [].concat(to);
-      if (!(ok(from) && tos.every(ok))) { bone.quaternion.slerp(_q.identity(), k * 0.3); return; }
+      if (!(ok(from) && tos.every(ok))) { this.lostLimb(name, k); return; }
+      this._lost && (this._lost[name] = 0);
       _d.set(0, 0, 0);
       tos.forEach((t) => _d.add(P(t)));
       _d.multiplyScalar(1 / tos.length).sub(P(from)).normalize().applyQuaternion(_rq);
@@ -641,7 +650,14 @@ export class RiggedCharacter {
       _d.applyQuaternion(_pq.invert());
       _q.setFromUnitVectors(this.restDir(name), _d);
       if (maxBend) _q.copy(amp(_q, ex.wrist, maxBend));   // only wrists have a bend limit
-      bone.quaternion.slerp(_q, k);
+      // a big sudden jump is usually the tracker flipping (an arm pointing at the camera has
+      // shaky depth): follow it more slowly so the limb doesn't snap
+      const jump = bone.quaternion.angleTo(_q);
+      // and a joint the camera is unsure of (going out of view: the tracker is guessing)
+      // only moves a little
+      const vis = Math.min(pts[from].v, ...tos.map((t) => pts[t].v));
+      const sure = Math.min(1, (vis - 0.4) / 0.35);
+      bone.quaternion.slerp(_q, (jump > 0.9 ? k * 0.35 : k) * sure);
     };
     const hipL = P(L.lHip), hipR = P(L.rHip), shL = P(L.lShoulder), shR = P(L.rShoulder);
     const up = shL.clone().add(shR).sub(hipL).sub(hipR).multiplyScalar(0.5);
@@ -683,6 +699,30 @@ export class RiggedCharacter {
     this.used3D = true;
   }
 
+  // a limb the camera can't see: hold it still for a moment (it's often just a blink of the
+  // tracker), then let it relax — arms hang down by the sides, elbows a little bent; legs
+  // and paws straighten. (Rest rotation for an arm is the T-pose, so never ease back to that.)
+  lostLimb(name, k) {
+    this._lost = this._lost || {};
+    const n = (this._lost[name] = (this._lost[name] || 0) + 1);
+    if (n < 15) return;                                       // ~½ s at 30 fps: hold
+    this.relax(name, k * 0.12);
+  }
+  // ease one bone toward a relaxed standing pose
+  relax(name, kk, sway = 0) {
+    const bone = this.b[name];
+    const arm = { upperL: [-0.25 - sway, -1, 0.08], upperR: [0.25 + sway, -1, 0.08], foreL: [-0.05, -1, 0.12], foreR: [0.05, -1, 0.12] }[name];
+    if (arm) {
+      // down, slightly out (upper arm) / slightly forward (forearm), in the body's frame
+      this.root.getWorldQuaternion(_rq);
+      _d.set(...arm).normalize().applyQuaternion(_rq);
+      bone.parent.getWorldQuaternion(_pq);
+      _d.applyQuaternion(_pq.invert());
+      _q.setFromUnitVectors(this.restDir(name), _d);
+    } else _q.identity();
+    bone.quaternion.slerp(_q, kk);
+  }
+
   // clear what pose3D set, before going back to the 2D (rotation.z) way of posing
   reset3D() {
     if (!this.used3D) return;
@@ -706,10 +746,24 @@ export class RiggedCharacter {
 
   idle(t) {
     this.unfold();
+    if (this.used3D) {
+      // the player just dropped out of a 3D pose: relax from where the body was (snapping
+      // every bone back to its rest rotation would flash a T-pose)
+      const w = Math.sin(t * 2) * 0.08;
+      this.root.updateMatrixWorld(true);
+      for (const name of ['hips', 'spine', 'chest', 'head', 'upperL', 'upperR', 'foreL', 'foreR', 'handL', 'handR', 'thighL', 'thighR', 'shinL', 'shinR']) {
+        if (!this.b[name]) continue;
+        this.relax(name, 0.06, w);
+        this.b[name].updateMatrixWorld(true);
+      }
+      this.hop *= 0.9; this.b.hips.position.y = this.hipY0 + this.hop;
+      this.adjustShoulders();
+      return;
+    }
     this.reset3D();
     const w = Math.sin(t * 2) * 0.2;
     const ease = (name, target) => { const cur = this.a[name] ?? 0; this.a[name] = cur + (target - cur) * 0.08; this.b[name].rotation.z = -this.a[name]; };
-    ease('upperL', -1.0 + w); ease('upperR', 1.0 - w); ease('foreL', -0.2); ease('foreR', 0.2); ease('handL', 0); ease('handR', 0);
+    ease('upperL', -1.3 + w * 0.4); ease('upperR', 1.3 - w * 0.4); ease('foreL', -0.15); ease('foreR', 0.15);   // arms hang relaxed, a gentle sway ease('handL', 0); ease('handR', 0);
     ease('hips', 0); ease('chest', 0); ease('head', 0); this.b.head.rotation.y *= 0.9;
     ['thighL', 'thighR', 'shinL', 'shinR'].forEach((k) => ease(k, 0));
     this.tilt *= 0.9; this.b.spine.rotation.z = -this.tilt;
