@@ -266,20 +266,50 @@ function uprightFrame() {
   return smallCv;
 }
 
-// ---------- staying awake, with a dark screen ----------
-// A web page can't keep the camera running with the screen OFF (the browser pauses the
-// page). So the phone stays awake, and after a while without a touch the page goes fully
-// black instead: on phones whose screens light each pixel (OLED) black pixels are off, so
-// it looks off and uses little power — while the camera keeps tracking. Tap to wake it.
-const SAVER_AFTER = 25000;
-let lastTouch = performance.now(), saver = false;
+// ---------- staying awake, with a dark, LOCKED screen ----------
+// A web page can't keep the camera running with the screen OFF: the power button makes the
+// phone stop the page's camera. So the phone stays awake, and after a while without a touch
+// (or the 🌙 button) the page goes fully black instead: on phones whose screens light each
+// pixel (OLED) black pixels are off, so it looks off and uses little power — while the
+// camera keeps tracking. The black screen is LOCKED: taps and brushes do nothing (a phone on
+// a stand gets bumped); hold a finger on it for 2 s to wake it.
+const SAVER_AFTER = 25000, HOLD_MS = 2000;
+let lastTouch = performance.now(), saver = false, holdT = null, holdStart = 0;
 function setSaver(on) {
   if (saver === on) return;
   saver = on;
   $('saver').hidden = !on;
+  endHold();
+  if (on) $('saverMsg').textContent = '● camera running · hold 2 s to wake';
 }
-for (const ev of ['pointerdown', 'touchstart', 'keydown']) window.addEventListener(ev, () => { lastTouch = performance.now(); setSaver(false); }, { passive: true });
-setInterval(() => { if (running && performance.now() - lastTouch > SAVER_AFTER) setSaver(true); }, 1000);
+function endHold() {
+  if (holdT) { clearInterval(holdT); holdT = null; }
+  $('saverRing').style.setProperty('--p', 0);
+  $('saverRing').hidden = true;
+}
+for (const ev of ['pointerdown', 'touchstart', 'keydown']) window.addEventListener(ev, () => { if (!saver) lastTouch = performance.now(); }, { passive: true });
+setInterval(() => { if (running && !saver && performance.now() - lastTouch > SAVER_AFTER) setSaver(true); }, 1000);
+{
+  const el = $('saver');
+  const swallow = (e) => { e.preventDefault(); e.stopPropagation(); };
+  el.addEventListener('pointerdown', (e) => {
+    swallow(e);
+    if (holdT) return;
+    holdStart = performance.now();
+    $('saverRing').hidden = false;
+    $('saverMsg').textContent = 'keep holding…';
+    holdT = setInterval(() => {
+      const p = (performance.now() - holdStart) / HOLD_MS;
+      $('saverRing').style.setProperty('--p', Math.min(1, p));
+      if (p >= 1) { lastTouch = performance.now(); setSaver(false); }
+    }, 50);
+  });
+  for (const ev of ['pointerup', 'pointercancel', 'pointerleave']) el.addEventListener(ev, (e) => {
+    swallow(e);
+    if (saver && holdT) { endHold(); $('saverMsg').textContent = '● camera running · hold 2 s to wake'; }
+  });
+  for (const ev of ['click', 'dblclick', 'contextmenu', 'touchstart', 'touchend', 'wheel']) el.addEventListener(ev, swallow, { passive: false });
+}
 
 // ---------- main loop ----------
 function loop() {

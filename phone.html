@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta name="build" content="1128-024544-no-collide">
+<meta name="build" content="1128-025722-lock-screen">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Race to the Ark — Camera</title>
@@ -18,6 +18,10 @@
   .hidden-preview video, .rotated video { visibility: hidden; }
   #saver { position: fixed; inset: 0; z-index: 100; background: #000; display: flex; align-items: flex-end; justify-content: center; }
   #saver[hidden] { display: none; }
+  #saver { touch-action: none; user-select: none; -webkit-user-select: none; -webkit-touch-callout: none; }
+  #saverRing { position: absolute; left: 50%; top: 50%; width: 90px; height: 90px; margin: -45px 0 0 -45px; border-radius: 50%;
+    background: conic-gradient(#3a3a3a calc(var(--p, 0) * 360deg), #111 0); }
+  #saverRing[hidden] { display: none; }
   #saver span { color: #2a2a2a; font: 13px system-ui, sans-serif; margin-bottom: 4vh; animation: breathe 4s ease-in-out infinite; }
   @keyframes breathe { 50% { color: #444; } }
   #turnTip { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
@@ -49,7 +53,7 @@
 <div id="stage">
   <video id="video" playsinline muted></video>
   <canvas id="overlay"></canvas>
-  <div id="saver" hidden><span>● camera running · tap to wake</span></div>
+  <div id="saver" hidden><div id="saverRing" hidden></div><span id="saverMsg">● camera running · hold 2 s to wake</span></div>
   <div id="turnTip" hidden><b>↻</b><br>Turn this phone sideways<br><small>a landscape view fits far more people</small></div>
 </div>
 
@@ -76,7 +80,7 @@
   <div id="caminfo" class="tip"></div>
   <button id="take" hidden>Make this the main camera (in front of the players)</button>
   <button id="preview" class="secondary" hidden>Hide preview (saves battery)</button>
-  <button id="darkBtn" class="secondary" hidden>🌙 Dark screen now (camera keeps going)</button>
+  <button id="darkBtn" class="secondary" hidden>🌙 Lock &amp; darken screen (camera keeps going)</button>
   <p class="tip"><b>Turn the phone sideways (landscape)</b> for a much wider view — the picture is turned upright for you. Pick the widest camera in the list (try each one and keep the one that shows the most). Stand it about 3 m from the players so everyone fits head to toe. Everything stays on this phone and the big screen — only stick-figure points are sent, never video.</p>
 </div>
 
