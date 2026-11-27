@@ -418,6 +418,32 @@ export class RiggedCharacter {
     }
     return (this._rest[name] = d);
   }
+  // how far out (as the sideways part of a unit direction) an upper arm pointing up must
+  // lean so the paw passes beside the head rather than in front of the face
+  raiseSpread() {
+    if (this._spread !== undefined) return this._spread;
+    const j = this.joints, H = this.height, b = this.b, root = this.root;
+    root.updateMatrixWorld(true);
+    const P = (bone) => root.worldToLocal(bone.getWorldPosition(new THREE.Vector3()));
+    const sh = Math.abs(P(b.upperR).x), la = b.foreR.position.length() + b.handR.position.length() * 1.3;
+    // the head's real half-width, from the mesh above the neck (a lion's mane is much wider
+    // than its head is tall); ears and tufts are left out by taking the 90th percentile
+    let rh = (H - j.neckY) * 0.42;
+    const pos = this.mesh?.geometry?.attributes?.position;
+    if (pos) {
+      const xs = [];
+      this.mesh.updateMatrixWorld(true);
+      const v = new THREE.Vector3(), step = Math.max(1, Math.floor(pos.count / 6000));
+      for (let i = 0; i < pos.count; i += step) {
+        v.fromBufferAttribute(pos, i).applyMatrix4(this.mesh.matrixWorld); root.worldToLocal(v);   // the rest pose, in the character's own units
+        if (v.y > j.neckY + H * 0.03) xs.push(Math.abs(v.x));
+      }
+      if (xs.length > 50) { xs.sort((a, c) => a - c); rh = Math.max(rh, xs[Math.floor(xs.length * 0.9)]); }
+    }
+    this._headR = rh;
+    rh *= 1.1;                                       // a little room
+    return (this._spread = la > 1e-6 ? Math.max(0, Math.min(0.7, (rh - sh) / la)) : 0);
+  }
   unfixArms() {
     if (!this._fix) return;
     for (const [name, q] of Object.entries(this._fix)) this.b[name].quaternion.copy(q);
@@ -432,7 +458,8 @@ export class RiggedCharacter {
     const top = chestP.clone().add(chestP.clone().sub(hipsP).setLength((j.armRootY - j.chestY) * 0.6 + H * 0.02));
     const zc = ((j.frontZ || 0) + (j.backZ || 0)) / 2, rz = Math.max(H * 0.06, ((j.frontZ || 0) - (j.backZ || 0)) / 2);
     const rx = j.sx * 0.82, m = H * 0.035;
-    const head = P(b.head, 0, headLen * 0.5, 0), rh = headLen * 0.42;
+    this.raiseSpread();
+    const head = P(b.head, 0, headLen * 0.5, 0), rh = Math.min(headLen * 0.5, this._headR ?? headLen * 0.42);
     // how deep a point is inside the body or head (≤ 0 = outside)
     const depth = (p) => {
       const ax = top.clone().sub(hipsP), t = Math.max(0, Math.min(1, p.clone().sub(hipsP).dot(ax) / ax.lengthSq()));
@@ -456,7 +483,8 @@ export class RiggedCharacter {
       // a little away from it), and only if that isn't enough, forward as well
       const dir = fore.position.clone().applyQuaternion(q0).normalize();
       const fwdAxis = dir.clone().cross(_fz).normalize();
-      const outSign = s === 'R' ? 1 : -1;
+      // turning about the body's front axis opens a hanging arm outward but a raised arm inward
+      const outSign = (s === 'R' ? 1 : -1) * (dir.y > 0 ? -1 : 1);
       const rot = (phi, theta) => {
         _fq.setFromAxisAngle(_fz, outSign * phi);
         if (theta && fwdAxis.lengthSq() > 0.5) _fq.premultiply(_fw2.setFromAxisAngle(fwdAxis, theta));
@@ -466,7 +494,13 @@ export class RiggedCharacter {
       // front, on the tummy, at the mouth). Take whichever needs the smaller turn; stick with
       // last frame's choice unless the other is clearly better, so it doesn't flip.
       let phi = 0, theta = 0;
-      if (pen() > 0) {
+      // a raised arm (elbow above the shoulder) can only be hitting the head: open it out
+      // to the side, never swing it forward over the face
+      const raised = P(fore).y > P(up).y + H * 0.02;
+      if (raised && pen() > 0) {
+        for (phi = 0.1; phi <= 1.2; phi += 0.1) { up.quaternion.copy(rot(phi, 0)); if (pen() <= 0) break; }
+        phi = Math.min(phi, 1.2); this._armFix[s].mode = 'o';
+      } else if (pen() > 0) {
         let po = 9, pf = 9;
         for (let a = 0.1; a <= 0.81; a += 0.1) { up.quaternion.copy(rot(a, 0)); if (pen() <= 0) { po = a; break; } }
         for (let a = 0.1; a <= 1.01; a += 0.1) { up.quaternion.copy(rot(0, a)); if (pen() <= 0) { pf = a; break; } }
@@ -645,7 +679,24 @@ export class RiggedCharacter {
       this._lost && (this._lost[name] = 0);
       _d.set(0, 0, 0);
       tos.forEach((t) => _d.add(P(t)));
-      _d.multiplyScalar(1 / tos.length).sub(P(from)).normalize().applyQuaternion(_rq);
+      _d.multiplyScalar(1 / tos.length).sub(P(from)).normalize();
+      // cartoon bodies: the shoulders sit close together under a big head, so a person's
+      // arm raised straight up (or up in front) would put the paw over the animal's face.
+      // The higher an upper arm points, the more it opens out — just enough to clear the head.
+      if (name === 'upperL' || name === 'upperR' || name === 'foreL' || name === 'foreR') {
+        // the body's own up and outward directions (whatever the camera's axes are)
+        const uv = up.clone().normalize();
+        const ov = shR.clone().sub(shL).addScaledVector(uv, -shR.clone().sub(shL).dot(uv)).normalize();
+        if (name.endsWith('L')) ov.negate();
+        const need = this.raiseSpread(), u = _d.dot(uv), o = _d.dot(ov);
+        const want = need * Math.min(1, Math.max(0, u) * 1.6);
+        if (want > 0 && o < want) {
+          const rest = _d.clone().addScaledVector(ov, -o);          // the up/forward part
+          const r = Math.sqrt(Math.max(0, 1 - want * want)) / Math.max(1e-6, rest.length());
+          _d.copy(rest.multiplyScalar(r)).addScaledVector(ov, want);
+        }
+      }
+      _d.applyQuaternion(_rq);
       bone.parent.getWorldQuaternion(_pq);
       _d.applyQuaternion(_pq.invert());
       _q.setFromUnitVectors(this.restDir(name), _d);
