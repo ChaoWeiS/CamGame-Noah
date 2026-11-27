@@ -7,7 +7,11 @@ export const TV = /\b(TV|SmartTV|SMART-TV|GoogleTV|Android TV|AFT[A-Z]+|Tizen|We
 const phoneUA = /Android.+Mobile|iPhone|iPod|Windows Phone/i.test(navigator.userAgent);
 const smallTouch = matchMedia('(pointer: coarse)').matches && navigator.maxTouchPoints > 0 && Math.min(screen.width, screen.height) < 600;
 export const PHONE = forced ? forced === 'phone' : (!TV && (phoneUA || smallTouch));
-export const LITE = PHONE;              // lighter graphics
+// lighter graphics (smaller models) on phones, TVs, TV boxes and anything short of memory:
+// a TV browser runs out of memory loading the detailed animals and crashes
+const androidNoTouch = /Android/i.test(navigator.userAgent) && !/Mobile/i.test(navigator.userAgent) && !(navigator.maxTouchPoints > 0);
+const lowMemory = navigator.deviceMemory !== undefined && navigator.deviceMemory <= 4;
+export const LITE = PHONE || TV || androidNoTouch || lowMemory;
 export const PHONE_PLAYERS = 2;
 
 // full screen + landscape (needs a tap; quietly does nothing where not allowed)
