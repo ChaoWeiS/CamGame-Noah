@@ -396,6 +396,27 @@ export class RiggedCharacter {
   // until it's clear — so a hand on the tummy or at the mouth rests in front of the body
   // (from the front it looks the same as the player's pose). Arms may still cross each other.
   // Call unfixArms() before posing and fixArms() after.
+  // which way a bone really points in this model's rest pose (towards its child joint). The
+  // shared REST table says straight out to the side; models whose arms reach forward a little
+  // (the walrus's flippers, the lion's and otter's paws) would otherwise keep that forward
+  // angle on top of the player's pose, hands always in front.
+  restDir(name) {
+    this._rest = this._rest || {};
+    if (this._rest[name]) return this._rest[name];
+    const child = { upperL: 'foreL', upperR: 'foreR', foreL: 'handL', foreR: 'handR', handL: 'foreL', handR: 'foreR', thighL: 'shinL', thighR: 'shinR' }[name];
+    let d = REST[name];
+    const b = this.b[name], c = this.b[child];
+    if (b && c) {
+      // the hand has no child: it carries on the forearm's direction
+      const v = name.startsWith('hand') ? c.parent === b ? c.position.clone() : this.b[child].children.includes(b) ? b.position.clone() : null : c.parent === b ? c.position.clone() : null;
+      if (v && v.lengthSq() > 1e-10) {
+        if (!name.startsWith('thigh')) v.y = 0;      // arms: only the forward reach (keeps the older animals as they were)
+        v.normalize();
+        if (v.dot(REST[name]) > 0.5) d = v;          // sanity: never far off the usual direction
+      }
+    }
+    return (this._rest[name] = d);
+  }
   unfixArms() {
     if (!this._fix) return;
     for (const [name, q] of Object.entries(this._fix)) this.b[name].quaternion.copy(q);
@@ -607,7 +628,7 @@ export class RiggedCharacter {
       _d.multiplyScalar(1 / tos.length).sub(P(from)).normalize().applyQuaternion(_rq);
       bone.parent.getWorldQuaternion(_pq);
       _d.applyQuaternion(_pq.invert());
-      _q.setFromUnitVectors(REST[name], _d);
+      _q.setFromUnitVectors(this.restDir(name), _d);
       if (maxBend) _q.copy(amp(_q, ex.wrist, maxBend));   // only wrists have a bend limit
       bone.quaternion.slerp(_q, k);
     };
