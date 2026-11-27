@@ -69,6 +69,7 @@ const SHOULDER_FOR = { bear: 0.7, dog: 0.38, chicken: 0.66, hamster: 0.82, walru
 // rigged ONCE; every character made from it shares the geometry, skin weights and textures
 // and only gets its own bones. (Character select used to rig 4 animals × 4 players afresh.)
 const rigCache = new Map();
+const _fw2 = new THREE.Quaternion();
 const _fv = new THREE.Vector3(), _fw = new THREE.Vector3(), _fz = new THREE.Vector3(0, 0, 1), _fx = new THREE.Vector3(1, 0, 0), _fdown = new THREE.Vector3(0, -1, 0);
 const _fq = new THREE.Quaternion(), _fq2 = new THREE.Quaternion(), _fq3 = new THREE.Quaternion(), _fe = new THREE.Euler(), _fm = new THREE.Matrix4();
 export function loadRiggedCharacter(url, opts = {}) {
@@ -442,7 +443,7 @@ export class RiggedCharacter {
       return Math.max(torso, hd);
     };
     this._fix = this._fix || {};
-    this._armTheta = this._armTheta || { L: 0, R: 0 };
+    this._armFix = this._armFix || { L: { phi: 0, theta: 0 }, R: { phi: 0, theta: 0 } };
     for (const s of ['L', 'R']) {
       const up = b['upper' + s], fore = b['fore' + s], hand = b['hand' + s];
       const pen = () => {
@@ -451,22 +452,32 @@ export class RiggedCharacter {
         return Math.max(depth(e), depth(e.clone().lerp(w, 0.5)), depth(w), depth(tip));
       };
       const q0 = up.quaternion.clone();
-      // forward axis for this arm: (arm direction) × (the body's front), in the chest's space
+      // an arm inside the body moves OUT to the side first (arms hanging by a round body rest
+      // a little away from it), and only if that isn't enough, forward as well
       const dir = fore.position.clone().applyQuaternion(q0).normalize();
-      const axis = dir.clone().cross(_fz).normalize();
-      let theta = 0;
-      if (axis.lengthSq() > 0.5 && pen() > 0) {
-        for (theta = 0.1; theta <= 1.4; theta += 0.1) {
-          up.quaternion.copy(_fq.setFromAxisAngle(axis, theta)).multiply(q0);
-          if (pen() <= 0) break;
+      const fwdAxis = dir.clone().cross(_fz).normalize();
+      const outSign = s === 'R' ? 1 : -1;
+      const rot = (phi, theta) => {
+        _fq.setFromAxisAngle(_fz, outSign * phi);
+        if (theta && fwdAxis.lengthSq() > 0.5) _fq.premultiply(_fw2.setFromAxisAngle(fwdAxis, theta));
+        return _fq.multiply(q0);
+      };
+      let phi = 0, theta = 0;
+      if (pen() > 0) {
+        for (phi = 0.1; phi <= 0.8; phi += 0.1) { up.quaternion.copy(rot(phi, 0)); if (pen() <= 0) break; }
+        if (phi > 0.8) {
+          phi = 0.8;
+          for (theta = 0.1; theta <= 1.0; theta += 0.1) { up.quaternion.copy(rot(phi, theta)); if (pen() <= 0) break; }
+          theta = Math.min(theta, 1.0);
         }
       }
       // ease, so the arm doesn't pop
-      const shown = this._armTheta[s] + (theta - this._armTheta[s]) * (theta > this._armTheta[s] ? 0.6 : 0.25);
-      this._armTheta[s] = shown;
-      if (shown > 0.005 && axis.lengthSq() > 0.5) {
+      const st = this._armFix[s];
+      st.phi += (phi - st.phi) * (phi > st.phi ? 0.6 : 0.25);
+      st.theta += (theta - st.theta) * (theta > st.theta ? 0.6 : 0.25);
+      if (st.phi > 0.005 || st.theta > 0.005) {
         this._fix['upper' + s] = q0;
-        up.quaternion.copy(_fq.setFromAxisAngle(axis, shown)).multiply(q0);
+        up.quaternion.copy(rot(st.phi, st.theta));
       } else up.quaternion.copy(q0);
       up.updateMatrixWorld(true);
     }
