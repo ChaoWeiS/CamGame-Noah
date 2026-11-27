@@ -70,6 +70,7 @@ const SHOULDER_FOR = { bear: 0.7, dog: 0.38, chicken: 0.66, hamster: 0.82, walru
 // and only gets its own bones. (Character select used to rig 4 animals × 4 players afresh.)
 const rigCache = new Map();
 const _fw2 = new THREE.Quaternion();
+const ARM_COLLIDE = new URLSearchParams(globalThis.location?.search || '').get('collide') === '1';
 const _fv = new THREE.Vector3(), _fw = new THREE.Vector3(), _fz = new THREE.Vector3(0, 0, 1), _fx = new THREE.Vector3(1, 0, 0), _fdown = new THREE.Vector3(0, -1, 0);
 const _fq = new THREE.Quaternion(), _fq2 = new THREE.Quaternion(), _fq3 = new THREE.Quaternion(), _fe = new THREE.Euler(), _fm = new THREE.Matrix4();
 export function loadRiggedCharacter(url, opts = {}) {
@@ -450,6 +451,9 @@ export class RiggedCharacter {
     this._fix = null;
   }
   fixArms() {
+    // Off: limbs may go into the body wherever the player moves them — pushing them out made
+    // arms jump around. (?collide=1 in the address turns it back on, for comparing.)
+    if (!ARM_COLLIDE) return;
     const j = this.joints, H = this.height, b = this.b, root = this.root;
     root.updateMatrixWorld(true);
     const P = (bone, x = 0, y = 0, z = 0) => root.worldToLocal(bone.localToWorld(_fv.set(x, y, z))).clone();

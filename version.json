@@ -1,5 +1,5 @@
 {
- "build": "1128-023801-arms-up",
+ "build": "1128-024544-no-collide",
  "files": [
   "js/autorig.js",
   "js/awake.js",
