@@ -29,6 +29,8 @@ export const stats = {
 const CONFIRM_HITS = 3;      // frames before a new person counts
 const KEEP_MS = 800;         // how long a missing person keeps their id
 const PLAYER_KEEP_MS = 2500; // …and a player (hidden behind someone walking past, say)
+const REMATCH_RELAX_MS = 1500; // a missing player then takes back anyone plausible, anywhere in view
+const REMATCH_ANY_MS = 5000;   // …and, as the only one missing, the only person left, whatever their clothes
 
 function boxOf(pts) {
   let x0 = Infinity, y0 = Infinity, x1 = -Infinity, y1 = -Infinity, n = 0, vis = 0;
@@ -215,6 +217,10 @@ class Tracker {
         }
         if (best) { t = best; pl.trackId = best.id; claimed.add(best.id); }
       }
+      if ((!t || !t.seen) && now - pl.lastSeen > REMATCH_RELAX_MS) {
+        t = this.rematchRelaxed(pl, claimed, now);
+        if (t) { pl.trackId = t.id; claimed.add(t.id); stats.rematched = (stats.rematched || 0) + 1; }
+      }
       if (t && t.lastSeen === stats.lastFrame) {
         pl.body.update(t.pts, t.world);
         pl.hands = t.hands || null;
@@ -239,6 +245,35 @@ class Tracker {
       }
     }
     this.fixSwaps(cams, now);
+  }
+
+  // A player missing for a while who still hasn't been matched: the strict rules above (same
+  // spot, same size, same clothes) can keep them out for good — they came back somewhere else,
+  // nearer or farther, in other light, or the main camera changed. So the longer they're
+  // gone, the less we ask: anyone standing in view who isn't another player and didn't
+  // arrive before they left (a bystander), best clothes match first. After a long while, if
+  // they're the only player missing and there's just one such person, that's them.
+  rematchRelaxed(pl, claimed, now) {
+    const gone = now - pl.lastSeen;
+    const cands = this.tracks.filter((x) => x.confirmed && x.seen && !claimed.has(x.id) && x.hits >= 8 &&
+      x.born >= pl.lastSeen - 300 &&                                  // not someone who was already standing there
+      Math.hypot(x.vx, x.vy) < 0.6 * x.torso.s * 2);                  // standing to play, not walking past
+    if (!cands.length) return null;
+    const missing = this.players.filter((p) => p.kind === 'camera' && !this.tracks.some((x) => x.id === p.trackId && x.seen));
+    let best = null, bestC = Infinity;
+    for (const x of cands) {
+      const cd = clothesDiff(pl.look, x.look);
+      const size = pl.torsoS ? Math.abs(Math.log(x.torso.s / pl.torsoS)) : 0;
+      if (size > 0.7) continue;                                       // half or double the size: not them
+      const cost = (cd ?? 15) + 12 * size;
+      if (cost < bestC) { bestC = cost; best = x; }
+    }
+    if (!best) return null;
+    const cd = clothesDiff(pl.look, best.look);
+    if (cd === null || cd < 40) return best;                         // clothes close enough, in other light
+    // very different clothes (a jacket came off?): only by elimination, after a long wait
+    if (gone > REMATCH_ANY_MS && missing.length === 1 && cands.length === 1) return best;
+    return null;
   }
 
   // Two players' animals on the wrong children (after they crossed, say)? Their clothes say
