@@ -168,10 +168,13 @@ export class SkiScene extends Phaser.Scene {
       sk.speed = Math.max(0, sk.speed - 14 * dt);
       sk.turnRate = 0;
     } else {
-      // turning: tilted arms turn gently, a twisted body turns hard; with neither, the skis
-      // drift back to pointing down the hill
+      // turning: tilted arms turn gently, a twisted body turns hard. Like real skiing, the
+      // slope always wants you pointing down the hill: the moment you stop steering (arms
+      // level, relaxed or down) the skis swing back to the fall line — and you pick up speed.
+      // Steering harder holds your line against that pull.
+      const holding = Math.min(1, Math.max(Math.abs(steer) - 0.08, 0) / 0.3 + Math.max(Math.abs(sk.twist) - 0.08, 0) / 0.3);
       let rate = steer * 1.0 + sk.twist * 2.2;
-      if (Math.abs(steer) < 0.1 && Math.abs(sk.twist) < 0.1) rate -= sk.heading * 0.8;
+      rate -= sk.heading * (1.5 * (1 - holding) + 0.25 * holding);
       sk.turnRate += (rate - sk.turnRate) * Math.min(1, dt * 6);
       sk.heading = Math.max(-1.25, Math.min(1.25, sk.heading + sk.turnRate * dt));
       // speed: the hill pulls you down, pumping pushes, air and snow hold you back,
