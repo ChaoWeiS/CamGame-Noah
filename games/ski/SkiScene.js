@@ -154,7 +154,7 @@ export class SkiScene extends Phaser.Scene {
     const steer = running && inp.present ? inp.steer : 0;
     const twist = running && inp.present ? inp.twist : 0;
     const pump = running && inp.present ? Math.min(1.2, inp.pump) : 0;
-    sk.twist += (twist - sk.twist) * Math.min(1, dt * 8);
+    sk.twist += (twist - sk.twist) * Math.min(1, dt * 18);     // a twist is a sudden, sharp move
     sk.pump = pump;
     const crashed = now < sk.crashUntil;
     sk.crashK += ((crashed ? 1 : 0) - sk.crashK) * Math.min(1, dt * 7);
@@ -173,9 +173,12 @@ export class SkiScene extends Phaser.Scene {
       // level, relaxed or down) the skis swing back to the fall line — and you pick up speed.
       // Steering harder holds your line against that pull.
       const holding = Math.min(1, Math.max(Math.abs(steer) - 0.08, 0) / 0.3 + Math.max(Math.abs(sk.twist) - 0.08, 0) / 0.3);
-      let rate = steer * 1.4 + sk.twist * 2.2;
+      let rate = steer * 1.4 + sk.twist * 3.4;
       rate -= sk.heading * (1.5 * (1 - holding) + 0.25 * holding);
-      sk.turnRate += (rate - sk.turnRate) * Math.min(1, dt * 6);
+      // arms carve smoothly; a twisted body throws the skis round at once (like a real
+      // skier's hip swing), so the turn follows it almost instantly
+      const snap = Math.min(1, Math.abs(sk.twist) / 0.3);
+      sk.turnRate += (rate - sk.turnRate) * Math.min(1, dt * (6 + 14 * snap));
       sk.heading = Math.max(-1.25, Math.min(1.25, sk.heading + sk.turnRate * dt));
       // speed: the hill pulls you down, pumping pushes, air and snow hold you back,
       // and a twisted body digs the skis in and brakes
